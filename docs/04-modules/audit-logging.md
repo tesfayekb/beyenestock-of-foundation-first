@@ -37,15 +37,16 @@ Audit trail for:
 
 ## Standardized Action Naming
 
-Use consistent action keys:
+Action keys must match the canonical event names defined in [Event Index](../07-reference/event-index.md):
 
 - `auth.signed_in`
 - `auth.signed_out`
 - `auth.password_reset`
 - `rbac.role_assigned`
 - `rbac.permission_revoked`
-- `admin.config_updated`
-- `user.deactivated`
+- `admin.config_changed`
+- `user.account_deactivated`
+- `user.account_reactivated`
 
 ## Audit Log Schema
 
@@ -66,8 +67,8 @@ CREATE TABLE public.audit_logs (
 **Rules:**
 
 - No update/delete paths from app logic
-- Read access restricted by permission
-- DB permissions must enforce append-only behavior
+- Read access restricted by `audit.view` permission; export by `audit.export`
+- Append-only behavior must be enforced both by application logic AND database permissions/RLS/policies
 
 ## Shared Functions
 
@@ -99,10 +100,13 @@ CREATE TABLE public.audit_logs (
 
 **Rule:** `audit.export` is higher sensitivity than `audit.view`
 
-## Failure Handling
+## Failure Handling (CRITICAL)
 
-- High-risk actions should not silently succeed if required audit logging fails
-- Audit write failures must be monitored and surfaced
+- For required auditable high-risk actions, failure to record the audit event must either:
+  - **Block completion** of the action, OR
+  - **Enter a governed async-fallback path** with guaranteed retry, alerting, and reconciliation
+- Audit write failures must emit `audit.write_failed` and be surfaced in health monitoring and admin alerts
+- Silent audit drops are an **INVALID** implementation
 
 ## Dependencies
 
