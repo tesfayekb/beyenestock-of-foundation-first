@@ -113,10 +113,24 @@ The following apply across all layers and modules:
 ## Dependency Rules
 
 - Modules must communicate through defined interfaces or approved shared services
+- No module may directly access another module's internal data or logic except through approved interfaces, documented shared services, or explicit API/database contracts
+- Any new cross-module interaction must update [Dependency Map](dependency-map.md) and relevant module docs
 - Shared functions/services used across modules must be tracked in reference indexes
 - No hidden coupling between modules
 - Dependency direction must remain consistent with the layered architecture
 - High-impact modules (Auth, RBAC, Security) require explicit review before changes
+
+## Privileged Path Controls
+
+- Service-role access must be minimized, justified, and documented
+- Any service-role usage must have an audit path and be limited to server-side code
+- Client-originated requests must never execute with service-role privileges directly
+
+## State and Async Architecture
+
+- User-facing mutations should use synchronous request flows unless intentionally delegated
+- Background jobs handle deferred, retryable, or non-interactive work
+- Async operations must define trigger, retry policy, failure handling, and observability path
 
 ## Operational Rules
 
