@@ -293,17 +293,188 @@ Each risk must include:
 
 ---
 
+## Leading vs Lagging Risk Indicators
+
+Each risk must define early warning (leading) and post-occurrence (lagging) indicators:
+
+| Risk ID | Leading Indicators (Early Warning) | Lagging Indicators (After Occurrence) |
+|---------|-----------------------------------|--------------------------------------|
+| RISK-001 | Unusual role assignment frequency, unauthorized API attempts | Confirmed privilege escalation, unauthorized data access |
+| RISK-002 | AI output diverging from SSOT patterns, missed reading steps | Plan sections dropped, incorrect code generated |
+| RISK-003 | Function signature changes without cross-module review | Downstream module failures, test regressions |
+| RISK-004 | Plan revision without diff, merge rule violations | Approved sections missing, stable IDs broken |
+| RISK-005 | Cache key validation failures rising, missing tenant scope | Actual cross-tenant data exposure |
+| RISK-006 | RLS policy changes without benchmark, query plan drift | Unauthorized row access, tenant data leak |
+| RISK-007 | AI generating unindexed permissions/routes | Code contradicting SSOT, security logic errors |
+| RISK-008 | Rising retry rates, DLQ depth increasing | Job cascade failure, audit gaps, health degradation |
+| RISK-009 | p99 trending upward, connection pool > 60% | SLO breach, query timeouts, user-facing degradation |
+
+**Rules:**
+- Leading indicators must be monitored continuously for CRITICAL/HIGH risks
+- Leading indicator threshold breach → preventive action before materialization
+- Lagging indicators confirm materialization → trigger response plan
+
+---
+
+## Risk Appetite and Tolerance
+
+| Risk Type | Tolerance Level | Boundary |
+|-----------|----------------|----------|
+| **Security** | Zero | No accepted security risk without CRITICAL-level approval |
+| **Authorization / RLS** | Zero | No accepted authorization bypass |
+| **Data Integrity** | Zero | No accepted silent data corruption |
+| **Audit / Observability** | Low | Minor audit gaps may be temporarily accepted with timeline |
+| **Performance** | Moderate | Degradation within defined SLO bands acceptable |
+| **Jobs / Background** | Low | Non-critical job delays tolerable; critical job failures = zero tolerance |
+| **AI / Process** | Low | Governance drift must be caught within same session |
+| **UX / Workflow** | Moderate | Non-critical UX issues tracked but not release-blocking |
+
+**Rules:**
+- Zero-tolerance risks may **never** be accepted — must be mitigated or eliminated
+- Tolerance boundaries inform decision-making under pressure — not permission to ignore
+- Tolerance levels reviewed annually or after significant incidents
+
+---
+
+## Risk Trend Tracking
+
+Each risk must track directional trend:
+
+| Trend | Definition | Action |
+|-------|-----------|--------|
+| **Improving** | Likelihood decreasing, controls proving effective | Continue monitoring |
+| **Stable** | No change in likelihood or impact | Standard review cadence |
+| **Degrading** | Likelihood increasing, mitigation less effective, repeated triggers | Escalate review, strengthen controls |
+
+### Current Risk Trends
+
+| Risk ID | Current Trend | Evidence |
+|---------|--------------|---------|
+| RISK-001 | Stable | RLS + security definer in place, no triggers |
+| RISK-002 | Stable | SSOT reading enforced, no recent drift |
+| RISK-003 | Improving | Function index + regression tests active |
+| RISK-004 | Improving | Merge rule + diff requirement enforced |
+| RISK-005 | Stable | Cache key governance defined, not yet production-tested |
+| RISK-006 | Stable | Benchmark requirements defined |
+| RISK-007 | Stable | SSOT traceability improving |
+| RISK-008 | Stable | Job governance hardened |
+| RISK-009 | Stable | Capacity planning defined |
+
+**Rule:** Degrading trend for > 2 review cycles → mandatory architectural review.
+
+---
+
+## Risk-to-Metric Correlation
+
+Each risk maps to specific measurable signals:
+
+| Risk ID | Correlated Metrics |
+|---------|--------------------|
+| RISK-001 | Unauthorized API attempts, role change frequency, audit anomalies |
+| RISK-002 | SSOT reading compliance rate, AI output diff score |
+| RISK-003 | Shared function change frequency, downstream test failures |
+| RISK-005 | Cache key validation pass rate, tenant isolation test results |
+| RISK-006 | RLS benchmark results, query plan stability |
+| RISK-008 | Job failure rate, DLQ depth, retry storm count |
+| RISK-009 | p99 latency, DB connection saturation, slow query count |
+
+**Rule:** Metric thresholds must align with risk trigger conditions — crossing threshold = leading indicator alert.
+
+---
+
+## Preventive Control Effectiveness Review
+
+Mitigation must be periodically validated — not assumed effective:
+
+| Review Element | Question | Frequency |
+|---------------|----------|-----------|
+| Prevention controls | Are they reducing likelihood? | Per priority cadence |
+| Detection controls | Are they catching events early (leading indicators)? | Monthly |
+| Response controls | Is response effective and timely? | After each trigger |
+| Residual risk accuracy | Is residual risk still correctly assessed? | Quarterly |
+
+**Rules:**
+- Controls found ineffective must be strengthened or replaced
+- Effectiveness review results documented in risk entry
+- Repeated control failure → architectural review
+
+---
+
+## Pre-Mortem Risk Analysis
+
+### Before HIGH-Impact Changes
+
+Before implementing any HIGH-impact change, perform pre-mortem analysis:
+
+1. **Ask:** "How could this change fail?"
+2. **Identify:** New risks introduced by the change
+3. **Evaluate:** Impact on existing risks (score increase?)
+4. **Output:**
+   - New risk entries added to register (if needed)
+   - Existing risk mitigation updated
+   - Rollback/containment plan confirmed
+
+**Rules:**
+- Pre-mortem is **mandatory** for HIGH-impact changes
+- Pre-mortem findings must be documented before implementation begins
+- Skipping pre-mortem = INVALID change (per change control policy)
+
+---
+
+## Risk Simulation and Drills
+
+### Periodic Simulation Requirements
+
+| Scenario | Frequency | Verifies |
+|----------|-----------|---------|
+| Privilege escalation attempt | Quarterly | Detection + response + escalation |
+| Cross-tenant cache leak | Quarterly | Detection + cache purge + investigation |
+| Job failure cascade | Semi-annually | Kill switch + DLQ + health monitoring |
+| RLS bypass attempt | Quarterly | Detection + access restriction + audit |
+| AI governance failure | Semi-annually | SSOT enforcement + revert process |
+
+### Rules
+
+- Simulations must verify end-to-end: detection → response → escalation → resolution
+- Simulation failures must create Action Tracker entries and improve controls
+- Simulation results documented and reviewed
+- First simulation after initial implementation, then per schedule
+
+---
+
+## System-Wide Risk Gate (Release Control)
+
+### Before Release of HIGH-Impact Changes
+
+The system must confirm:
+
+| Gate | Verification |
+|------|-------------|
+| No new unmitigated CRITICAL/HIGH risks | Risk register reviewed |
+| All affected risks reviewed | Cross-module mapping checked |
+| Risk scores not increased without approval | Score comparison against baseline |
+| Rollback/containment plan exists | Plan documented for all affected risks |
+| Pre-mortem completed | Findings documented |
+| Leading indicators stable | No warning signals active |
+
+**Rules:**
+- Risk gate failure = **release blocker**
+- Risk gate is evaluated alongside regression gate and testing gate
+- Gate results linked to release record
+
+---
+
 ## Top Risk Summary
 
 ### Top 5 Active Risks (by Score)
 
-| Rank | ID | Risk | Score | Priority | Status |
-|------|----|------|-------|----------|--------|
-| 1 | RISK-004 | Plan sections dropped in revisions | 16 | HIGH | Monitored |
-| 2 | RISK-002 | Context drift across AI sessions | 12 | HIGH | Monitored |
-| 3 | RISK-003 | Silent behavior change in shared functions | 12 | HIGH | Monitored |
-| 4 | RISK-007 | AI hallucination affecting code/docs | 12 | HIGH | Monitored |
-| 5 | RISK-001 | Privilege escalation via role manipulation | 10 | MEDIUM | Monitored |
+| Rank | ID | Risk | Score | Priority | Trend | Status |
+|------|----|------|-------|----------|-------|--------|
+| 1 | RISK-004 | Plan sections dropped in revisions | 16 | HIGH | Improving | Monitored |
+| 2 | RISK-002 | Context drift across AI sessions | 12 | HIGH | Stable | Monitored |
+| 3 | RISK-003 | Silent behavior change in shared functions | 12 | HIGH | Improving | Monitored |
+| 4 | RISK-007 | AI hallucination affecting code/docs | 12 | HIGH | Stable | Monitored |
+| 5 | RISK-001 | Privilege escalation via role manipulation | 10 | MEDIUM | Stable | Monitored |
 
 ### Recently Triggered Risks
 
@@ -341,6 +512,9 @@ The following **MUST** create Action Tracker entries:
 | Unresolved high risk beyond SLA | Escalated | Immediate |
 | New critical/high risk identified | HIGH | Assessment within 24h |
 | Risk acceptance requires review | MEDIUM | Review within 1 week |
+| Leading indicator threshold breached | Per risk priority | Preventive action |
+| Risk simulation failure | HIGH | Control improvement within 1 week |
+| Degrading trend detected | MEDIUM | Review within 1 week |
 
 ---
 
@@ -377,6 +551,8 @@ Risks can amplify each other. The following dependency chains are tracked:
 - Accepted risks must be reviewed at their priority cadence
 - Risk register reviewed in full quarterly; critical/high risks reviewed per cadence
 - Cross-risk dependencies must be evaluated when any linked risk changes status
+- Pre-mortem mandatory for HIGH-impact changes
+- Risk simulations executed per schedule
 
 ---
 
