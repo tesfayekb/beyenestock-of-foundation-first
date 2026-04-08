@@ -766,6 +766,54 @@ When changing any indexed function:
 | **Related tests** | Health check tests |
 | **Lifecycle** | active |
 
+#### `getMetrics(timeRange)`
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | data-access |
+| **Owner module** | health-monitoring |
+| **Signature** | `(timeRange: TimeRange) → MetricsReport` |
+| **Returns** | Metrics data for the specified time range |
+| **Purity** | impure |
+| **Side effects** | DB / metrics-store read |
+| **Transactional** | No |
+| **Fail behavior** | fail-fast — throw on DB error |
+| **Used by** | admin-panel |
+| **Blast radius** | small |
+| **Criticality** | MEDIUM |
+| **Approval required** | No |
+| **Callable from** | request-path |
+| **Related permissions** | `monitoring.view` |
+| **Related routes** | `/admin/monitoring` |
+| **Related tests** | Metrics retrieval tests, time-range validation tests, authorized access tests |
+| **Observability** | Latency, query performance |
+| **Lifecycle** | active |
+
+#### `evaluateAlerts()`
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | job-critical |
+| **Owner module** | health-monitoring |
+| **Signature** | `() → AlertEvaluationResult` |
+| **Returns** | Result of threshold evaluations; triggers alerts as needed |
+| **Purity** | impure |
+| **Side effects** | DB read (metrics + thresholds), may emit `health.alert_triggered`, may update health state via `health.status_changed` |
+| **Transactional** | No |
+| **Fail behavior** | fail-fast — emit `health.monitoring_failed` on evaluation failure |
+| **Used by** | `alert_evaluation` job |
+| **Blast radius** | large |
+| **Criticality** | HIGH |
+| **Approval required** | Yes |
+| **Callable from** | job-path |
+| **Related permissions** | `monitoring.configure` (for threshold management) |
+| **Related events** | `health.alert_triggered`, `health.status_changed`, `health.monitoring_failed` |
+| **Related tests** | Threshold evaluation tests, alert grouping/throttling tests, maintenance-mode suppression tests |
+| **Observability** | Evaluation latency, alert trigger rate, false-positive rate |
+| **Lifecycle** | active |
+
 ### API Functions
 
 #### `apiError(code, message)`
