@@ -4,11 +4,18 @@
 
 ## Purpose
 
-Defines the mandatory structure and metadata for every document in this SSOT system.
+Defines the mandatory structure, format, and enforcement rules for all documentation in the SSOT system.
 
 ## Scope
 
-All files under `/docs`.
+Applies to ALL files under `/docs`.
+
+## Enforcement Rule (CRITICAL)
+
+- All documents MUST follow this structure exactly
+- No required section may be omitted
+- If any required section is missing → the document is **INVALID**
+- Invalid documents must **NOT** be used as a source of truth
 
 ## Mandatory Document Structure
 
@@ -20,38 +27,60 @@ Every document MUST include:
 > **Owner:** [Role/Person] | **Last Reviewed:** [YYYY-MM-DD]
 ```
 
+- `Last Reviewed` MUST be updated whenever the document is modified
+
 ### Required Sections
 
 1. **Purpose** — What this document defines
 2. **Scope** — What it covers
-3. **Key Rules / Principles** — Core content (varies by document type)
+3. **Key Rules / Principles** — Core content
 4. **Dependencies** — What this document relies on
 5. **Used By / Affects** — What depends on this document
 6. **Risks If Changed** — Impact classification (LOW / MEDIUM / HIGH)
 7. **Related Documents** — Cross-references
 
-### Additional Sections for Module Documents
+## Additional Requirements for Module Documents
 
-Module files (under `docs/04-modules/`) must also include:
+Module files (`docs/04-modules/`) MUST include:
 
-8. **Shared Functions** — Functions used by or shared with other modules
-9. **Events** — Events emitted and consumed
-10. **Jobs** — Background jobs owned by this module
-11. **Permissions** — Permissions defined by this module
-12. **Risks If Modified** — Specific behavioral risks
+- **Shared Functions** — Functions used across modules
+- **Events** — Events emitted and consumed
+- **Jobs** — Background jobs owned by this module
+- **Permissions** — Permissions defined by this module
+- **Risks If Modified** — Specific behavioral risks
+
+### Module Enforcement
+
+- Dependencies MUST be explicitly listed
+- "Used By / Affects" MUST be populated
+- If module behavior changes → dependencies and references MUST be updated
 
 ## Naming Conventions
 
 - Files: `kebab-case.md`
-- Section IDs in plans: `PLAN-{MODULE}-{NNN}` (e.g., `PLAN-AUTH-001`)
-- Decision IDs: `DEC-{NNN}` (e.g., `DEC-001`)
+- Plan section IDs: `PLAN-{MODULE}-{NNN}`
+- Decision IDs: `DEC-{NNN}`
 - IDs are permanent and never reassigned
 
 ## Cross-Reference Rules
 
-- Never copy content between documents; always link
-- Use relative paths for links within `/docs`
-- Every cross-reference must point to an existing document
+- Never duplicate content — always link
+- Use relative paths within `/docs`
+- Every reference MUST point to an existing document
+- Broken references = **INVALID** document
+
+## Document Integrity Rules
+
+- No temporary, ad-hoc, or free-form documents allowed
+- No "notes", "draft", or duplicate files allowed as sources of truth
+- Each concept must exist in exactly one authoritative document
+
+## Update Requirements
+
+When a document is modified:
+- `Last Reviewed` MUST be updated
+- Related documents MUST be checked for consistency
+- Cross-references MUST be validated
 
 ## Dependencies
 
@@ -59,11 +88,11 @@ Module files (under `docs/04-modules/`) must also include:
 
 ## Used By / Affects
 
-Every document in this system must follow this standard.
+All documentation in the SSOT system.
 
 ## Risks If Changed
 
-MEDIUM — affects document consistency across the entire project.
+MEDIUM — improper changes lead to inconsistency and breakdown of the SSOT system.
 
 ## Related Documents
 
