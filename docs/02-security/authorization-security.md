@@ -96,6 +96,14 @@ CREATE TABLE public.role_permissions (
 - Permission changes are HIGH impact and must be audited
 - All permissions must be indexed in `permission-index.md`
 
+## Permission Evaluation Rules
+
+- `superadmin` bypasses all permission checks — all permissions are implicitly granted
+- Explicit permission grants override absence of role assumptions
+- Deny-by-default applies when permission is not explicitly granted
+- Business logic must not rely on role names (e.g., `'admin'`) for access decisions
+- All access decisions should be permission-driven where possible
+
 ## Permission Checking
 
 ```sql
