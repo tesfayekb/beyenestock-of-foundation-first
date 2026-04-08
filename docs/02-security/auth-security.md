@@ -4,11 +4,23 @@
 
 ## Purpose
 
-Defines authentication security requirements and implementation rules.
+Defines enforced authentication security requirements and implementation rules.
 
 ## Scope
 
-User authentication: email/password, social login (Google, Apple), MFA.
+All authentication flows:
+
+- Email/password
+- Social login
+- MFA
+- Session management
+- Recovery and reset flows
+
+## Enforcement Rule (CRITICAL)
+
+- All authentication controls defined here are **mandatory**
+- Any violation results in an **INVALID** implementation
+- Authentication rules override convenience
 
 ## Authentication Methods
 
@@ -19,35 +31,86 @@ User authentication: email/password, social login (Google, Apple), MFA.
 | Apple Sign-In | Required | Not started |
 | MFA (TOTP) | Required | Not started |
 
-## Security Rules
+## Password Policy
 
-### Password Policy
 - Minimum 12 characters
-- Must include uppercase, lowercase, number, special character
-- Bcrypt hashing (handled by Supabase Auth)
-- No password reuse (last 5)
+- Allow password manager-generated passwords
+- Reject known weak/common passwords if supported
+- No password reuse for last 5
+- Password hashing handled by trusted auth provider
 
-### Session Management
-- JWT tokens via Supabase Auth
-- Access token: short-lived (1 hour max)
-- Refresh token: rotation on use
+## Session Management
+
+- JWT/session tokens via trusted auth provider
+- Access tokens short-lived
+- Refresh token rotation enforced
 - Secure, HttpOnly, SameSite cookies where applicable
+- Session revocation required on password reset/change
+- Ability to revoke all active sessions required
+- Suspicious session activity must be auditable
 
-### MFA
-- TOTP-based (authenticator app)
+## MFA
+
+- TOTP-based authenticator app
 - Required for admin roles
-- Optional for regular users (strongly encouraged)
-- Recovery codes generated on MFA enrollment
+- Optional but encouraged for regular users
+- Recovery codes generated on enrollment
+- Recovery codes are **one-time use**
+- Regenerating recovery codes invalidates previous set
+- MFA disable/reset is a high-risk action requiring re-authentication
 
-### Rate Limiting
+## Sensitive Auth Flows
+
+The following require enhanced controls:
+
+- Password reset
+- Email verification
+- Email change
+- Password change
+- MFA enrollment / disable / recovery
+- Logout all sessions
+- Account deletion
+
+**Requirements:**
+
+- Re-authentication where appropriate
+- Audit logging required
+- Rate limiting required
+
+## Re-Authentication Rules
+
+Recent authentication is required for:
+
+- Password change
+- Email change
+- MFA disable
+- Role-sensitive account changes
+- Account deletion
+
+## Rate Limiting
+
 - Login attempts: max 5 per minute per IP
 - Password reset: max 3 per hour per email
-- Account lockout after 10 consecutive failures
+- MFA verification attempts rate limited
+- Account lockout / progressive throttling after repeated failures
 
-### Social Login Security
+## Social Login Security
+
 - Validate OAuth tokens server-side
-- Link social accounts to existing users by verified email
 - Never trust client-provided OAuth data
+- Only link accounts using verified identity data
+- Prevent unsafe account merging or takeover on ambiguous identity claims
+
+## Audit Requirements
+
+Log all authentication-sensitive events:
+
+- Login success/failure
+- Password reset requested/completed
+- MFA enrolled/disabled/recovered
+- Email change
+- Session revoked
+- Suspicious auth activity
 
 ## Dependencies
 
@@ -56,11 +119,11 @@ User authentication: email/password, social login (Google, Apple), MFA.
 
 ## Used By / Affects
 
-Every authenticated feature in the application.
+Every authenticated feature and all session-protected flows.
 
 ## Risks If Changed
 
-HIGH — authentication is the security perimeter.
+HIGH — authentication is the primary entry boundary to the system.
 
 ## Related Documents
 
@@ -68,3 +131,4 @@ HIGH — authentication is the security perimeter.
 - [Authorization Security](authorization-security.md)
 - [Auth Module](../04-modules/auth.md)
 - [RBAC Module](../04-modules/rbac.md)
+- [Audit Logging](../04-modules/audit-logging.md)
