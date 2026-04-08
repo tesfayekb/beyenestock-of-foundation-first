@@ -218,7 +218,9 @@ Events that must automatically create action tracker entries:
 | `job.kill_switch_activated` | Emergency action requiring follow-up |
 | `job.slo_breach` | SLO violation requiring review |
 | `health.alert_triggered` | System health event requiring response |
+| `health.monitoring_failed` | Monitoring blind spot requiring immediate fix |
 | `admin.config_changed` | Config change requiring audit trail |
+| `audit.write_failed` | Audit integrity failure requiring investigation |
 
 ---
 
@@ -267,10 +269,15 @@ Key event chains showing upstream triggers and downstream effects:
 |------|-------|----------|
 | **Login** | `auth.signed_in` → `audit.logged` → monitoring metrics | Strict |
 | **Failed login** | `auth.failed_attempt` → `audit.logged` → `health.alert_triggered` (if threshold) | Strict |
+| **MFA recovery** | `auth.mfa_recovered` → `audit.logged` → admin notification (security review) | Strict |
+| **Session revoke** | `auth.session_revoked` → `audit.logged` → session cleanup | Strict |
 | **Role change** | `rbac.role_assigned` → `audit.logged` → admin notification | Best-effort |
+| **Permission change** | `rbac.permission_assigned` / `rbac.permission_revoked` → `audit.logged` | Best-effort |
 | **Job failure** | `job.failed` → `job.retry_scheduled` → `job.dead_lettered` (if exhausted) → `health.alert_triggered` | Strict |
 | **Kill switch** | `job.kill_switch_activated` → `audit.logged` → `health.alert_triggered` → admin notification | Strict |
 | **Config change** | `admin.config_changed` → `audit.logged` → `health.status_changed` (if applicable) | Best-effort |
+| **Audit failure** | `audit.write_failed` → `health.alert_triggered` → admin notification | Strict |
+| **Monitor failure** | `health.monitoring_failed` → independent alert channel → admin notification | Strict |
 
 ---
 
