@@ -227,7 +227,9 @@ Tied to [Audit Logging Module](../04-modules/audit-logging.md) governance:
 
 ---
 
-## Test Determinism and Flakiness Rules
+## Test Determinism and Replay
+
+### Determinism Rules
 
 - No reliance on real wall-clock time without controlled mocking
 - No random/nondeterministic behavior in test assertions
@@ -238,6 +240,178 @@ Tied to [Audit Logging Module](../04-modules/audit-logging.md) governance:
   - Fixed within 48 hours or removed
   - Never masked by retry loops
 - Test timeout must be defined and enforced (unit: 5s, integration: 15s, E2E: 30s per test)
+
+### Deterministic Replay Requirements
+
+All tests must support exact reproduction of past failures:
+
+- **Time**: must be mockable/frozen (use fake timers for time-dependent logic)
+- **Random values**: must be seeded (no `Math.random()` without seed control)
+- **External dependencies**: must be stubbed or recorded (no live external calls in unit/integration)
+- **Test artifacts**: CI must capture sufficient context for replay (logs, screenshots for E2E, seed values)
+
+---
+
+## Test Execution Isolation
+
+### Infrastructure-Level Isolation
+
+| Resource | Isolation Method |
+|----------|-----------------|
+| Database | Per-suite schema or transaction rollback |
+| Cache | Namespaced per test run |
+| File storage | Isolated bucket/prefix per run |
+| Environment variables | Scoped per test process |
+
+### Rules
+
+- Parallel test execution must **not** share mutable state
+- Database state must be reset between test suites (no cross-test contamination)
+- Cache must be cleared or namespaced between test runs
+- No test may depend on artifacts left by a previous test
+
+---
+
+## Snapshot and Golden Dataset Testing
+
+### Purpose
+
+Catch silent regressions that don't break logic but change outputs subtly.
+
+### Required Snapshots
+
+| Output | Snapshot Type | Review Trigger |
+|--------|-------------|---------------|
+| Permission resolution output | Golden dataset | Any RBAC change |
+| Audit log entry structure | Schema snapshot | Any audit change |
+| API response shapes (critical endpoints) | Response snapshot | Any API change |
+| Dashboard aggregate results | Golden dataset | Any query/aggregation change |
+| Cache key format | String snapshot | Any cache key change |
+
+### Rules
+
+- Snapshot changes must be reviewed and explicitly approved — not auto-updated
+- Golden datasets must be version-controlled
+- Snapshot mismatches block merge until reviewed
+
+---
+
+## Cross-Version Compatibility Testing
+
+### API Compatibility
+
+- Critical APIs must be tested for **backward compatibility** when versioned
+- Breaking changes must be detected and documented before release
+- Old client + new backend scenarios must be validated for critical flows
+
+### Cache Compatibility
+
+- Cache version bumps must be tested: old-version entries treated as misses, not served
+- Schema changes must validate that cached data from prior versions doesn't corrupt new flows
+
+---
+
+## Security Adversarial Testing
+
+Beyond functional security tests, adversarial scenarios must be tested:
+
+| Attack Vector | Test Scenario |
+|--------------|--------------|
+| Privilege escalation | User attempts to access admin endpoints/data |
+| Cache poisoning | Crafted request attempts to pollute shared cache |
+| RLS bypass | Direct DB query attempts with crafted auth context |
+| Replay attacks | Reuse of expired/revoked tokens |
+| Injection | SQL injection via API parameters |
+| Cross-tenant access | Manipulated tenant ID in requests |
+| CSRF/session fixation | Forged cross-origin requests |
+| Parameter tampering | Modified IDs/roles in request payloads |
+
+### Rules
+
+- Adversarial tests required for all auth, RBAC, and tenant-isolation boundaries
+- New attack vectors discovered must be added to test suite and regression watchlist
+- Adversarial test failures = **CRITICAL** severity
+
+---
+
+## Data Integrity End-to-End Validation
+
+### Rules
+
+- End-to-end flows must validate data state **before and after** each action
+- Invariants must hold across flows:
+
+| Invariant | Verification |
+|-----------|-------------|
+| User count consistency | Count before + created = count after |
+| Audit entry count | Actions performed = audit entries created |
+| Role assignment integrity | Assigned roles match DB state |
+| Tenant data isolation | No cross-tenant rows after operations |
+| Job execution count | Scheduled runs = completed + failed + pending |
+
+- Silent data corruption (correct behavior but wrong data) must be caught by invariant checks
+
+---
+
+## Long-Running and Soak Testing
+
+### Purpose
+
+Detect degradation that only manifests over extended operation:
+
+| Concern | Soak Test Verification |
+|---------|----------------------|
+| Memory leaks | Stable memory usage over simulated hours |
+| Cache drift | Cache vs source consistency after extended operation |
+| DB bloat impact | Query performance stable as data accumulates |
+| Connection pool health | No connection exhaustion under sustained load |
+| Job system stability | Queue depth, execution time stable over time |
+
+### Rules
+
+- Soak tests required before major releases (simulate minimum 4 hours of activity)
+- Soak test results must be compared against baseline
+- Degradation detected in soak test = release blocker
+
+---
+
+## Test Execution Budget and Cost Governance
+
+### CI Time Budgets
+
+| Suite | Maximum Duration | Parallelization |
+|-------|-----------------|----------------|
+| Unit tests | 2 minutes | Full parallel |
+| Integration tests | 5 minutes | Parallel by module |
+| E2E critical | 10 minutes | Limited parallel |
+| E2E full | 20 minutes | Sequential or staging |
+| Performance | 15 minutes | Staging only |
+
+### Rules
+
+- Total CI gate time must not exceed **30 minutes** for merge-blocking suites
+- Slow tests (> 2x average) must be optimized or moved to staging-only suites
+- Test suite prioritization: security > critical paths > coverage > non-critical
+- Test execution cost tracked and reviewed monthly
+
+---
+
+## Coverage Drift Detection
+
+### Automated Monitoring
+
+- Coverage trends must be tracked over time (per module, per week)
+- Downward trend detection:
+
+| Signal | Action |
+|--------|--------|
+| Coverage drop > 2% in one PR | Merge warning |
+| Coverage drop > 5% over 2 weeks | Action Tracker entry |
+| Critical module drops below threshold | Merge blocker |
+| Sustained downward trend (3+ weeks) | Mandatory coverage sprint |
+
+- Coverage reports stored for historical comparison
+- Coverage trend dashboard must be accessible to all contributors
 
 ---
 
@@ -319,12 +493,34 @@ CI/CD pipeline must enforce:
 | Performance budget met | Bundle size, endpoint latency | Documented exception only |
 | Security tests pass | Auth, RBAC, RLS tests | No |
 | No flaky tests | Zero quarantined tests running | No |
+| Snapshot tests pass | No unapproved snapshot changes | No |
 
 ### Rules
 
 - No deploy if critical tests fail — no exception
 - Security test failure = release blocker + Action Tracker entry
 - Regression test failure = release blocker + investigation required
+
+---
+
+## Test Health and System Integration
+
+### Test Results → Health Monitoring
+
+- Test results must feed the **health monitoring** system:
+
+| Signal | System Status |
+|--------|--------------|
+| All CI tests passing | Healthy |
+| E2E failure in staging | Degraded |
+| Critical test failure in production monitoring | Degraded → investigation |
+| Repeated regressions (3+ in 2 weeks) | Unstable — requires stabilization sprint |
+
+### Rules
+
+- Test health is a first-class system health signal
+- Sustained test instability must be treated as a system reliability issue
+- Post-deploy validation failures must trigger rollback evaluation
 
 ---
 
@@ -336,11 +532,14 @@ The following **MUST** create Action Tracker entries:
 |---------|----------|-------------------|
 | Critical test failure in CI | HIGH | 24h |
 | Security test failure | CRITICAL | 4h |
+| Adversarial test failure | CRITICAL | 4h |
 | Recurring flaky test (> 3 occurrences) | MEDIUM | 48h |
 | Regression detected | HIGH | 24h |
 | Coverage drop on critical module | MEDIUM | 1 week |
 | E2E critical flow failure | HIGH | 24h |
 | Performance regression detected | MEDIUM | 1 week |
+| Soak test degradation | HIGH | 24h |
+| Coverage drift (sustained downward) | MEDIUM | 1 week |
 
 ---
 
@@ -350,6 +549,8 @@ The following **MUST** create Action Tracker entries:
 - E2E: `e2e/*.spec.ts`
 - Test utilities/helpers: `src/test/` directory
 - Test fixtures/data: `src/test/fixtures/` directory
+- Golden datasets: `src/test/golden/` directory
+- Adversarial tests: `src/test/security/` directory
 
 ---
 
@@ -361,6 +562,7 @@ The following **MUST** create Action Tracker entries:
 - [Jobs and Scheduler](../04-modules/jobs-and-scheduler.md) — job testing requirements
 - [Audit Logging](../04-modules/audit-logging.md) — audit integrity test requirements
 - [RBAC Module](../04-modules/rbac.md) — permission test requirements
+- [Health Monitoring](../04-modules/health-monitoring.md) — test health integration
 
 ## Used By / Affects
 
