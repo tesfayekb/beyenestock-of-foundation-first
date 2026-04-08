@@ -161,11 +161,74 @@ Each watchlist item must include:
 Before completing any MEDIUM/HIGH impact change:
 
 1. **Identify** affected modules from the change
-2. **Pull** all watchlist items matching affected modules or trigger conditions
+2. **Pull** all watchlist items matching affected modules or trigger conditions (automated matching where available)
 3. **Execute** required checks for each matching item
-4. **Record** verification evidence (test run ID, screenshot, monitoring link)
+4. **Record** verification evidence in standardized format (see Evidence Standardization)
 5. **If any check fails** → change cannot proceed until resolved
 6. **If new fragility discovered** → add new watchlist item before completing change
+
+### System-Level Watchlist Gate
+
+Before any HIGH-impact change completes, the system must confirm:
+
+- All matching watchlist items verified with evidence
+- No critical items skipped
+- Evidence recorded in standardized format
+- No new untracked fragility introduced
+- Override protocol followed if any item unresolvable (see Override Protocol)
+
+**Gate failure = change cannot proceed.**
+
+---
+
+## Leading vs Lagging Indicators
+
+Each watchlist item should define early warning and post-occurrence signals:
+
+| Item | Leading Indicators (Early Warning) | Lagging Indicators (After Occurrence) |
+|------|-----------------------------------|--------------------------------------|
+| RW-001 | Cache invalidation delay > threshold, invalidation error rate rising | Actual permission mismatch observed in UI/API |
+| RW-002 | RLS policy change without benchmark, query plan drift on tenant tables | Unauthorized row access, cross-tenant data exposure |
+| RW-003 | Function signature change detected, no cross-module test update | Downstream module failures, unexpected behavior |
+| RW-004 | Retry config change without test, DLQ depth trend increasing | Duplicate execution, retry storm, job cascade |
+| RW-005 | Audit emission logic changed, error handling path modified | Missing audit entries in reconciliation |
+
+**Rule:** Leading indicators should be monitored proactively — catching them prevents the regression from materializing.
+
+---
+
+## SSOT Artifact Traceability
+
+Each watchlist item should map to specific SSOT artifacts for instant test targeting:
+
+| Item | Related Routes | Related Permissions | Related Functions | Related Events |
+|------|---------------|-------------------|------------------|----------------|
+| RW-001 | All permission-gated routes | All RBAC permissions | `has_role()`, `checkPermission()` | `rbac.role_assigned`, `rbac.role_revoked` |
+| RW-002 | All tenant-scoped data routes | `users.*`, `audit.*` | RLS policy functions | — |
+| RW-003 | Routes consuming shared functions | Per function | All shared functions (function-index) | — |
+| RW-004 | Admin job management routes | `jobs.*` | Job execution functions | `job.failed`, `job.dead_lettered` |
+| RW-005 | All mutation routes | `audit.view`, `audit.export` | `logAuditEvent()` | `audit.logged`, `audit.write_failed` |
+
+**Rule:** When reviewing a change, match changed SSOT artifacts against watchlist traceability to identify all relevant items.
+
+---
+
+## Verification Evidence Standardization
+
+All verification evidence must follow a standardized format:
+
+| Evidence Type | Required Content |
+|--------------|-----------------|
+| **Automated test** | Test run ID + pass/fail + timestamp + CI link |
+| **Runtime verification** | Monitoring dashboard link + metric values + time range |
+| **Manual check** | Screenshot/recording + timestamp + verifier name |
+| **Log/trace reference** | Trace ID + relevant log entries + timestamp |
+| **Hybrid** | Combination of above as appropriate |
+
+**Rules:**
+- "Checked" without evidence is **not valid** verification
+- Evidence must be linked or embedded in the change record
+- Evidence must be timestamped within the current change cycle
 
 ---
 
@@ -184,6 +247,15 @@ Watchlist must be updated when:
 
 **Rule:** Population is both manual and event-driven — any discovery of fragility must result in a watchlist entry.
 
+### Automated Watchlist Matching (Design Rule)
+
+The system should support automatic mapping of changed modules to relevant watchlist items:
+
+- On each change, identify affected modules and files
+- Match against watchlist `affected_modules` and `trigger_conditions`
+- Surface matching items to the developer before completion
+- Even if implemented later, all watchlist items must be structured to support automated matching
+
 ---
 
 ## Recurrence Tracking and Escalation
@@ -194,6 +266,12 @@ Watchlist must be updated when:
 | 2 | Warning — enhanced test coverage required |
 | 3+ | **Escalate to Risk Register** if not already linked |
 | 5+ | Mandatory architectural review — point fixes insufficient |
+
+### Regression Test Auto-Generation Rule
+
+- Watchlist items with recurrence ≥ 2 **must** be converted into automated regression tests
+- Goal: reduce manual verification over time
+- Once automated test exists and passes consistently, manual verification requirement may be relaxed (item remains active but verification = test pass)
 
 **Rules:**
 - Recurrence count incremented each time the regression actually occurs (not each time checked)
@@ -218,6 +296,68 @@ Watchlist must be updated when:
   - Root cause addressed
   - Regression test exists (or justified exception)
   - No recent recurrence
+
+### Watchlist Drift Detection
+
+- Periodic review (monthly) must check:
+  - Missing new risk patterns not yet on watchlist
+  - Outdated items no longer relevant
+  - Items never triggered or verified (stale detection)
+- Drift detected → update watchlist + Action Tracker entry if gap is critical
+
+---
+
+## Watchlist Coverage Completeness
+
+**Rule:** Every critical module must have at least one active watchlist item.
+
+| Module | Required Coverage | Current Items |
+|--------|------------------|---------------|
+| Auth / Session | ≥ 1 item | RW-001 (via RBAC) |
+| RBAC / Permissions | ≥ 1 item | RW-001 |
+| RLS / Database | ≥ 1 item | RW-002 |
+| Jobs / Scheduler | ≥ 1 item | RW-004 |
+| Audit Logging | ≥ 1 item | RW-005 |
+| Caching | ≥ 1 item | RW-001 (via cache) |
+| Shared Functions | ≥ 1 item | RW-003 |
+| Admin Panel | Covered via module items | RW-001, RW-005 |
+| Health Monitoring | Should add when system active | — |
+
+**Gap Detection:** Absence of watchlist item for a fragile module = coverage gap → must be addressed.
+
+---
+
+## Watchlist Performance Constraint
+
+The watchlist must remain **high-signal, not bloated**:
+
+- Target: ≤ 20 active items at any time
+- Low-value items should be:
+  - Merged with related items
+  - Archived if risk is fully mitigated by automated tests
+  - Escalated to permanent regression tests (removing manual verification need)
+- Quarterly review must prune or consolidate
+
+**Rule:** Watchlist overhead must not materially slow development velocity — if it does, items must be converted to automated tests.
+
+---
+
+## High-Risk Change Override Protocol
+
+When a change must proceed despite unresolved watchlist items:
+
+| Requirement | Details |
+|------------|---------|
+| **Explicit approval** | Project lead or designated authority |
+| **Documented justification** | Why override is necessary |
+| **Mitigation plan** | How risk will be managed post-merge |
+| **Follow-up Action Tracker item** | With owner, severity, and resolution timeline |
+| **Time-bounded** | Override expires — follow-up must resolve within SLA |
+
+**Rules:**
+- Override is exceptional — not routine
+- Override count tracked — frequent overrides = systemic problem
+- Critical-priority items cannot be overridden without CRITICAL-level approval
 
 ---
 
@@ -247,6 +387,9 @@ The following **MUST** create Action Tracker entries:
 | Unresolved active item > 90 days | MEDIUM | Review/resolve within 1 week |
 | Critical item triggered | CRITICAL | 4h |
 | New critical item added | HIGH | Verification within 24h |
+| Override invoked | MEDIUM | Follow-up per SLA |
+| Coverage gap detected | MEDIUM | 1 week |
+| Watchlist drift detected | MEDIUM | 1 week |
 
 ---
 
@@ -299,3 +442,5 @@ MEDIUM — weakening watchlist verification directly increases regression risk a
 - [Testing Strategy](../05-quality/testing-strategy.md)
 - [Function Index](../07-reference/function-index.md)
 - [Permission Index](../07-reference/permission-index.md)
+- [Route Index](../07-reference/route-index.md)
+- [Event Index](../07-reference/event-index.md)
