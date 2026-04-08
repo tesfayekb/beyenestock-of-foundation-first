@@ -33,6 +33,12 @@ Examples:
 - `audit.view`
 - `config.update`
 
+### Identity Rules
+
+- Each permission has a stable identifier (UUID) at the database level
+- The `key` is the human-readable reference, not the primary identifier
+- Absence of a permission **MUST** be treated as deny (no implicit access)
+
 ## Permission Map
 
 | Permission | Module | Used By | Impact If Changed |
