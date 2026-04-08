@@ -345,6 +345,84 @@ When changing any indexed function:
 | **Observability** | Latency (p95/p99), error rate, denial rate |
 | **Lifecycle** | active |
 
+#### `requireVerifiedEmail()`
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | security-critical |
+| **Owner module** | auth |
+| **Signature** | `() → void` (throws `403` if email unverified) |
+| **Returns** | void; throws `403 Forbidden` if user's email is not verified |
+| **Purity** | impure |
+| **Side effects** | DB read (email verification status), may emit `auth.failed_attempt` on denial |
+| **Transactional** | No |
+| **Fail behavior** | fail-secure — throw 403 |
+| **Used by** | All protected routes requiring verified email |
+| **Blast radius** | system-wide |
+| **Criticality** | CRITICAL |
+| **Approval required** | Yes — Lead |
+| **Callable from** | request-path |
+| **Upstream deps** | `requireAuth()` |
+| **Related routes** | All protected routes |
+| **Related events** | `auth.failed_attempt` |
+| **Related risks** | RSK-001 (unverified account abuse) |
+| **Related tests** | Email verification enforcement tests, 403 response tests |
+| **Observability** | Denial rate, error rate |
+| **Lifecycle** | active |
+
+#### `requireRecentAuth()`
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | security-critical |
+| **Owner module** | auth |
+| **Signature** | `() → void` (throws `401` if auth is stale) |
+| **Returns** | void; throws `401 Unauthorized` if last authentication is older than configured threshold |
+| **Purity** | impure |
+| **Side effects** | DB read (session timestamp), may emit `auth.failed_attempt` on denial |
+| **Transactional** | No |
+| **Fail behavior** | fail-secure — throw 401 (re-authentication required) |
+| **Used by** | admin-panel, user-panel (sensitive actions) |
+| **Blast radius** | large |
+| **Criticality** | CRITICAL |
+| **Approval required** | Yes — Lead |
+| **Callable from** | request-path |
+| **Upstream deps** | `requireAuth()` |
+| **Related routes** | Destructive routes, admin-critical routes |
+| **Related permissions** | Admin-critical permissions |
+| **Related events** | `auth.failed_attempt` |
+| **Related risks** | RSK-001 (session hijacking mitigation), RSK-003 |
+| **Related tests** | Re-auth enforcement tests, stale session tests |
+| **Observability** | Denial rate, re-auth frequency |
+| **Lifecycle** | active |
+
+#### `getSessionContext()`
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | security-critical |
+| **Owner module** | auth |
+| **Signature** | `() → SessionContext` |
+| **Returns** | `{ user_id, session_id, ip_address, device, created_at, last_active_at }` |
+| **Purity** | impure |
+| **Side effects** | DB read (session metadata) |
+| **Transactional** | No |
+| **Fail behavior** | fail-secure — throw 401 if no valid session |
+| **Used by** | All modules (auth context, audit enrichment, rate limiting) |
+| **Blast radius** | system-wide |
+| **Criticality** | CRITICAL |
+| **Approval required** | Yes — Lead |
+| **Callable from** | request-path |
+| **Upstream deps** | `requireAuth()` |
+| **Related routes** | All authenticated routes |
+| **Related risks** | RSK-003 (session hijacking) |
+| **Related tests** | Session context tests, metadata accuracy tests |
+| **Observability** | Latency, session validity check rate |
+| **Lifecycle** | active |
+
 ### Authorization Functions
 
 #### `has_role(user_id, role)`
@@ -430,7 +508,7 @@ When changing any indexed function:
 | **Signature** | `(permission: string) → boolean` |
 | **Returns** | `true` if current user has the specified permission |
 | **Purity** | impure |
-| **Side effects** | DB read (role → permission mapping) |
+| **Side effects** | DB read (role → permission mapping), emits `rbac.permission_denied` on denial |
 | **Transactional** | No |
 | **Fail behavior** | fail-secure — return `false` on error |
 | **Used by** | All feature modules |
@@ -440,9 +518,36 @@ When changing any indexed function:
 | **Callable from** | request-path, ui |
 | **Upstream deps** | `getCurrentUser()`, `has_role()` |
 | **Related permissions** | All permission index entries |
+| **Related events** | `rbac.permission_denied` |
 | **Related risks** | RSK-002 (privilege escalation) |
 | **Related watchlist** | RW-001 |
 | **Related tests** | Permission check tests, RBAC integration tests |
+| **Observability** | Denial rate, anomaly detection |
+| **Lifecycle** | active |
+
+#### `requireSelfScope(userId)`
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | authorization-critical |
+| **Owner module** | rbac |
+| **Signature** | `(userId: uuid) → void` (throws `403` if mismatch) |
+| **Returns** | void; throws `403 Forbidden` if authenticated user's ID does not match target userId |
+| **Purity** | impure |
+| **Side effects** | DB read (current user context), emits `rbac.permission_denied` on mismatch |
+| **Transactional** | No |
+| **Fail behavior** | fail-secure — throw 403 |
+| **Used by** | user-panel, user-management |
+| **Blast radius** | large |
+| **Criticality** | HIGH |
+| **Approval required** | Yes — Lead |
+| **Callable from** | request-path |
+| **Upstream deps** | `requireAuth()`, `getCurrentUser()` |
+| **Related permissions** | `users.view_self`, `users.edit_self`, `profile.self_manage` |
+| **Related events** | `rbac.permission_denied` |
+| **Related risks** | RSK-002 (privilege escalation — cross-user access) |
+| **Related tests** | Self-scope enforcement tests, cross-user denial tests |
 | **Observability** | Denial rate, anomaly detection |
 | **Lifecycle** | active |
 
@@ -666,8 +771,12 @@ When changing any indexed function:
 | `authenticateRequest()` | security-critical | system-wide | All API auth depends on this |
 | `getCurrentUser()` | security-critical | system-wide | All authenticated features depend on this |
 | `requireAuth()` | security-critical | system-wide | All route protection depends on this |
+| `requireVerifiedEmail()` | security-critical | system-wide | Email verification gate for all protected routes |
+| `requireRecentAuth()` | security-critical | large | Re-auth gate for sensitive/destructive actions |
+| `getSessionContext()` | security-critical | system-wide | Session metadata for all modules |
 | `has_role()` | authorization-critical | system-wide | All RLS policies depend on this |
 | `checkPermission()` | authorization-critical | system-wide | All permission checks depend on this |
+| `requireSelfScope()` | authorization-critical | large | Self-scope enforcement for user-owned resources |
 | `logAuditEvent()` | audit-critical | system-wide | Entire audit trail depends on this |
 | `validateRequest()` | api-critical | system-wide | All input validation depends on this |
 
