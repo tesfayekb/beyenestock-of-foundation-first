@@ -38,6 +38,11 @@ All application events.
 | `job.started` | jobs-and-scheduler | audit-logging | LOW — audit only |
 | `job.completed` | jobs-and-scheduler | audit-logging | LOW — audit only |
 | `job.failed` | jobs-and-scheduler | audit-logging, health-monitoring | HIGH — affects alerting |
+| `job.queued` | jobs-and-scheduler | health-monitoring | LOW — metrics only |
+| `job.retry_scheduled` | jobs-and-scheduler | audit-logging, health-monitoring | MEDIUM — affects retry tracking |
+| `job.dead_lettered` | jobs-and-scheduler | audit-logging, health-monitoring, admin-panel | HIGH — requires operator action |
+| `job.paused` | jobs-and-scheduler | audit-logging | MEDIUM — affects scheduling |
+| `job.cancelled` | jobs-and-scheduler | audit-logging | MEDIUM — affects scheduling |
 
 ## Dependencies
 
