@@ -271,7 +271,8 @@ Key event chains showing upstream triggers and downstream effects:
 | **Failed login** | `auth.failed_attempt` → `audit.logged` → `health.alert_triggered` (if threshold) | Strict |
 | **MFA recovery** | `auth.mfa_recovered` → `audit.logged` → admin notification (security review) | Strict |
 | **Session revoke** | `auth.session_revoked` → `audit.logged` → session cleanup | Strict |
-| **Role change** | `rbac.role_assigned` → `audit.logged` → admin notification | Best-effort |
+| **Role change** | `rbac.role_assigned` / `rbac.role_revoked` → `audit.logged` → admin notification | Best-effort |
+| **Role lifecycle** | `rbac.role_created` / `rbac.role_deleted` → `audit.logged` → admin notification | Strict |
 | **Permission change** | `rbac.permission_assigned` / `rbac.permission_revoked` → `audit.logged` | Best-effort |
 | **Job failure** | `job.failed` → `job.retry_scheduled` → `job.dead_lettered` (if exhausted) → `health.alert_triggered` | Strict |
 | **Kill switch** | `job.kill_switch_activated` → `audit.logged` → `health.alert_triggered` → admin notification | Strict |
