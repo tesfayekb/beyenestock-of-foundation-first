@@ -58,7 +58,7 @@ All layers:
 - All inputs validated against schema (Zod)
 - Sanitization applied to prevent XSS and injection
 - Output encoding enforced where applicable
-- Rate limiting applied at API boundary
+- Rate limiting applied at API boundary (per IP, per user, per endpoint)
 
 ### Layer 2: Authentication
 
@@ -67,6 +67,7 @@ All layers:
 - Secure session management
 - Token validation on every request
 - Token rotation and expiration enforced
+- Token storage: prefer httpOnly cookies over localStorage
 
 ### Layer 3: Authorization
 
@@ -88,7 +89,7 @@ All layers:
 
 - All significant actions logged (actor, action, timestamp)
 - Failed authentication attempts tracked
-- Audit logs are **immutable** and **access-controlled**
+- Audit logs are **immutable**, **append-only**, **tamper-resistant**, and **access-controlled**
 - Health monitoring and alerting enabled
 
 ## Sensitive Operation Rules
