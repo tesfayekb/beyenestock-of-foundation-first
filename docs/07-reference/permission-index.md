@@ -57,6 +57,10 @@ Examples:
 | `monitoring.configure` | health-monitoring | admin-panel (alerts config) | MEDIUM — affects alerting |
 | `jobs.view` | jobs-and-scheduler | admin-panel (jobs dashboard) | LOW — display only |
 | `jobs.trigger` | jobs-and-scheduler | admin-panel (manual trigger) | MEDIUM — affects execution |
+| `jobs.pause` | jobs-and-scheduler | admin-panel (job control) | MEDIUM — affects scheduling |
+| `jobs.resume` | jobs-and-scheduler | admin-panel (job control) | MEDIUM — affects scheduling |
+| `jobs.retry` | jobs-and-scheduler | admin-panel (failure management) | MEDIUM — affects execution |
+| `jobs.deadletter.manage` | jobs-and-scheduler | admin-panel (dead-letter management) | HIGH — affects failure resolution |
 
 ## Superadmin Rule
 
