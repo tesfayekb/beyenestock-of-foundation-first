@@ -23,6 +23,7 @@ All modules defined in `docs/04-modules/` and all approved shared services.
 - No hidden or undocumented dependency is allowed
 - New cross-module dependencies require updates to this file and affected module docs
 - Changes to shared services are HIGH impact unless explicitly proven otherwise
+- Reference documents (e.g., `permission-index.md`) are documentation dependencies, not runtime module dependencies, and must not be listed as execution dependencies in the module matrix
 
 ## Dependency Types
 
@@ -40,7 +41,7 @@ All modules defined in `docs/04-modules/` and all approved shared services.
 | Module | Depends On | Dependency Types | Depended On By | Risk If Changed |
 |--------|-----------|-----------------|---------------|----------------|
 | auth | — | — | rbac, user-management, admin-panel, user-panel, api, audit-logging, jobs-and-scheduler | HIGH |
-| rbac | auth, audit-logging | Auth, Authorization, Data, Event | admin-panel, user-panel, api, user-management, permission-index | HIGH |
+| rbac | auth, audit-logging | Auth, Authorization, Event, Operational | admin-panel, user-panel, api, user-management | HIGH |
 | user-management | auth, rbac | Auth, Authorization, Service, Data | admin-panel, user-panel | MEDIUM |
 | admin-panel | auth, rbac, user-management, audit-logging, health-monitoring | Auth, Authorization, Service, Operational | — | MEDIUM |
 | user-panel | auth, rbac, user-management | Auth, Authorization, Service | — | MEDIUM |
