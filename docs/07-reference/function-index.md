@@ -618,6 +618,58 @@ When changing any indexed function:
 | **Related tests** | User listing tests, pagination tests |
 | **Lifecycle** | active |
 
+#### `deactivateUser(userId)`
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | data-access |
+| **Owner module** | user-management |
+| **Signature** | `(userId: uuid) → void` |
+| **Returns** | void; sets user lifecycle state to `deactivated` |
+| **Purity** | impure |
+| **Side effects** | DB write (lifecycle state), emits `user.account_deactivated`, triggers `auth.session_revoked` for active sessions |
+| **Transactional** | Yes |
+| **Fail behavior** | fail-fast — throw on DB error or invalid state transition |
+| **Used by** | admin-panel |
+| **Blast radius** | large |
+| **Criticality** | HIGH |
+| **Approval required** | Yes |
+| **Callable from** | request-path |
+| **Related permissions** | `users.deactivate` |
+| **Related routes** | `/admin/users/:id/deactivate` |
+| **Related events** | `user.account_deactivated`, `auth.session_revoked` |
+| **Related risks** | User access disruption, session/token invalidation |
+| **Related tests** | Deactivation allow/deny suite, post-deactivation lockout test, session revocation test |
+| **Observability** | Invocation count, error rate |
+| **Lifecycle** | active |
+
+#### `reactivateUser(userId)`
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | data-access |
+| **Owner module** | user-management |
+| **Signature** | `(userId: uuid) → void` |
+| **Returns** | void; sets user lifecycle state back to `active` |
+| **Purity** | impure |
+| **Side effects** | DB write (lifecycle state), emits `user.account_reactivated` |
+| **Transactional** | Yes |
+| **Fail behavior** | fail-fast — throw on DB error or invalid state transition |
+| **Used by** | admin-panel |
+| **Blast radius** | large |
+| **Criticality** | HIGH |
+| **Approval required** | Yes |
+| **Callable from** | request-path |
+| **Related permissions** | `users.reactivate` |
+| **Related routes** | `/admin/users/:id/reactivate` |
+| **Related events** | `user.account_reactivated` |
+| **Related risks** | Premature access restoration |
+| **Related tests** | Reactivation allow/deny suite, post-reactivation access test |
+| **Observability** | Invocation count, error rate |
+| **Lifecycle** | active |
+
 ### Audit Functions
 
 #### `logAuditEvent(params)`
