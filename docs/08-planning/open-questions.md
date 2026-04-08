@@ -28,7 +28,7 @@ All open questions and pending decisions across the project.
 |----|----------|---------------------|---------------|--------|-------|-------------|--------|
 | OQ-001 | Which OAuth providers beyond Google and Apple? | PLAN-AUTH-001 | auth | MEDIUM | Project Lead | 2026-04-08 | Open |
 | OQ-002 | MFA recovery code format and count? | PLAN-AUTH-001 | auth | HIGH | Project Lead | 2026-04-08 | Open |
-| OQ-003 | Audit log retention period? | PLAN-AUDIT-001 | audit-logging | MEDIUM | Project Lead | 2026-04-08 | Open |
+| OQ-003 | Audit log retention period? | PLAN-AUDIT-001 | audit-logging | MEDIUM | Project Lead | 2026-04-08 | Resolved — DEC-007: 90 days default (range 30–365), defined in config-index.md as `audit.retention_days` |
 | OQ-004 | Include moderator role in v1? | PLAN-RBAC-001 | rbac | LOW | Project Lead | 2026-04-08 | Open |
 | OQ-005 | Job scheduling mechanism (pg_cron vs external)? | PLAN-JOBS-001 | jobs-and-scheduler | HIGH | Project Lead | 2026-04-08 | Open |
 

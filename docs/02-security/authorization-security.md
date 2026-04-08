@@ -46,7 +46,7 @@ Authorization is enforced in three layers:
 CREATE TABLE public.user_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-    role TEXT NOT NULL,
+    role app_role NOT NULL,
     UNIQUE (user_id, role)
 );
 ```
@@ -165,17 +165,30 @@ The following are HIGH impact and require strict controls:
 
 ## Permission Levels (initial baseline)
 
-| Capability | admin | moderator | user |
-|-----------|-------|-----------|------|
-| View own data | ✓ | ✓ | ✓ |
-| Edit own data | ✓ | ✓ | ✓ |
-| View all users | ✓ | ✓ | ✗ |
-| Edit user roles | ✓ | ✗ | ✗ |
-| Access admin panel | ✓ | ✗ | ✗ |
-| View audit logs | ✓ | ✓ | ✗ |
-| Manage system config | ✓ | ✗ | ✗ |
+> **Note:** This is a baseline summary only. The authoritative source for all permission definitions, scope, classification, and governance is [`permission-index.md`](../07-reference/permission-index.md).
+>
+> **Provisional:** The `moderator` role is provisional — see OQ-004. Do not implement until OQ-004 is resolved.
 
-Note: this is an initial baseline only. Long-term enforcement should come from dynamic permissions and `permission-index.md`.
+| Permission Key | Description | Default Roles |
+|----------------|-------------|---------------|
+| `users.view_all` | View all user profiles | admin, superadmin |
+| `users.edit_any` | Edit any user's profile | admin, superadmin |
+| `users.deactivate` | Deactivate user accounts | admin, superadmin |
+| `roles.assign` | Assign roles to users | admin, superadmin |
+| `roles.revoke` | Revoke roles from users | admin, superadmin |
+| `roles.create` | Create dynamic roles | admin, superadmin |
+| `roles.delete` | Delete dynamic roles (destructive) | admin, superadmin |
+| `admin.access` | Access admin panel | admin, superadmin |
+| `admin.config` | Modify system configuration | admin, superadmin |
+| `audit.view` | View audit logs | admin, superadmin |
+| `audit.export` | Export audit data | admin, superadmin |
+| `monitoring.view` | View health dashboards | admin, superadmin |
+| `monitoring.configure` | Configure alert thresholds | admin, superadmin |
+| `jobs.view` | View job status | admin, superadmin |
+| `jobs.manage` | Manage job lifecycle | admin, superadmin |
+| `jobs.emergency` | Emergency job controls | admin, superadmin |
+
+Authorization is **permission-driven**, not role-name-driven. Business logic must check permission keys, not role names.
 
 ## Audit Requirements
 

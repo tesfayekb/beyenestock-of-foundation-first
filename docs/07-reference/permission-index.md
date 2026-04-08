@@ -237,6 +237,50 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related tests** | Role view allow/deny tests |
 | **Lifecycle** | active |
 
+#### `roles.create`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-roles-create` (actual UUID assigned at DB creation) |
+| **Module** | rbac |
+| **Description** | Allows creating new dynamic roles within the RBAC system |
+| **Classification** | admin-critical |
+| **Scope** | system-wide |
+| **Default roles** | admin, superadmin |
+| **Used by** | admin-panel (role management UI, API) |
+| **Blast radius** | system-wide |
+| **Approval required** | Yes — Lead |
+| **Audit required** | Yes |
+| **Reauth required** | No |
+| **Related routes** | `/admin/roles` (POST) |
+| **Related functions** | `checkPermission()` |
+| **Related events** | `rbac.role_created` |
+| **Related risks** | RSK-002 (privilege escalation via new role) |
+| **Related tests** | Role creation allow/deny suite |
+| **Lifecycle** | active |
+
+#### `roles.delete`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-roles-delete` (actual UUID assigned at DB creation) |
+| **Module** | rbac |
+| **Description** | Allows deleting dynamic roles. Destructive — removes role and all associated permissions. Base roles (superadmin, user) cannot be deleted. |
+| **Classification** | admin-critical, destructive |
+| **Scope** | system-wide |
+| **Default roles** | admin, superadmin |
+| **Used by** | admin-panel (role management UI, API) |
+| **Blast radius** | system-wide |
+| **Approval required** | Yes — Lead |
+| **Audit required** | Yes |
+| **Reauth required** | Yes |
+| **Related routes** | `/admin/roles/:id` (DELETE) |
+| **Related functions** | `checkPermission()` |
+| **Related events** | `rbac.role_deleted` |
+| **Related risks** | RSK-002 (orphaned users after role deletion) |
+| **Related tests** | Role deletion allow/deny suite, base role protection tests |
+| **Lifecycle** | active |
+
 ### User Management Permissions
 
 #### `users.view_all`

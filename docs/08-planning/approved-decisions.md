@@ -49,8 +49,8 @@ If any field is missing → the decision is **INVALID**.
 - **Date Approved:** 2026-04-08
 - **Decision:** Constitution contains 10 non-negotiable rules including documentation phase lock, shared component protection, no silent behavior change, approved plan preservation, execution lock, and plan merge rule.
 - **Affected Modules / Systems:** All
-- **Status:** active
-- **Superseded By:** —
+- **Status:** superseded
+- **Superseded By:** DEC-006
 
 ---
 
@@ -82,6 +82,28 @@ If any field is missing → the decision is **INVALID**.
 - **Date Approved:** 2026-04-08
 - **Decision:** Plan sections use `PLAN-{MODULE}-{NNN}` format. Decisions use `DEC-{NNN}` format. IDs are permanent and never reassigned.
 - **Affected Modules / Systems:** All
+- **Status:** active
+- **Superseded By:** —
+
+---
+
+### DEC-006: 11 Constitutional Rules
+- **Plan Section:** PLAN-GOV-001
+- **Decision Type:** policy
+- **Date Approved:** 2026-04-08
+- **Decision:** Constitution contains 11 non-negotiable rules including documentation phase lock, shared component protection, no silent behavior change, approved plan preservation, execution lock, plan merge rule, and Rule 11: Critical Module Override. Supersedes DEC-002 which referenced 10 rules.
+- **Affected Modules / Systems:** All
+- **Status:** active
+- **Superseded By:** —
+
+---
+
+### DEC-007: Audit Log Retention Period — 90 Days
+- **Plan Section:** PLAN-AUDIT-001
+- **Decision Type:** policy
+- **Date Approved:** 2026-04-08
+- **Decision:** Audit log retention period is 90 days (default), configurable within range 30–365 days. Defined in config-index.md as `audit.retention_days`. Resolves OQ-003.
+- **Affected Modules / Systems:** audit-logging
 - **Status:** active
 - **Superseded By:** —
 

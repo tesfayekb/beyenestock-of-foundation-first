@@ -92,6 +92,9 @@ Violations = **INVALID** implementation.
 ## Validation Schema Pattern
 
 ```typescript
+// Note: Valid roles are defined by the `app_role` enum in the database.
+// The values below must match that enum definition.
+// 'moderator' is provisional — see OQ-004. Do not implement until resolved.
 const createUserSchema = z.object({
   email: z.string().email().max(255),
   name: z.string().min(1).max(100).trim(),

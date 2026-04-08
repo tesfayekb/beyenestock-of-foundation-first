@@ -858,6 +858,28 @@ When changing any indexed function:
 | **Related tests** | Input validation tests, boundary tests, injection prevention tests |
 | **Lifecycle** | active |
 
+#### `normalizeRequest(input)`
+
+| Field | Value |
+|-------|-------|
+| **Type** | utility |
+| **Classification** | api-critical |
+| **Owner module** | api |
+| **Signature** | `(input: unknown) → NormalizedInput` |
+| **Returns** | Normalized input object (trimmed, lowercased where applicable, sanitized) |
+| **Purity** | impure |
+| **Side effects** | Input mutation (trim whitespace, normalize casing, sanitize) |
+| **Transactional** | No |
+| **Fail behavior** | fail-secure — reject malformed input with 400 |
+| **Used by** | All edge functions |
+| **Blast radius** | system-wide |
+| **Criticality** | HIGH |
+| **Approval required** | No |
+| **Callable from** | request-path |
+| **Downstream deps** | `validateRequest()` (called after normalization) |
+| **Related tests** | Normalization tests, sanitization tests, encoding tests |
+| **Lifecycle** | active |
+
 ### Job Functions
 
 #### `executeWithRetry(fn, config)`
@@ -904,6 +926,7 @@ When changing any indexed function:
 | `requireSelfScope()` | authorization-critical | large | Self-scope enforcement for user-owned resources |
 | `logAuditEvent()` | audit-critical | system-wide | Entire audit trail depends on this |
 | `validateRequest()` | api-critical | system-wide | All input validation depends on this |
+| `normalizeRequest()` | api-critical | system-wide | All input normalization depends on this |
 
 ---
 
