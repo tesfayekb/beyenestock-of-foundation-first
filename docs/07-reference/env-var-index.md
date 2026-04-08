@@ -194,6 +194,71 @@ Every env var entry must include:
 
 ---
 
+## Env Version Snapshot Enforcement
+
+| Rule | Description |
+|------|-------------|
+| **Runtime exposure** | Active `env_version` (e.g., `env-v1.0`) must be exposed at runtime via health endpoint and admin panel |
+| **SSOT comparison** | Runtime env version must match this index's declared version. Mismatch → alert + action tracker entry |
+| **Deploy tagging** | Each deployment must record the env version it was built against |
+| **Rollback** | Env version mismatch after rollback must trigger re-validation of all env vars |
+
+---
+
+## Dual-Key Rotation Strategy
+
+For secrets that affect active sessions (e.g., `SUPABASE_JWT_SECRET`):
+
+| Phase | Description |
+|-------|-------------|
+| **1. Overlap** | New key is added alongside old key. System accepts tokens signed by either. |
+| **2. Transition** | New tokens issued with new key only. Old tokens still validated. |
+| **3. Retirement** | After max token TTL elapses, old key is removed. Only new key active. |
+| **4. Confirmation** | Rotation confirmed — audit event generated, action tracker entry created. |
+
+**Rule:** Secrets linked to active sessions must use dual-key rotation. Hard rotation (instant swap) is only permitted in emergency with Lead approval.
+
+---
+
+## Secret Access Telemetry
+
+| Rule | Description |
+|------|-------------|
+| **Access logging** | Track which services/functions access which secrets (sampled, not per-request) |
+| **Anomaly detection** | Unusual access patterns (new caller, frequency spike, off-hours access) must trigger alert |
+| **Baseline** | Establish normal access patterns per secret; deviations flagged for review |
+| **Audit integration** | Anomalous access generates `SECRET_ACCESS_ANOMALY` audit event |
+
+---
+
+## Config–Env Consistency Check
+
+| Rule | Description |
+|------|-------------|
+| **Automatic validation** | Env vars feeding config values (per Config Index) must be validated against Config Index constraints at startup |
+| **Cross-reference** | Each env var with `related_configs` must have values compatible with the config's `allowed_values` / `format_validation` |
+| **Mismatch behavior** | Inconsistency between env var value and config constraint → `fail-fast` for critical, `warn` for non-critical |
+| **CI enforcement** | CI pipeline should include config–env consistency check as a gate |
+
+---
+
+## Deployment Gate
+
+Before any deployment proceeds, the system must confirm:
+
+| Check | Requirement |
+|-------|-------------|
+| **Presence** | All `required` env vars present |
+| **Format** | All env vars pass format validation |
+| **Secrets** | All secrets valid and not expired |
+| **Drift** | No drift between deployed env and this index |
+| **Config consistency** | Env vars compatible with Config Index constraints |
+| **Env version** | Deployment env version matches SSOT |
+
+**Rule:** Deployment with any failed check is **blocked**. Override requires Lead approval + documented justification + action tracker entry.
+
+---
+
 ## Env Var Registry
 
 ### `SUPABASE_URL`
