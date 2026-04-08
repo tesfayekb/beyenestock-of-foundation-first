@@ -33,21 +33,24 @@ Admin-only UI and control plane for:
 
 The following actions require strict controls:
 
-- Assigning roles
-- Revoking roles
-- Creating or deleting roles
-- Assigning or revoking permissions
-- Modifying system configuration
-- Deactivating users
-- Accessing or exporting audit logs
+- Assigning roles → `roles.assign`
+- Revoking roles → `roles.revoke`
+- Creating or deleting roles → `roles.create` / `roles.delete`
+- Assigning or revoking permissions → `rbac.permission_assigned` / `rbac.permission_revoked`
+- Modifying system configuration → `admin.config`
+- Deactivating users → `users.deactivate`
+- Reactivating users → `users.reactivate`
+- Accessing or exporting audit logs → `audit.view` / `audit.export`
 
 **Requirements:**
 
-- Permission checks enforced
+- Permission checks enforced via `checkPermission()`
 - Audit logging required
-- Re-authentication required for sensitive actions
+- Re-authentication required for: role assignment/revocation, config changes, dead-letter management, emergency kill switch, user deactivation/reactivation
 
 ## RBAC Management Responsibilities
+
+Admin panel is a **control surface** — it provides the UI for RBAC management, but canonical domain events come from the [RBAC Module](rbac.md), not admin-panel-specific duplicates.
 
 Admin panel must provide:
 
@@ -55,6 +58,8 @@ Admin panel must provide:
 - Permission assignment and removal
 - Role-to-permission mapping visibility
 - Safe handling of base roles (`superadmin`, `user`)
+
+All admin RBAC actions must map to: [Permission Index](../07-reference/permission-index.md), [Route Index](../07-reference/route-index.md), [Event Index](../07-reference/event-index.md), and [Function Index](../07-reference/function-index.md).
 
 ## Monitoring & Audit Integration
 
@@ -73,20 +78,23 @@ Admin panel must surface:
 - All data must be paginated
 - UI must not bypass backend authorization
 
-## Shared Functions
+## Module-Local Components
 
-| Function | Purpose | Used By |
-|----------|---------|---------|
-| `AdminLayout` | Layout wrapper with admin navigation | Admin pages |
-| `AdminGuard` | Enforces `admin.access` permission | Admin routes |
+| Component | Purpose |
+|-----------|---------|
+| `AdminLayout` | Layout wrapper with admin navigation (module-local, not cross-module shared) |
+| `AdminGuard` | Panel-local wrapper around `requireAuth()` + `checkPermission('admin.access')` (module-local) |
 
 ## Events
 
-| Event | Emitted When | Consumed By |
-|-------|-------------|-------------|
-| `admin.config_changed` | System configuration modified | audit-logging, health-monitoring |
-| `admin.user_action` | Admin performs user operation | audit-logging |
-| `admin.role_updated` | Role or permission modified | audit-logging |
+| Event | Emitted When | Consumed By | Notes |
+|-------|-------------|-------------|-------|
+| `admin.config_changed` | System configuration modified | audit-logging, health-monitoring | |
+| `admin.user_action` | Admin performs user operation | audit-logging | |
+| `rbac.role_assigned` | Role assigned via admin UI | audit-logging | Owned by RBAC module |
+| `rbac.role_revoked` | Role revoked via admin UI | audit-logging | Owned by RBAC module |
+| `rbac.permission_assigned` | Permission assigned via admin UI | audit-logging | Owned by RBAC module |
+| `rbac.permission_revoked` | Permission revoked via admin UI | audit-logging | Owned by RBAC module |
 
 ## Jobs
 
@@ -94,10 +102,29 @@ None owned by this module.
 
 ## Permissions
 
-| Permission | Description |
-|-----------|-------------|
-| `admin.access` | Access admin panel |
-| `admin.config` | Modify system configuration |
+Admin panel consumes the following permissions (defined in [Permission Index](../07-reference/permission-index.md)):
+
+| Permission | Description | Re-Auth |
+|-----------|-------------|---------|
+| `admin.access` | Gate access to entire admin panel | No |
+| `admin.config` | Modify system configuration | Yes |
+| `users.view_all` | View all user profiles | No |
+| `users.edit_any` | Edit any user profile | No |
+| `users.deactivate` | Deactivate user accounts | Yes |
+| `users.reactivate` | Reactivate user accounts | Yes |
+| `roles.view` | View roles and mappings | No |
+| `roles.assign` | Assign roles to users | Yes |
+| `roles.revoke` | Revoke roles from users | Yes |
+| `roles.create` | Create new roles | No |
+| `roles.delete` | Delete roles | Yes |
+| `audit.view` | View audit logs | No |
+| `audit.export` | Export audit data | No |
+| `monitoring.view` | View system health | No |
+| `monitoring.configure` | Configure monitoring | No |
+| `jobs.view` | View job status | No |
+| `jobs.trigger` | Manually trigger jobs | No |
+| `jobs.deadletter.manage` | Manage dead-letter queue | Yes |
+| `jobs.emergency` | Emergency kill switch | Yes |
 
 ## Dependencies
 
