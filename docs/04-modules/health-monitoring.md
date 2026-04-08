@@ -63,6 +63,11 @@ Response: { status: "healthy" | "degraded" | "unhealthy", checks: {...minimal sa
 | `warning` | Threshold approaching, investigation recommended |
 | `critical` | Immediate action required |
 
+### Alert Rules
+
+- Alerts must support throttling or grouping to prevent alert flooding
+- System should support **maintenance mode** to suppress non-critical alerts during planned operations
+
 ## Metrics Tracked
 
 | Metric | Source | Alert Threshold | Severity |
