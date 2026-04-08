@@ -271,7 +271,8 @@ Key event chains showing upstream triggers and downstream effects:
 | **Failed login** | `auth.failed_attempt` → `audit.logged` → `health.alert_triggered` (if threshold) | Strict |
 | **MFA recovery** | `auth.mfa_recovered` → `audit.logged` → admin notification (security review) | Strict |
 | **Session revoke** | `auth.session_revoked` → `audit.logged` → session cleanup | Strict |
-| **Role change** | `rbac.role_assigned` → `audit.logged` → admin notification | Best-effort |
+| **Role change** | `rbac.role_assigned` / `rbac.role_revoked` → `audit.logged` → admin notification | Best-effort |
+| **Role lifecycle** | `rbac.role_created` / `rbac.role_deleted` → `audit.logged` → admin notification | Strict |
 | **Permission change** | `rbac.permission_assigned` / `rbac.permission_revoked` → `audit.logged` | Best-effort |
 | **Job failure** | `job.failed` → `job.retry_scheduled` → `job.dead_lettered` (if exhausted) → `health.alert_triggered` | Strict |
 | **Kill switch** | `job.kill_switch_activated` → `audit.logged` → `health.alert_triggered` → admin notification | Strict |
@@ -477,6 +478,48 @@ Key event chains showing upstream triggers and downstream effects:
 | **Failure handling** | Alert on failure |
 | **Observability** | Logged, traced |
 | **Related risks** | RSK-002 |
+| **Lifecycle** | active |
+
+#### `rbac.role_created` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | rbac |
+| **Consumers** | audit-logging |
+| **Description** | New dynamic role created in the RBAC system |
+| **Payload schema** | `{ role_name: string, created_by: uuid, timestamp: datetime, permissions: string[] }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure |
+| **Observability** | Logged, traced |
+| **Related permissions** | `roles.create` |
+| **Related risks** | RSK-002 (privilege escalation via new role) |
+| **Related tests** | Role creation event emission test |
+| **Lifecycle** | active |
+
+#### `rbac.role_deleted` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | rbac |
+| **Consumers** | audit-logging |
+| **Description** | Dynamic role deleted from the RBAC system. Base roles cannot be deleted. |
+| **Payload schema** | `{ role_name: string, deleted_by: uuid, timestamp: datetime, affected_users: integer }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure |
+| **Observability** | Logged, traced |
+| **Related permissions** | `roles.delete` |
+| **Related risks** | RSK-002 (orphaned users after role deletion) |
+| **Related tests** | Role deletion event emission test, base role protection test |
 | **Lifecycle** | active |
 
 #### `rbac.permission_denied` — v1

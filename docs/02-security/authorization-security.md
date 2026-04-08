@@ -80,7 +80,7 @@ CREATE TABLE public.permissions (
 
 CREATE TABLE public.role_permissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    role TEXT NOT NULL,
+    role app_role NOT NULL,
     permission_id UUID REFERENCES public.permissions(id) ON DELETE CASCADE NOT NULL,
     UNIQUE (role, permission_id)
 );
