@@ -529,6 +529,71 @@ Every config must define:
 
 ---
 
+## Config Versioning
+
+| Field | Description |
+|-------|-------------|
+| **Global version** | `config_version: vX.Y` — incremented on any config change |
+| **Purpose** | Snapshot entire config state for rollback, audit, and drift comparison |
+| **Rule** | Every config change must bump the version. Major version = security-sensitive change. Minor version = all other changes. |
+| **Rollback** | Any previous version can be restored as a complete set. Partial rollback prohibited for security-sensitive configs. |
+| **Current version** | `v1.0` (initial baseline) |
+
+---
+
+## Config Change Simulation
+
+| Rule | Description |
+|------|-------------|
+| **Dry-run requirement** | Changes to `security-sensitive`, `authorization-sensitive`, or `system-wide` blast radius configs must support dry-run validation before apply |
+| **Simulated impact** | Dry-run must report: affected flows, expected behavior change, blast radius confirmation |
+| **Validation gate** | Dry-run failure blocks the change — no override without Lead approval |
+| **Scope** | Simulation covers: validation rules, dependent config interactions, fail-secure behavior |
+
+---
+
+## Config Dependency Graph
+
+Configs that influence each other must be reviewed together when either changes.
+
+| Config Group | Dependency | Combined Impact |
+|-------------|------------|-----------------|
+| `api.rate_limit_per_minute` + `pagination.max_page_size` | Rate limit × max payload = API load ceiling | Misconfiguration can cause capacity exhaustion |
+| `jobs.max_retries` + `jobs.retry_backoff_base` | Retries × backoff = total retry window | Excessive retries can cascade system load |
+| `session.access_token_ttl` + `session.refresh_token_rotation` | TTL × rotation = session security posture | Changing one without the other can weaken security |
+| `auth.max_login_attempts` + `auth.lockout_duration` | Attempts × lockout = brute-force resistance | Must be tuned together |
+| `monitoring.error_rate_threshold` + `monitoring.health_check_interval` | Threshold × interval = alert sensitivity | Mismatch causes false positives or missed alerts |
+
+**Rule:** When changing any config in a dependency group, all related configs must be reviewed in the same change request.
+
+---
+
+## Config Usage Telemetry
+
+| Rule | Description |
+|------|-------------|
+| **Tracking** | System should track which configs are read at runtime (access count, last accessed) |
+| **Dead config detection** | Configs with zero access over 90 days are flagged as potentially unused |
+| **Cleanup policy** | Unused configs must be reviewed → confirmed active, deprecated, or removed |
+| **Telemetry events** | `CONFIG_ACCESSED` event (sampled, not per-request) for observability |
+
+---
+
+## Config Drift Severity Classification
+
+Not all drift is equal. Drift severity determines response urgency:
+
+| Severity | Applies To | Response Time | Action |
+|----------|-----------|---------------|--------|
+| **Critical** | `security-sensitive`, `authorization-sensitive` | Immediate (< 15 min) | Alert → investigate → restore or approve |
+| **High** | `operational`, `retention-compliance`, system-wide blast radius | Rapid (< 4 hours) | Alert → scheduled correction |
+| **Medium** | `performance`, `infrastructure` | Standard (< 24 hours) | Logged → next review cycle |
+| **Low** | `ux-product`, `feature-flag` | Tracked | Noted in drift report |
+
+**Rule:** Critical drift triggers automatic alert. Config cannot remain in drifted state without explicit approval and action tracker entry.
+
+---
+
 ## Critical Config Summary
 
 ### Top Critical Configs (Require Strongest Governance)
