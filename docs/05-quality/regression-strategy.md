@@ -253,6 +253,214 @@ Every regression / watchlist item must include:
 
 ---
 
+## Automated Baseline Drift Detection
+
+Baselines must be automatically compared — not only during test runs:
+
+| Baseline Type | Automated Comparison Method | Frequency |
+|--------------|---------------------------|-----------|
+| API response shapes | Snapshot diff against golden dataset | Every CI run |
+| Permission matrix | Allow/deny output diff | Every RBAC change + weekly |
+| Query plans (critical) | `EXPLAIN` output diff against stored baseline | Every migration + weekly |
+| Audit event emissions | Event list diff per action | Every audit-related change |
+| Performance metrics | p95/p99 comparison against stored baseline | Every release + continuous |
+| Cache key format | String snapshot comparison | Every cache-related change |
+
+**Rules:**
+- Drift detected = Action Tracker entry created **automatically**
+- Drift on security/permission baselines = CRITICAL severity
+- Automated drift checks must run in CI and post-deploy surveillance
+
+---
+
+## Regression Blast Radius Estimation
+
+Every regression must estimate its blast radius to prioritize containment:
+
+| Blast Radius | Definition | Containment Priority |
+|-------------|-----------|---------------------|
+| **Small** | Single feature, single module, no cross-dependencies | Standard SLA |
+| **Medium** | Multiple features or one shared service affected | Escalated SLA |
+| **Large** | Multiple modules, cross-tenant impact possible | Immediate containment |
+| **System-wide** | Auth, permissions, RLS, or core infrastructure affected | Emergency response |
+
+### Required Fields per Regression
+
+- `blast_radius`: small / medium / large / system-wide
+- `affected_modules`: list
+- `affected_user_scope`: all users / tenant-specific / role-specific / single user
+- `criticality_of_affected_flows`: critical / high / medium / low
+
+---
+
+## Progressive Rollout and Canary Integration
+
+### Rules for HIGH Impact Changes
+
+- HIGH impact changes should support **staged rollout** (feature flags, canary deployment)
+- Regression signals must be evaluated **during** rollout:
+
+| Signal | Threshold for Halt |
+|--------|-------------------|
+| Error rate | > 2x baseline |
+| Latency (p99) | > 1.5x baseline |
+| Permission denial rate | Any unexpected increase |
+| Audit event anomalies | Missing expected events |
+
+- Regression detected during rollout → **halt rollout automatically**
+- Rollout may resume only after investigation and approval
+- Feature flags must support instant disable without full rollback
+
+---
+
+## Regression Recurrence Detection
+
+### Rules
+
+- Regression system must track recurrence by module, function, and flow
+- Recurrence thresholds:
+
+| Recurrences (in 30 days) | Action |
+|--------------------------|--------|
+| 2 | Warning + enhanced test coverage required |
+| 3+ | **Architectural review** mandatory |
+| 5+ | Module flagged as unstable — stabilization sprint required |
+
+- Recurrence tracking feeds into regression knowledge base
+- Recurrent regressions must be escalated beyond the original owner
+
+---
+
+## Silent Regression Detection
+
+Some regressions don't fail tests or trigger alerts but degrade quality subtly:
+
+### Monitoring for Silent Regressions
+
+| Signal | Detection Method |
+|--------|-----------------|
+| User behavior anomalies | Analytics — unexpected drops in feature usage |
+| Subtle latency increases | p99 trend analysis (not just threshold) |
+| Audit inconsistencies | Reconciliation — expected vs actual event counts |
+| Permission evaluation drift | Sampled permission output comparison |
+| Data quality degradation | Invariant checks on aggregates/summaries |
+
+### Rules
+
+- Silent regression detection is part of post-release surveillance
+- Anomaly detection must be reviewed during watch windows
+- Confirmed silent regression = Action Tracker entry + regression test added
+
+---
+
+## Regression Budget and Error Budget
+
+### Regression Rate Limits
+
+| Period | Acceptable Regression Count | Action on Breach |
+|--------|---------------------------|-----------------|
+| Per week | ≤ 2 (non-critical) | Warning |
+| Per week | 0 critical | Always — any critical = immediate response |
+| Per month | ≤ 5 total | System stability review |
+| Per month | > 5 total | System flagged **unstable** — stabilization sprint |
+
+### Rules
+
+- Minor regressions accumulate — repeated minor regressions escalate to system concern
+- Regression budget tracked and reported monthly
+- Budget breach = Action Tracker entry + architectural review consideration
+
+---
+
+## Pre-Deployment Regression Simulation
+
+### For HIGH Impact Changes
+
+- Simulate production scenarios in staging before deploy:
+
+| Simulation | Required For |
+|-----------|-------------|
+| Load simulation | Performance-sensitive changes |
+| Multi-tenant data | RLS/permission changes |
+| Concurrent actions | Write-path / transaction changes |
+| Large dataset | Migration / query changes |
+| Cache cold start | Cache key / TTL changes |
+
+### Rules
+
+- Simulation results must be compared against baseline
+- Simulation failure = release blocker
+- Simulation environment must mirror production configuration (RLS, pooling, permissions)
+
+---
+
+## Time-to-Detection Metric
+
+### Detection Latency Targets
+
+| Severity | Detection Target | Measurement |
+|----------|-----------------|-------------|
+| CRITICAL | Near real-time (< 15 min) | Monitoring + alerting |
+| HIGH | Within hours (< 4h) | Surveillance + automated checks |
+| MEDIUM | Within 24 hours | Post-release watch window |
+| LOW | Within 1 week | Periodic review |
+
+### Rules
+
+- Time-to-detection tracked per regression (introduction timestamp → detection timestamp)
+- Detection latency exceeding target = process improvement required
+- Detection efficiency reviewed monthly
+
+---
+
+## Regression Knowledge Base
+
+### Learning from Regressions
+
+Every resolved regression must contribute to system improvement:
+
+| Action | When |
+|--------|------|
+| Update regression watchlist | On resolution |
+| Add permanent regression test | On resolution (if automatable) |
+| Update architecture/design rules | If root cause is architectural |
+| Update baseline | If expected behavior changed |
+| Update cross-module mapping | If new dependency discovered |
+| Document root cause and prevention | Always |
+
+### Rules
+
+- Knowledge base is the regression watchlist + linked documentation
+- Patterns across regressions must be analyzed quarterly
+- Systemic issues must trigger architectural review, not just point fixes
+
+---
+
+## Full-System Regression Gate
+
+### Pre-Release System-Wide Validation
+
+Before release of any HIGH impact change, the system must pass **all** gates:
+
+| Gate | Source |
+|------|--------|
+| Testing strategy gates (unit, integration, E2E, security) | Testing Strategy |
+| Regression checks (classification, baselines, cross-module) | This document |
+| Performance budgets (latency, bundle, query plans) | Performance Strategy |
+| Security validation (auth, RBAC, RLS, adversarial) | Security Architecture |
+| Cache correctness (invalidation, isolation, freshness) | Caching Strategy |
+| Job system validation (idempotency, scheduling, DLQ) | Jobs Module |
+| Audit completeness (event emission, integrity) | Audit Module |
+
+### Rules
+
+- No single module may pass while system-level validation fails
+- System gate is the **final** check before production deploy
+- System gate failure = release blocker, no exceptions
+- Gate results must be recorded and linked to release
+
+---
+
 ## Post-Release Regression Surveillance
 
 ### Watch Window
@@ -303,6 +511,10 @@ The following **MUST** create Action Tracker entries:
 | Unresolved regression beyond SLA | Escalated +1 level | Immediate |
 | Post-release regression in watch window | HIGH | 24h |
 | Regression watchlist item stale (> 30 days) | MEDIUM | Review/retire |
+| Automated baseline drift detected | Per baseline type | 24h |
+| Regression budget breach | HIGH | 1 week |
+| Canary rollout halted | HIGH | 4h |
+| Silent regression confirmed | MEDIUM | 1 week |
 
 ### Health Board Integration
 
@@ -310,6 +522,7 @@ The following **MUST** create Action Tracker entries:
 - Repeated regression in same module = stability concern flagged
 - Unresolved critical regressions degrade system health score
 - Regression resolution restores health status with evidence
+- Regression budget breach = system flagged unstable
 
 ---
 
