@@ -20,19 +20,33 @@ RBAC system, permission model, RLS policies, and authorization checks across all
 
 Authorization is enforced in three layers:
 
-1. **Role assignment** — which roles a user has
-2. **Permission assignment** — which permissions a role grants
-3. **Policy enforcement** — how access is enforced in APIs and database policies
+1. **User → Roles** — which roles a user has (base or dynamic)
+2. **Roles → Permissions** — which permissions a role grants (resource-based)
+3. **Permissions → Resources/Actions** — how access is enforced in APIs and database policies
 
 ## Role Structure
 
-```sql
-CREATE TYPE public.app_role AS ENUM ('admin', 'moderator', 'user');
+### Base Roles (IMMUTABLE)
 
+| Role | Description |
+|------|-------------|
+| `superadmin` | Full access to all current and future permissions |
+| `user` | Default role with baseline access |
+
+- Base roles cannot be deleted or modified
+- `superadmin` automatically inherits all permissions (including newly created ones)
+
+### Dynamic Roles
+
+- Additional roles can be created, updated, and deleted at runtime
+- Dynamic roles are assigned permissions explicitly
+- Role changes are HIGH impact and must be audited
+
+```sql
 CREATE TABLE public.user_roles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-    role app_role NOT NULL,
+    role TEXT NOT NULL,
     UNIQUE (user_id, role)
 );
 ```
@@ -45,20 +59,28 @@ CREATE TABLE public.user_roles (
 
 ## Permission Model
 
-Authorization must support dynamic permissions.
+Permissions are **resource-based** and **dynamically generated**.
 
-Recommended structure:
+### Permission Format
+
+```
+{resource}.{action}
+```
+
+Examples: `user.read`, `user.create`, `user.update`, `user.delete`, `audit.view`, `config.update`
+
+### Permission Tables
 
 ```sql
 CREATE TABLE public.permissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    key TEXT UNIQUE NOT NULL,
+    key TEXT UNIQUE NOT NULL,        -- e.g. 'user.read'
     description TEXT
 );
 
 CREATE TABLE public.role_permissions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    role app_role NOT NULL,
+    role TEXT NOT NULL,
     permission_id UUID REFERENCES public.permissions(id) ON DELETE CASCADE NOT NULL,
     UNIQUE (role, permission_id)
 );
@@ -67,9 +89,12 @@ CREATE TABLE public.role_permissions (
 **Permission Rules:**
 
 - Permissions are the source of truth for capabilities
+- Every resource must define permissions at creation
 - Roles are collections of permissions
+- `superadmin` bypasses permission checks — all permissions are implicitly granted
 - Hardcoded permission logic should be minimized and documented
 - Permission changes are HIGH impact and must be audited
+- All permissions must be indexed in `permission-index.md`
 
 ## Permission Checking
 
