@@ -361,34 +361,35 @@ Rules:
 
 ## Job Registry (SSOT)
 
-| Field | `audit_cleanup` | `health_check` | `metrics_aggregate` |
-|-------|----------------|----------------|---------------------|
-| **Job ID** | `audit_cleanup` | `health_check` | `metrics_aggregate` |
-| **Version** | `1.0.0` | `1.0.0` | `1.0.0` |
-| **Owner Module** | audit-logging | health-monitoring | health-monitoring |
-| **Purpose** | Archive old audit logs | Run health checks | Aggregate metrics |
-| **Schedule** | Weekly | Every 1 min | Every 5 min |
-| **Trigger Type** | scheduled | scheduled | scheduled |
-| **Class** | maintenance | system_critical | operational |
-| **Priority** | Normal | Highest | High |
-| **Execution Guarantee** | at_least_once | at_least_once | at_least_once |
-| **Timeout (seconds)** | 25 | 10 | 20 |
-| **Max Retries** | 3 | 3 | 3 |
-| **Retry Policy** | Standard backoff | Aggressive | Standard backoff |
-| **Concurrency Policy** | forbid | forbid | forbid |
-| **Idempotency Strategy** | Time-window dedup | Execution-id based | Time-window dedup |
-| **Failure Classification** | Transient/dependency | Transient | Transient/dependency |
-| **Replay Safe** | true | true | true |
-| **Alert Severity** | Low | Critical | High |
-| **Health Impact** | None | System health degrades | Metrics staleness |
-| **Audit Required** | Yes | Yes | Yes |
-| **Run Principal** | `svc:audit-cleanup` | `svc:health-check` | `svc:metrics-aggregate` |
-| **Dependencies** | DB | DB, monitored services | DB, metrics sources |
-| **Resource Budget** | ≤ 1000 DB ops | ≤ 50 DB ops | ≤ 500 DB ops |
-| **SLO Success Rate** | ≥ 99.0% | ≥ 99.9% | ≥ 99.5% |
-| **SLO Latency** | ≤ 25s | ≤ 2s | ≤ 15s |
-| **SLO Freshness** | ≤ 8 days | ≤ 3 min | ≤ 10 min |
-| **Status** | Not started | Not started | Not started |
+| Field | `audit_cleanup` | `health_check` | `metrics_aggregate` | `alert_evaluation` |
+|-------|----------------|----------------|---------------------|-------------------|
+| **Job ID** | `audit_cleanup` | `health_check` | `metrics_aggregate` | `alert_evaluation` |
+| **Version** | `1.0.0` | `1.0.0` | `1.0.0` | `1.0.0` |
+| **Owner Module** | audit-logging | health-monitoring | health-monitoring | health-monitoring |
+| **Purpose** | Archive old audit logs | Run health checks | Aggregate metrics | Evaluate alert thresholds |
+| **Schedule** | Weekly | Every 1 min | Every 5 min | Every 1 min |
+| **Trigger Type** | scheduled | scheduled | scheduled | scheduled |
+| **Class** | maintenance | system_critical | operational | system_critical |
+| **Priority** | Normal | Highest | High | Highest |
+| **Execution Guarantee** | at_least_once | at_least_once | at_least_once | at_least_once |
+| **Timeout (seconds)** | 25 | 10 | 20 | 10 |
+| **Max Retries** | 3 | 3 | 3 | 3 |
+| **Retry Policy** | Standard backoff | Aggressive | Standard backoff | Aggressive |
+| **Concurrency Policy** | forbid | forbid | forbid | forbid |
+| **Idempotency Strategy** | Time-window dedup | Execution-id based | Time-window dedup | Time-window dedup |
+| **Failure Classification** | Transient/dependency | Transient | Transient/dependency | Transient |
+| **Replay Safe** | true | true | true | true |
+| **Alert Severity** | Low | Critical | High | Critical |
+| **Health Impact** | None | System health degrades | Metrics staleness | Alert blindness — missed threshold breaches |
+| **Audit Required** | Yes | Yes | Yes | Yes |
+| **Run Principal** | `svc:audit-cleanup` | `svc:health-check` | `svc:metrics-aggregate` | `svc:alert-evaluation` |
+| **Dependencies** | DB | DB, monitored services | DB, metrics sources | DB, metrics data, alert config |
+| **Resource Budget** | ≤ 1000 DB ops | ≤ 50 DB ops | ≤ 500 DB ops | ≤ 100 DB ops |
+| **SLO Success Rate** | ≥ 99.0% | ≥ 99.9% | ≥ 99.5% | ≥ 99.9% |
+| **SLO Latency** | ≤ 25s | ≤ 2s | ≤ 15s | ≤ 5s |
+| **SLO Freshness** | ≤ 8 days | ≤ 3 min | ≤ 10 min | ≤ 3 min |
+| **Event Outputs** | — | `health.alert_triggered`, `health.status_changed` | — | `health.alert_triggered`, `health.status_changed` |
+| **Status** | Not started | Not started | Not started | Not started |
 
 ### Recovery and Reconciliation Jobs (Planned)
 

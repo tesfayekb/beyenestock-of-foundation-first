@@ -81,11 +81,11 @@ Response: { status: "healthy" | "degraded" | "unhealthy", checks: {...minimal sa
 
 ## Shared Functions
 
-| Function | Purpose | Used By |
-|----------|---------|---------|
-| `getSystemHealth()` | Returns current system status | admin-panel |
-| `getMetrics(timeRange)` | Returns metrics view | admin-panel |
-| `evaluateAlerts()` | Evaluates thresholds and alert state | health jobs / monitoring flow |
+| Function | Purpose | Used By | Defined In |
+|----------|---------|---------|------------|
+| `getSystemHealth()` | Returns current system status | admin-panel | [Function Index](../07-reference/function-index.md) |
+| `getMetrics(timeRange)` | Returns metrics view | admin-panel | [Function Index](../07-reference/function-index.md) |
+| `evaluateAlerts()` | Evaluates thresholds and alert state | health jobs (`alert_evaluation`) | [Function Index](../07-reference/function-index.md) |
 
 ## Events
 
@@ -110,9 +110,12 @@ Response: { status: "healthy" | "degraded" | "unhealthy", checks: {...minimal sa
 | `monitoring.view` | Can view health dashboard |
 | `monitoring.configure` | Can configure thresholds and alerts |
 
-## Failure Handling Rules
+## Failure Handling Rules (CRITICAL)
 
-- Monitoring failure must raise an alert
+- Monitoring failure must raise an alert via `health.monitoring_failed`
+- Monitoring pipeline failure must degrade system health state to `degraded` or `unhealthy`
+- Prolonged monitoring blindness (sustained failure) must create action tracker entry
+- Critical alerting failure must surface in admin panel as a control failure
 - Critical health degradation must surface prominently in admin panel
 - Repeated failures must not be silently suppressed
 

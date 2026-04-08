@@ -747,7 +747,7 @@ Key event chains showing upstream triggers and downstream effects:
 | **Owner module** | health-monitoring |
 | **Consumers** | audit-logging |
 | **Description** | System health status changed |
-| **Payload schema** | `{ component: string, previous_status: enum[healthy, degraded, down], new_status: enum[healthy, degraded, down], timestamp: datetime }` |
+| **Payload schema** | `{ component: string, previous_status: enum[healthy, degraded, unhealthy], new_status: enum[healthy, degraded, unhealthy], timestamp: datetime }` |
 | **Delivery guarantee** | at-least-once |
 | **Ordering** | strict |
 | **Idempotency** | event_id |
