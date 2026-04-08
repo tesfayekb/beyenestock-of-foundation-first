@@ -4,34 +4,71 @@
 
 ## Purpose
 
-Manages user profiles, account settings, and user lifecycle.
+Manages user profiles, account settings data, and user lifecycle state.
 
 ## Scope
 
-Profile CRUD, account settings, user search/listing, account deactivation.
+Profile CRUD, account settings data, user search/listing, account deactivation/reactivation.
+
+## Enforcement Rule (CRITICAL)
+
+- Profile and lifecycle access must be enforced by **permissions** and **self-scope rules**
+- RLS and backend authorization checks are mandatory
+- Any unauthorized cross-user access is an **INVALID** implementation
 
 ## Key Rules
 
 - Profile data is separate from auth data
-- Users can only edit their own profile (enforced by RLS)
-- Admins can view/edit all profiles
-- Profile changes are audited
-- Soft delete for account deactivation
+- Self-service access is limited to the authenticated user's own profile
+- Elevated access requires explicit permissions
+- Profile and lifecycle changes are audited
+- Deactivation uses soft delete / reversible lifecycle state
+
+## Access Model
+
+**Self access:**
+
+- `users.view_self`
+- `users.edit_self`
+
+**Elevated access:**
+
+- `users.view_all`
+- `users.edit_any`
+- `users.deactivate`
+
+No access is granted based on role name alone.
+
+## Lifecycle Rules
+
+User lifecycle states must be explicitly defined and enforced:
+
+- `active`
+- `deactivated`
+- `reactivated`
+
+**Deactivation rules:**
+
+- Must be auditable
+- Must revoke active access as defined by auth/security policy
+- Must preserve retained data per policy
 
 ## Shared Functions
 
 | Function | Purpose | Used By |
 |----------|---------|---------|
-| `getUserProfile(userId)` | Fetches user profile | admin-panel, user-panel |
-| `updateUserProfile(userId, data)` | Updates profile data | admin-panel, user-panel |
-| `listUsers(filters, pagination)` | Lists users with filtering | admin-panel |
+| `getUserProfile(userId)` | Fetch profile data | admin-panel, user-panel |
+| `updateUserProfile(userId, data)` | Update profile data | admin-panel, user-panel |
+| `listUsers(filters, pagination)` | List/filter users | admin-panel |
+| `deactivateUser(userId)` | Deactivate account | admin-panel |
+| `reactivateUser(userId)` | Restore account | admin-panel |
 
 ## Events
 
 | Event | Emitted When | Consumed By |
 |-------|-------------|-------------|
-| `user.profile_updated` | Profile data changed | audit-logging |
-| `user.account_deactivated` | Account soft-deleted | audit-logging, admin-panel |
+| `user.profile_updated` | Profile changed | audit-logging |
+| `user.account_deactivated` | Account deactivated | audit-logging, admin-panel |
 | `user.account_reactivated` | Account restored | audit-logging, admin-panel |
 
 ## Jobs
@@ -42,22 +79,26 @@ None owned by this module.
 
 | Permission | Description |
 |-----------|-------------|
-| `users.view_all` | Can view all user profiles |
-| `users.edit_any` | Can edit any user profile |
-| `users.deactivate` | Can deactivate user accounts |
+| `users.view_self` | View own profile |
+| `users.edit_self` | Edit own profile |
+| `users.view_all` | View all user profiles |
+| `users.edit_any` | Edit any user profile |
+| `users.deactivate` | Deactivate user accounts |
 
 ## Dependencies
 
 - [Auth Module](auth.md)
 - [RBAC Module](rbac.md)
+- [Input Validation](../02-security/input-validation-and-sanitization.md)
+- [Audit Logging Module](audit-logging.md)
 
 ## Used By / Affects
 
-admin-panel, user-panel.
+admin-panel, user-panel, auth-related account lifecycle flows.
 
 ## Risks If Modified
 
-MEDIUM — affects user data access patterns.
+HIGH — affects user data access, lifecycle control, and administrative operations.
 
 ## Related Documents
 
@@ -65,3 +106,4 @@ MEDIUM — affects user data access patterns.
 - [RBAC Module](rbac.md)
 - [Admin Panel](admin-panel.md)
 - [User Panel](user-panel.md)
+- [Authorization Security](../02-security/authorization-security.md)
