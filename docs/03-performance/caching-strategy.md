@@ -292,6 +292,162 @@ The following may tolerate bounded staleness:
 
 ---
 
+## Cache Consistency Under Concurrency
+
+### Write Model
+
+- Cache updates must follow **write-through** or **write-after-invalidate** model
+- Concurrent mutations must serialize updates OR use version checks (ETag/version)
+- "Last write wins" allowed **only** for non-critical, user-private data
+- Critical data (permissions, roles, config) must use **version-aware updates**
+
+### Race Condition Prevention
+
+- Mutations must invalidate cache **before** returning success to client
+- Stale cache overwrites from slow responses must be prevented via version ordering
+- Optimistic updates must be rolled back if server version conflicts
+
+---
+
+## Global Cache Versioning Strategy
+
+All cache keys must include a **global cache version** prefix:
+
+```
+v{N}:module:resource:id:tenant:user:params_hash
+```
+
+**Rules:**
+
+- Global cache version is bumped on:
+  - Schema changes affecting cached data shapes
+  - API response format changes
+  - Permission model structural changes
+  - Major deployments with incompatible payloads
+- Version bump = instant global invalidation of all prior-version entries
+- Version is managed centrally — no per-module version drift
+- Old-version cache entries must be treated as misses, not served stale
+
+---
+
+## Cache Warmup and Prepopulation
+
+### Strategy
+
+- Critical caches must support **pre-warming** after deployment or cold start:
+  - Permission resolution for active users
+  - Config/feature flags
+  - Dashboard summary data
+- Cache warm jobs must follow **Jobs module** governance (idempotent, observable, backpressure-aware, kill-switch)
+
+### Rules
+
+- Warm jobs must not overwhelm source systems — rate-limited and batched
+- Warm priority: permission caches > config > dashboard summaries
+- Warm failure must be logged and surfaced — system must function with cold cache (degraded latency, not failure)
+
+---
+
+## Partial Cache Failure Handling
+
+**Fundamental Rule:** Cache is a **performance optimization only**, never a correctness dependency.
+
+- System must behave correctly when cache is:
+  - Fully unavailable
+  - Partially inconsistent
+  - Returning errors
+- Fallback: always to source of truth (DB/API)
+- Cache failure must **degrade latency**, not **break functionality**
+- Cache layer errors must not propagate as user-facing errors
+- Cache unavailability must be detected and reported to health monitoring
+
+---
+
+## Cache Storage Limits and Eviction Policy
+
+Every cache must define storage boundaries:
+
+| Cache Layer | Max Size | Eviction Policy | Priority Protection |
+|------------|----------|----------------|-------------------|
+| TanStack Query (client) | Per gcTime config | Time-based GC | N/A (managed by gcTime) |
+| In-memory (server/edge) | Defined per service | LRU | Permission/auth entries protected |
+| Service worker | Bounded per cache name | LRU with version sweep | Versioned entries only |
+| CDN | Provider-managed | TTL-based | N/A |
+
+**Rules:**
+
+- High-priority entries (permissions, auth) must have shorter TTL but higher refresh priority
+- Eviction of security-sensitive entries must trigger immediate re-fetch on next access
+- Memory pressure alerts must feed observability (see Observability section)
+- No unbounded cache growth — every cache must have a defined ceiling
+
+---
+
+## Sensitive Data Redaction and Security
+
+- Cached data must contain the **minimum necessary** fields — no over-caching
+- Tokens, secrets, MFA codes, and passwords must **never** be cached beyond in-memory scope
+- Offline/service worker storage must not contain sensitive PII unless explicitly approved and access-controlled
+- Browser localStorage/sessionStorage must not store auth tokens or permission data
+- Cache entries for sensitive data must be cleared on logout, session expiry, and tab close (where applicable)
+
+---
+
+## Cross-Tab and Multi-Session Synchronization
+
+### Critical Invalidations Across Tabs
+
+The following must propagate across all open tabs/sessions:
+
+- Logout / session revoke
+- Permission/role changes
+- Auth state changes
+- Security-critical config changes
+
+### Mechanisms
+
+- **BroadcastChannel API** (preferred) for same-origin tab communication
+- **Storage events** (localStorage change detection) as fallback
+- **Service worker messages** for offline-capable sync
+
+**Rules:**
+
+- Cross-tab sync must be tested as part of auth and permission flows
+- Stale tab serving old permissions after role change is a **security violation**
+- Cross-tab sync failure must degrade to forced refresh on next user interaction
+
+---
+
+## Cache Drift Detection
+
+### Periodic Validation
+
+- Critical caches must be periodically validated against source of truth:
+  - Permission cache: sampled validation every 5 minutes
+  - Config cache: validated on each deployment
+  - Dashboard data: validated against fresh query on schedule
+
+### Drift Response
+
+- Drift detected → immediate invalidation of affected keys
+- Drift detected → alert to observability
+- Persistent drift (> 3 occurrences in 24h) → Action Tracker entry
+- Drift on permission/auth cache → treated as security incident
+
+---
+
+## Freshness SLA Enforcement
+
+- Freshness SLA (defined in Ownership Registry) must be **monitored per resource class**
+- Cache entries exceeding their freshness SLA must:
+  - Trigger background refresh (if stale-while-revalidate allowed)
+  - Trigger alert (if strong consistency required)
+  - Never be served beyond 2x the defined SLA without forced refresh
+- Freshness monitoring must be part of cache observability dashboard
+- Sustained SLA breaches (> 1h) must create Action Tracker entries
+
+---
+
 ## Cache Ownership and Lifecycle Registry
 
 Every meaningful cache must be documented:
@@ -327,6 +483,8 @@ Every meaningful cache must be documented:
 | Hot key concentration | > 20% traffic on single key | > 40% traffic on single key |
 | Stampede events | > 1/hour | > 5/hour |
 | Permission-cache invalidation lag | > 5s | > 30s |
+| Cache drift occurrences | > 1/day | > 5/day |
+| Freshness SLA breaches | > 1% of entries | > 5% of entries |
 
 ### Rules
 
@@ -350,6 +508,11 @@ The following **MUST** create Action Tracker entries:
 | Cache corruption detected | CRITICAL | 4h |
 | Stale security-sensitive data served | CRITICAL | Immediate |
 | Invalidation storm (cascading) | HIGH | 24h |
+| Cache drift detected (persistent) | HIGH | 24h |
+| Cache warm job failure | MEDIUM | 48h |
+| Cache layer outage | HIGH | 4h |
+| Invalidation lag breach (permission cache) | HIGH | 4h |
+| Cache key collision/bug detected | HIGH | 24h |
 
 ---
 
