@@ -46,7 +46,7 @@ Authorization consists of:
 
 ## Permission Model
 
-Permissions are resource-based and dynamically generated.
+Permissions are centrally defined in [permission-index.md](../07-reference/permission-index.md) and provisioned dynamically into the RBAC system from that index. No permission may exist at runtime unless it is registered in the Permission Index with an immutable key.
 
 ### Permission Format
 
@@ -56,12 +56,22 @@ Permissions are resource-based and dynamically generated.
 
 Examples:
 
-- `user.read`
-- `user.create`
-- `user.update`
-- `user.delete`
+- `users.view_all`
+- `users.create`
+- `users.edit_self`
 - `audit.view`
 - `config.update`
+
+### Permission Scope
+
+Permission scope is governed by [permission-index.md](../07-reference/permission-index.md) and must be enforced consistently across application layer, API layer, and RLS.
+
+| Scope | Description | Example |
+|-------|-------------|---------|
+| **self** | User can only act on own resources | `users.view_self`, `profile.self_manage` |
+| **resource-scoped** | Access to specific resource instances | `audit.view` |
+| **tenant-scoped** | Access within tenant boundary | Future implementation |
+| **system-wide** | Unrestricted scope | `system.kill_switch` |
 
 ### Permission Tables (Conceptual)
 
@@ -84,29 +94,33 @@ role_permissions (
 
 - Every resource must define permissions at creation
 - No resource may exist without permissions
-- Permissions must be centrally indexed (`permission-index.md`)
+- Permissions must be centrally indexed in [permission-index.md](../07-reference/permission-index.md) — the Permission Index is the SSOT
+- RBAC permission records must reconcile with permission-index.md; undocumented or missing permissions are invalid
+- Permission drift detection and DB reconciliation are governed by the Permission Index
 - Permission changes are HIGH impact
 
 ## Permission Enforcement
 
 ### Application Layer
 
-- Use `checkPermission(permission)` for feature access
-- Use `requireRole(role)` only for high-level gating (e.g., admin panel)
+- `checkPermission(permission)` is the **default enforcement mechanism** for routes, APIs, and features
+- `requireRole(role)` is reserved for narrowly approved base-role or bootstrap gating only (e.g., initial admin panel access) — it must NOT be used for general authorization
+- `requireSelfScope(userId)` enforces self-scope permissions — ensures user can only act on own resources
 
 ### Database Layer (RLS)
 
 - Use `has_role()` or equivalent helper functions
 - Avoid direct joins in RLS if recursion risk exists
-- Policies must reflect permission model
+- Policies must reflect the permission model defined in [permission-index.md](../07-reference/permission-index.md)
 
 ## Shared Functions
 
 | Function | Purpose | Used By |
 |----------|---------|---------|
 | `has_role(user_id, role)` | SQL security definer function | RLS policies |
-| `checkPermission(permission)` | Checks permission dynamically | All modules |
-| `requireRole(role)` | High-level role guard | Admin routes |
+| `checkPermission(permission)` | Default permission enforcement | All modules |
+| `requireRole(role)` | Base-role bootstrap gating only | Admin panel initial access |
+| `requireSelfScope(userId)` | Self-scope resource enforcement | user-panel, user-management |
 | `useUserRole()` | Fetch current user role | UI components |
 
 ## Events
@@ -134,7 +148,7 @@ The following are HIGH impact:
 
 - Server-side enforcement
 - Audit logging required
-- Restricted to `superadmin` or equivalent permissions
+- Restricted to the explicit permissions defined in [permission-index.md](../07-reference/permission-index.md) (e.g., `roles.assign`, `roles.revoke`); `superadmin` inherits these automatically
 
 ## Dependencies
 
