@@ -141,8 +141,16 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | State | Description | Action Required |
 |-------|-------------|-----------------|
 | **Active** | In use, governed by this index | Standard governance |
-| **Deprecated** | Scheduled for removal | Successor permission documented + sunset date + migration plan |
+| **Deprecated** | Scheduled for removal | `successor_permission` documented + sunset date + migration plan |
 | **Pending removal** | Will be removed in next release | All consumers confirmed migrated |
+
+**Additional fields for deprecated permissions:**
+
+| Field | Description |
+|-------|-------------|
+| `successor_permission` | The permission key that replaces this one |
+| `sunset_date` | Date after which permission will be removed |
+| `migration_plan` | How consumers should transition |
 
 **Rules:**
 - Deprecated permissions must reference successor
@@ -163,12 +171,15 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 ## Permission Registry
 
+> **Note:** Each entry includes a `Permission UUID` placeholder. Actual UUIDs are assigned at DB creation and must be recorded here for direct traceability.
+
 ### RBAC Permissions
 
 #### `roles.assign`
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-roles-assign` (actual UUID assigned at DB creation) |
 | **Module** | rbac |
 | **Description** | Allows assigning roles to users within governance boundaries. Does not imply revoke capability. |
 | **Classification** | admin-critical |
@@ -232,10 +243,11 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-users-view-all` (actual UUID assigned at DB creation) |
 | **Module** | user-management |
-| **Description** | Allows viewing all user profiles and account data (non-sensitive fields) |
+| **Description** | Allows viewing all user profiles and account data (non-sensitive fields). Intentionally **system-wide** — this is an admin-only permission for the single-tenant admin panel. If multi-tenancy is introduced, this must be re-scoped to tenant-scoped and a separate `users.view_tenant` created. |
 | **Classification** | operational |
-| **Scope** | system-wide |
+| **Scope** | system-wide *(see description for multi-tenancy note)* |
 | **Default roles** | admin, superadmin |
 | **Used by** | admin-panel (user listing) |
 | **Blast radius** | medium |
