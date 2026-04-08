@@ -392,6 +392,45 @@ Key event chains showing upstream triggers and downstream effects:
 | **Related tests** | Failed attempt emission, threshold alerting test |
 | **Lifecycle** | active |
 
+#### `auth.mfa_recovered` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | auth |
+| **Consumers** | audit-logging, health-monitoring |
+| **Description** | MFA recovered via backup method after primary MFA unavailable |
+| **Payload schema** | `{ user_id: uuid, timestamp: datetime, recovery_method: enum[backup_code, admin_override, support_reset], ip_address: string }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id (UUID) |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure — security event must not be lost |
+| **Observability** | Logged, traced, rate-monitored, anomaly detection |
+| **Related risks** | RSK-001 (credential compromise) |
+| **Related tests** | MFA recovery emission test, payload validation test |
+| **Lifecycle** | active |
+
+#### `auth.session_revoked` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | auth |
+| **Consumers** | audit-logging, health-monitoring |
+| **Description** | User session forcibly revoked (by user, admin, or system) |
+| **Payload schema** | `{ user_id: uuid, session_id: string, revoked_by: uuid, timestamp: datetime, reason: enum[user_request, admin_action, security_policy, timeout] }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id (UUID) |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure — session revocation is security-critical |
+| **Observability** | Logged, traced |
+| **Related tests** | Session revocation emission test, audit consumer test |
+| **Lifecycle** | active |
+
 ### RBAC Events
 
 #### `rbac.role_assigned` — v1
@@ -450,6 +489,46 @@ Key event chains showing upstream triggers and downstream effects:
 | **Failure handling** | Log warning; alert on spike |
 | **Observability** | Logged, traced, rate-monitored |
 | **Related risks** | RSK-002 (privilege escalation) |
+| **Lifecycle** | active |
+
+#### `rbac.permission_assigned` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | rbac |
+| **Consumers** | audit-logging |
+| **Description** | Permission granted to user |
+| **Payload schema** | `{ user_id: uuid, permission: string, assigned_by: uuid, timestamp: datetime }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure |
+| **Observability** | Logged, traced |
+| **Related risks** | RSK-002 (privilege escalation) |
+| **Related tests** | Permission assignment emission, audit consumer test |
+| **Lifecycle** | active |
+
+#### `rbac.permission_revoked` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | rbac |
+| **Consumers** | audit-logging |
+| **Description** | Permission revoked from user |
+| **Payload schema** | `{ user_id: uuid, permission: string, revoked_by: uuid, timestamp: datetime, reason: string }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure |
+| **Observability** | Logged, traced |
+| **Related risks** | RSK-002 (privilege escalation) |
+| **Related tests** | Permission revocation emission, audit consumer test |
 | **Lifecycle** | active |
 
 ### User Management Events
@@ -567,23 +646,7 @@ Key event chains showing upstream triggers and downstream effects:
 | **Observability** | Logged |
 | **Lifecycle** | active |
 
-#### `user_panel.session_revoked` — v1
-
-| Field | Value |
-|-------|-------|
-| **Classification** | security |
-| **Severity** | MEDIUM |
-| **Owner module** | user-panel |
-| **Consumers** | audit-logging |
-| **Description** | User revoked a session |
-| **Payload schema** | `{ user_id: uuid, session_id: string, timestamp: datetime, ip_address: string }` |
-| **Delivery guarantee** | at-least-once |
-| **Ordering** | strict |
-| **Idempotency** | event_id |
-| **Retry policy** | 3× exponential backoff |
-| **Failure handling** | Alert on failure |
-| **Observability** | Logged, traced |
-| **Lifecycle** | active |
+> **Note:** Session revocation events are emitted as `auth.session_revoked` (auth module owns session lifecycle). User panel triggers the action but does not own the event.
 
 ### Audit Events
 
@@ -603,6 +666,27 @@ Key event chains showing upstream triggers and downstream effects:
 | **Retry policy** | No retry |
 | **Failure handling** | Log only |
 | **Observability** | Counted (metrics) |
+| **Lifecycle** | active |
+
+#### `audit.write_failed` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | system |
+| **Severity** | HIGH |
+| **Owner module** | audit-logging |
+| **Consumers** | health-monitoring, admin-panel |
+| **Description** | Audit log write operation failed — critical integrity risk |
+| **Payload schema** | `{ source_event: string, timestamp: datetime, error: string, retry_count: integer, correlation_id: string }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Must not be lost — multi-channel alert; fallback to secondary log store |
+| **Observability** | Logged, traced, alerted |
+| **Action tracker** | Yes — creates entry (audit integrity failure) |
+| **Related risks** | RSK-004 (infrastructure failure) |
+| **Related tests** | Audit write failure emission, fallback store test |
 | **Lifecycle** | active |
 
 ### Health Monitoring Events
@@ -643,6 +727,27 @@ Key event chains showing upstream triggers and downstream effects:
 | **Retry policy** | 3× exponential backoff |
 | **Failure handling** | Alert on failure |
 | **Observability** | Logged, traced |
+| **Lifecycle** | active |
+
+#### `health.monitoring_failed` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | system |
+| **Severity** | HIGH |
+| **Owner module** | health-monitoring |
+| **Consumers** | admin-panel |
+| **Description** | Health monitoring system itself failed — creates observability blind spot |
+| **Payload schema** | `{ component: string, timestamp: datetime, error: string, last_successful_check: datetime, affected_monitors: string[] }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff + fallback notification |
+| **Failure handling** | Must not be lost — multi-channel alert (monitoring the monitor) |
+| **Observability** | Logged, alerted via independent channel |
+| **Action tracker** | Yes — creates entry (monitoring blind spot) |
+| **Related risks** | RSK-004 (infrastructure failure) |
+| **Related tests** | Monitor failure emission, independent alert channel test |
 | **Lifecycle** | active |
 
 ### API Events
