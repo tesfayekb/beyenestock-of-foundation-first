@@ -46,7 +46,7 @@ All modules defined in `docs/04-modules/` and all approved shared services.
 | user-panel | auth, rbac, user-management | Auth, Authorization, Service | — | MEDIUM |
 | audit-logging | auth | Auth, Operational | admin-panel, health-monitoring, jobs-and-scheduler | HIGH |
 | health-monitoring | audit-logging, jobs-and-scheduler | Operational, Event | admin-panel | MEDIUM |
-| api | auth, rbac, audit-logging, validation | Auth, Authorization, Service, Operational | presentation layer consumers | HIGH |
+| api | auth, rbac, audit-logging | Auth, Authorization, Service, Operational | presentation layer consumers | HIGH |
 | jobs-and-scheduler | auth, audit-logging | Auth, Operational, Event | health-monitoring | MEDIUM |
 
 ## Shared Services Matrix
@@ -57,6 +57,15 @@ All modules defined in `docs/04-modules/` and all approved shared services.
 | Permission checker | rbac | rbac, admin-panel, user-panel, api | Authorization | HIGH | function-index.md |
 | Audit logger | audit-logging | all significant write paths and jobs | Operational | HIGH | function-index.md |
 | API error handler | api | api, edge functions | Operational | MEDIUM | function-index.md |
+| Input validation / sanitization | api | api, edge functions, all input-accepting paths | Service | HIGH | function-index.md |
+
+## Forbidden Dependency Examples
+
+- `admin-panel` must not bypass `rbac`
+- `user-panel` must not access audit storage directly
+- Frontend must not call privileged service-role paths
+- `jobs-and-scheduler` must not bypass `audit-logging` for significant actions
+- No module may access another module's internal tables without approved shared service
 
 ## Impact Assessment Rules
 
