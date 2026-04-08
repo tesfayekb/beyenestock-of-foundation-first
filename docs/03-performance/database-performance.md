@@ -199,6 +199,168 @@ Database load must be managed through safe caching where appropriate:
 
 ---
 
+## Query Plan Stability and Regression Control
+
+### Plan Baseline Enforcement
+
+- Critical-path queries must have **baseline query plans stored** (captured via `EXPLAIN (ANALYZE, BUFFERS)`)
+- Baselines must be refreshed after major schema changes, index additions, or PostgreSQL upgrades
+- Periodic plan comparison required (minimum: weekly for critical queries)
+
+### Regression Detection
+
+Auto-detect and flag the following plan changes:
+
+- Index scan → sequential scan regression
+- Join strategy changes (nested loop ↔ hash join ↔ merge join)
+- Row estimate drift > 10x from actual
+- Cost estimate increase > 2x from baseline
+
+**Rules:**
+
+- Plan regression on a critical query = **release blocker** until reviewed
+- Regressions caused by statistics drift must trigger immediate `ANALYZE`
+- Regressions caused by data growth must trigger index or partitioning review
+
+---
+
+## Statistics and Vacuum Governance
+
+### Statistics Management
+
+- `ANALYZE` must run regularly on high-change tables (at minimum after bulk operations)
+- Stale statistics (> 24h on hot tables) must trigger alert
+- Custom statistics targets may be set for columns with skewed distributions
+- Statistics health must be monitored as part of DB observability
+
+### Vacuum Governance
+
+- Auto-vacuum thresholds must be monitored and tuned for hot tables
+- Tables with high write churn must have aggressive vacuum settings:
+  - Lower `autovacuum_vacuum_threshold`
+  - Lower `autovacuum_vacuum_scale_factor`
+- Vacuum lag (dead tuple accumulation) must be monitored
+
+### Required Signals
+
+| Signal | Warning | Critical |
+|--------|---------|----------|
+| Statistics staleness (hot tables) | > 12h | > 24h |
+| Vacuum lag (dead tuples) | > 100,000 | > 1,000,000 |
+| Autovacuum frequency (hot tables) | < 1/hour | < 1/day |
+| Transaction ID wraparound proximity | > 50% | > 75% |
+
+---
+
+## Partitioning Strategy
+
+High-growth tables must be evaluated for partitioning:
+
+| Table | Growth Pattern | Partitioning Trigger | Strategy |
+|-------|---------------|---------------------|----------|
+| `audit_logs` | Continuous append | > 10M rows or > 10GB | Time-based (monthly) |
+| `health_metrics` | Continuous append | > 5M rows or > 5GB | Time-based (weekly/monthly) |
+| `job_executions` | High churn | > 5M rows | Time-based + status |
+
+**Rules:**
+
+- Tables expected to exceed thresholds must have partitioning plan documented before reaching trigger
+- Partition pruning must be verified in query plans (queries must include partition key in WHERE)
+- Archive partitions may be detached rather than deleted
+- Partitioning changes require migration safety review
+
+---
+
+## Query Timeout and Kill Policy
+
+### Execution Time Limits
+
+| Context | Warning | Hard Kill |
+|---------|---------|-----------|
+| Hot-path queries (auth, permission, session) | 500ms | 2s |
+| Standard API queries | 1s | 5s |
+| Admin/search queries | 3s | 10s |
+| Background/job queries | 10s | 60s |
+| Reporting/export queries | 30s | 300s (async only) |
+
+**Rules:**
+
+- `statement_timeout` must be configured per connection context where possible
+- Queries exceeding warning threshold must be logged and flagged
+- Queries exceeding hard kill threshold must be terminated
+- Repeatedly killed queries must create Action Tracker entries
+- Long-running analytical queries must be routed to async job system
+
+---
+
+## Materialization Strategy
+
+### When to Materialize
+
+- Queries that compute aggregates across > 100,000 rows and run frequently (> 1/min)
+- Dashboard summary data that doesn't require real-time freshness
+- Permission/role resolution caches for complex hierarchies
+
+### Refresh Strategies
+
+| Strategy | Use When | Freshness |
+|----------|----------|-----------|
+| **Scheduled** | Predictable staleness acceptable | Minutes to hours |
+| **Event-driven** | On relevant data change | Near real-time |
+| **On-demand** | Infrequent access, expensive computation | Variable |
+
+**Rules:**
+
+- Every materialized view must have a defined refresh strategy and owner
+- Refresh must not block hot-path queries
+- Staleness must be tracked and surfaced in observability
+- Materialized views must not bypass RLS — downstream access must still be permission-scoped
+
+---
+
+## Data Access Layer Consistency
+
+- All database access must follow standardized query patterns through a shared data access layer
+- No raw/unreviewed SQL queries in critical paths
+- Query builders/ORM patterns must be consistent across modules
+- Direct DB access bypassing the access layer is prohibited unless explicitly justified (e.g., migrations, one-time scripts)
+- Access layer must enforce: parameterized queries, column selection (no `SELECT *`), and result set limits
+
+---
+
+## Cross-Table Join Complexity Limits
+
+| Path Type | Max Join Depth | Rule |
+|-----------|---------------|------|
+| Hot path (auth, session, permission) | 2 tables | No exceptions |
+| Standard API | 3 tables | Must use indexed join keys |
+| Admin/search | 4 tables | Must be justified |
+| Reporting/analytics | Unlimited | Must use precomputed structures or async |
+
+**Rules:**
+
+- All joins must use indexed join keys
+- Join fan-out must be estimated and bounded
+- Queries exceeding complexity limits must be refactored or moved to materialized views
+- Self-joins on large tables require explicit justification
+
+---
+
+## Hot vs Cold Data Separation
+
+### Enforcement Rules
+
+- Hot operational tables must **not** scan historical/archived data in normal operation
+- Historical data must be logically or physically separated:
+  - Partition detachment
+  - Archive tables
+  - Separate schemas
+- Queries on hot tables must include time-bounding or status filtering to exclude cold data
+- Cold data access must use dedicated query paths with relaxed latency budgets
+- Mixed hot/cold queries are prohibited on critical paths
+
+---
+
 ## Hot Tables and Hot Paths
 
 ### Identified Hot Tables
@@ -215,7 +377,6 @@ Database load must be managed through safe caching where appropriate:
 ### Rules
 
 - Hot tables require explicit query and index review
-- Operational (hot) and historical (cold) workloads should be separated where practical
 - Write-heavy hot tables must be monitored for bloat, vacuum health, and index overhead
 - Hot-path queries must have the strictest latency budgets (see Query Classification)
 
@@ -239,6 +400,22 @@ High-growth tables require lifecycle management:
 
 ---
 
+## Global Query Cost Budgeting
+
+Beyond latency, queries must be evaluated for resource cost:
+
+- **CPU cost**: queries with high computational overhead must be optimized or offloaded
+- **IO cost**: queries causing excessive disk reads must use indexes or caching
+- **Row processing cost**: queries processing > 100,000 rows on hot paths must be refactored
+
+**Rules:**
+
+- High-cost queries (by `EXPLAIN` cost estimate) must be flagged even if they meet latency targets
+- Repeatedly expensive queries must be reviewed for materialization or caching
+- Cost budgets must consider concurrent load — a "fast" query at 1 QPS may be expensive at 1000 QPS
+
+---
+
 ## Observability and Telemetry
 
 ### Required Database Signals
@@ -255,6 +432,9 @@ High-growth tables require lifecycle management:
 | Table bloat | > 30% | > 50% |
 | Replication lag (if applicable) | > 1s | > 5s |
 | Index usage effectiveness | < 90% used | < 70% used |
+| Statistics staleness (hot tables) | > 12h | > 24h |
+| Vacuum lag (dead tuples) | > 100K | > 1M |
+| Query plan regressions | Any on critical path | Sustained regression |
 
 ### Rules
 
@@ -262,6 +442,24 @@ High-growth tables require lifecycle management:
 - Threshold breaches create alerts
 - Sustained warning-level signals (> 24h) must create Action Tracker entries
 - Critical signals must trigger immediate investigation
+
+---
+
+## Action Tracker Integration
+
+The following **MUST** create Action Tracker entries:
+
+| Trigger | Severity | Target Resolution |
+|---------|----------|-------------------|
+| Slow query spike (sustained) | HIGH | 24h |
+| Query plan regression on critical path | HIGH | 24h |
+| Vacuum/statistics issues on hot tables | MEDIUM | 48h |
+| Index inefficiency detected | MEDIUM | 1 week |
+| Sustained lock contention | HIGH | 24h |
+| Connection pool saturation (critical) | CRITICAL | 4h |
+| Deadlock pattern detected | HIGH | 24h |
+| Table growth exceeding forecast | MEDIUM | 1 week |
+| Query timeout kills (repeated) | HIGH | 24h |
 
 ---
 
