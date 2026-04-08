@@ -8,7 +8,7 @@ Defines performance targets, optimization strategies, governance, degradation po
 
 ## Scope
 
-Frontend rendering, API response times, database queries, asset loading, authorization/RLS performance, caching safety, degradation behavior, load testing, and performance change control.
+Frontend rendering, API response times, database queries, asset loading, authorization/RLS performance, caching safety, degradation behavior, load testing, performance change control, trace-level budget enforcement, multi-tenant scale guarantees, and incident classification.
 
 ## Enforcement Rule (CRITICAL)
 
@@ -16,6 +16,7 @@ Frontend rendering, API response times, database queries, asset loading, authori
 - No feature may merge if it materially regresses critical-path performance without an approved exception
 - Performance budgets are enforced at CI, load test, and runtime monitoring layers
 - Breach of critical thresholds must trigger alerts and block release where applicable
+- Every request on a critical path must emit per-layer trace data for budget enforcement
 - Any unmonitored critical path is an **INVALID** implementation
 
 ## Performance Governance
@@ -50,6 +51,31 @@ Not all paths require the same targets. Performance targets are classified by wo
 | **Reporting / Export** | Audit export, analytics views | Tolerant | Lower |
 | **Real-time features** | Live health dashboard, notifications | Medium | Medium |
 
+## Hot Path vs Cold Path Separation
+
+### Hot Paths (Strictest Budgets)
+
+- Login + MFA verification
+- Session restore / token refresh
+- Dashboard initial load
+- Permission evaluation
+- Health check endpoints
+
+Rules for hot paths:
+- **Zero unnecessary dependencies** in execution chain
+- **Minimal abstraction layers** — direct, optimized code
+- **No lazy initialization** in request path
+- **Pre-warmed** where applicable (see Cold Start Strategy)
+
+### Cold Paths (Relaxed Budgets)
+
+- Audit export
+- Admin batch operations
+- Analytics / reporting views
+- Bulk data operations
+
+Cold paths may use higher latency budgets but must still respect timeout and degradation policies.
+
 ## Critical User Journeys
 
 The following flows receive **highest optimization priority**:
@@ -61,6 +87,14 @@ The following flows receive **highest optimization priority**:
 5. Admin role/permission changes
 6. Health dashboard load + freshness
 7. Audit log search and filter
+
+## p99-First Optimization Philosophy
+
+For **critical flows** (auth, dashboard, admin actions):
+- Optimization priority is **p99, not p95**
+- p99 regressions are treated as **critical** even if p95 is within target
+- Load tests must validate p99 under realistic concurrency
+- p99 outlier analysis required: identify and eliminate tail latency causes
 
 ## Performance Targets
 
@@ -136,6 +170,59 @@ For frontend render budget (LCP < 2.5s):
 | Hydration / mount | 500ms |
 | Data fetch + render | 500ms |
 | Buffer | 300ms |
+
+## End-to-End Trace Budget Enforcement
+
+Every request on a critical path **must** emit a structured trace with per-layer timing:
+
+| Trace Span | Required |
+|-----------|----------|
+| `network` | Time in transit / TLS |
+| `auth` | Token verification |
+| `authorization` | Permission evaluation |
+| `service_logic` | Business rules |
+| `database` | Query execution (including RLS) |
+| `audit` | Audit event emission |
+| `serialization` | Response encoding |
+
+Rules:
+- If **any layer exceeds its budget** → automatically flagged in monitoring
+- Trace data feeds into p95/p99 per-layer dashboards
+- Budget violations aggregated for trend analysis
+- Persistent per-layer violations create action tracker items
+
+## Cold Start vs Warm Path Strategy
+
+Relevant for edge functions, serverless, and Supabase functions:
+
+| Path | Latency Budget | Strategy |
+|------|---------------|----------|
+| **Cold start** | ≤ 1s additional | Acceptable only for non-critical paths |
+| **Warm path** | Standard targets apply | Must meet published p95/p99 targets |
+
+Rules:
+- Critical endpoints (auth, health) must use **pre-warming** where platform supports it
+- Heavy initialization **must not** occur in request path — use lazy singleton or boot-time init
+- Cache initialization data where safe (DB connection pools, permission caches)
+- Cold-start frequency tracked in telemetry — repeated cold starts on hot paths = critical issue
+- If cold starts cause p99 violations on critical paths → architectural mitigation required
+
+## Multi-Tenant Scale Guarantees
+
+All performance benchmarks **must** be validated at multiple tenant sizes:
+
+| Tenant Profile | Data Volume | Required |
+|---------------|-------------|----------|
+| Small | < 100 users, < 10K records | Baseline |
+| Medium | 100–1,000 users, 10K–100K records | Standard load test |
+| Large (realistic max) | 1,000+ users, 100K+ records | Stress test |
+
+Rules:
+- **No query may degrade beyond target** as tenant size grows
+- RLS performance must be tested at large-tenant scale
+- Index effectiveness validated at each tier
+- Pagination and filter performance validated at large scale
+- If any target is breached at large-tenant scale → must be resolved before release
 
 ## Database and Query Performance Rules
 
@@ -213,6 +300,19 @@ Under load or dependency stress:
 
 ## Observability and Telemetry
 
+### Monitoring Model
+
+Two monitoring modes are **both required**:
+
+| Mode | Purpose | Characteristics |
+|------|---------|----------------|
+| **Synthetic monitoring** | Controlled probes against known endpoints | Consistent baseline, detects infrastructure issues |
+| **Real User Monitoring (RUM)** | Captures real-world user experience | Real variability, geographic spread, device diversity |
+
+Rules:
+- Both must be active for critical paths
+- Discrepancies between synthetic and RUM must be **investigated** (indicates environmental or geographic issues)
+
 ### Frontend (Required)
 
 | Signal | Purpose |
@@ -230,6 +330,7 @@ Under load or dependency stress:
 | Error rate (per endpoint) | Reliability |
 | Request volume | Capacity tracking |
 | Timeout rate | Saturation indicator |
+| Per-layer trace spans | Budget enforcement |
 
 ### Database (Required)
 
@@ -255,13 +356,71 @@ Under load or dependency stress:
 | Execution time | Job performance |
 | (Refer to [Jobs Module](../04-modules/jobs-and-scheduler.md) for full telemetry) | |
 
+## Cross-Region and Network Variability
+
+> Note: Even if not multi-region today, targets must account for network reality.
+
+- Performance targets must be validated from **representative geographic regions**
+- CDN edge behavior must be verified for static assets
+- Network variability (latency jitter, packet loss) must be factored into p99 analysis
+- Synthetic probes should run from multiple locations
+- If multi-region is activated: per-region targets and monitoring required
+
+## Performance Incident Classification
+
+| Severity | Definition | Example | Response |
+|----------|-----------|---------|----------|
+| **P0** | System unusable | Auth failure, major latency spike (> 5x target) | Immediate response, rollback if needed |
+| **P1** | Critical degradation | Dashboard unusable, p99 > critical for auth | 1-hour response, hotfix path |
+| **P2** | Partial degradation | Admin panel slow, export timeouts | 4-hour response, investigation |
+| **P3** | Minor regression | p95 slightly above warning, non-critical path | Next sprint, tracked |
+
+Rules:
+- Every P0/P1 incident must:
+  - Create action tracker item
+  - Include root cause analysis
+  - Include prevention steps
+- P2 incidents tracked in action tracker with standard follow-up
+- P3 incidents tracked in backlog
+
+## Action Tracker Integration
+
+The following performance events **must** automatically create action tracker entries:
+
+| Trigger | Severity | Owner | Target Resolution |
+|---------|----------|-------|-------------------|
+| SLO breach (critical service) | High | Service owner | 4 hours |
+| p99 regression on critical flow | High | Module owner | 4 hours |
+| DB slow query spike | Medium | Backend owner | 24 hours |
+| Bundle size violation | Medium | Frontend owner | Next sprint |
+| Error rate > critical threshold | High | Service owner | 4 hours |
+| Sustained warning-level degradation (> 7 days) | Medium | Module owner | Next sprint |
+| Per-layer trace budget violation (persistent) | Medium | Layer owner | 24 hours |
+| Cold start causing p99 violation | High | Platform owner | 24 hours |
+
+## Cost vs Performance Tradeoff Policy
+
+Performance improvements must be evaluated against:
+
+| Factor | Consideration |
+|--------|--------------|
+| **Infrastructure cost** | Additional compute, storage, CDN, caching layers |
+| **Complexity cost** | Code complexity, operational burden, debugging difficulty |
+| **Operational risk** | New failure modes, monitoring gaps |
+
+Rules:
+- Performance optimizations that increase infra cost > 20% require explicit approval
+- Complexity-adding optimizations must demonstrate measurable user impact
+- Premature optimization remains forbidden — measure first, optimize where it matters
+- Cost-performance tradeoff decisions documented in approved decisions log
+
 ## Load Testing and Capacity Planning
 
 ### Load Test Policy
 
 - Load test **required** before major releases
 - Stress test **required** for critical API endpoints (auth, admin actions)
-- Realistic tenant/user-size test datasets mandatory
+- Realistic tenant/user-size test datasets mandatory (see Multi-Tenant Scale Guarantees)
 - Concurrency scenarios for admin and user panels
 - Recovery test after induced degradation (verify system returns to healthy state)
 - Performance regression test: compare against previous baseline
@@ -312,6 +471,7 @@ No merge allowed if:
 - [Caching Strategy](caching-strategy.md)
 - [Jobs and Scheduler](../04-modules/jobs-and-scheduler.md) — job performance telemetry
 - [Authorization Security](../02-security/authorization-security.md) — permission evaluation performance
+- [Action Tracker](../06-tracking/action-tracker.md) — performance incident follow-up
 
 ## Used By / Affects
 
@@ -319,7 +479,7 @@ All modules with UI, API, data operations, or background processing.
 
 ## Risks If Changed
 
-HIGH — loosening targets degrades user experience, reliability, and operational trust. Incorrect caching rules can cause security breaches.
+HIGH — loosening targets degrades user experience, reliability, and operational trust. Incorrect caching rules can cause security breaches. Removing trace enforcement eliminates budget accountability.
 
 ## Related Documents
 
@@ -328,3 +488,4 @@ HIGH — loosening targets degrades user experience, reliability, and operationa
 - [Health Monitoring](../04-modules/health-monitoring.md)
 - [Jobs and Scheduler](../04-modules/jobs-and-scheduler.md)
 - [System Design Principles](../01-architecture/system-design-principles.md)
+- [Action Tracker](../06-tracking/action-tracker.md)
