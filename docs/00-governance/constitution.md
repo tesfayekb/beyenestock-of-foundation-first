@@ -58,6 +58,10 @@ No implementation may begin from a proposed or partially revised plan. Execution
 
 When a revised plan is created, it MUST merge new proposals into the current approved baseline rather than regenerate the plan from scratch. The approved baseline is the starting document; revisions are additive diffs, not replacements.
 
+### Rule 11 — Critical Module Override
+
+Auth, RBAC, and Security modules are ALWAYS classified as HIGH impact regardless of change scope. No exception. All changes to these modules require full planning, regression verification, and documentation updates.
+
 ## Dependencies
 
 None — this is the root document.

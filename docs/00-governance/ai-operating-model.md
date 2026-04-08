@@ -33,6 +33,7 @@ Before performing ANY task, the AI must read these documents in order:
 7. Must never execute against a proposed or partially revised plan
 8. Must produce the mandatory output format after every task
 9. Must produce the plan revision output format after every plan update
+10. If required documents (module, dependency, or reference) are missing or unclear, the AI must STOP and request clarification instead of making assumptions
 
 ## Mandatory AI Output Format (Every Task)
 

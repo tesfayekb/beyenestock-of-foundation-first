@@ -32,6 +32,10 @@ Every change must follow these steps in order:
 | **MEDIUM** | Affects shared services or multiple modules | Must plan before implementation |
 | **HIGH** | Affects auth, RBAC, schema, shared functions, or security | Must plan before implementation + verify against `regression-watchlist.md` |
 
+### Critical Module Override
+
+Auth, RBAC, and Security modules are ALWAYS classified as HIGH impact regardless of change scope. No exception.
+
 ## Regression Protection Loop
 
 Before completing any MEDIUM or HIGH change:
