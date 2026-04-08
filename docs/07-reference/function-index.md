@@ -717,6 +717,31 @@ When changing any indexed function:
 | **Related tests** | Audit query tests, filter tests |
 | **Lifecycle** | active |
 
+#### `exportAuditLogs(filters)`
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | audit-critical |
+| **Owner module** | audit-logging |
+| **Signature** | `(filters: AuditExportFilters) → AuditExportResult` |
+| **Returns** | Exported audit data in requested format |
+| **Purity** | impure |
+| **Side effects** | DB read, export generation |
+| **Transactional** | No |
+| **Fail behavior** | fail-fast — throw on DB error or permission failure |
+| **Used by** | admin-panel |
+| **Blast radius** | medium |
+| **Criticality** | HIGH |
+| **Approval required** | No |
+| **Callable from** | request-path |
+| **Related permissions** | `audit.export` |
+| **Related routes** | `/admin/audit/export` |
+| **Related risks** | Compliance-sensitive data exposure, large export performance |
+| **Related tests** | Export allow/deny suite, export filtering tests, sensitive-field exclusion tests |
+| **Observability** | Invocation count, export size, latency |
+| **Lifecycle** | active |
+
 ### Health Monitoring Functions
 
 #### `getSystemHealth()`
