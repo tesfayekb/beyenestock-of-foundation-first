@@ -299,6 +299,26 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related tests** | Deactivation allow/deny suite, reactivation tests |
 | **Lifecycle** | active |
 
+#### `users.reactivate`
+
+| Field | Value |
+|-------|-------|
+| **Module** | user-management |
+| **Description** | Allows reactivating deactivated user accounts. Distinct from deactivation — separate authority boundary. |
+| **Classification** | admin-critical |
+| **Scope** | system-wide |
+| **Default roles** | admin, superadmin |
+| **Used by** | admin-panel (account lifecycle) |
+| **Blast radius** | large |
+| **Approval required** | Yes |
+| **Audit required** | Yes |
+| **Reauth required** | Yes |
+| **Related routes** | `/admin/users/:id/reactivate` |
+| **Related events** | `user.account_reactivated` |
+| **Related risks** | Premature access restoration |
+| **Related tests** | Reactivation allow/deny suite, post-reactivation access tests |
+| **Lifecycle** | active |
+
 ### Admin Permissions
 
 #### `admin.access`

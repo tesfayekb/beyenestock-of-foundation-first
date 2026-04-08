@@ -26,26 +26,36 @@ Profile CRUD, account settings data, user search/listing, account deactivation/r
 
 ## Access Model
 
-**Self access:**
+**Self access (enforced via `requireSelfScope()` + RLS):**
 
 - `users.view_self`
 - `users.edit_self`
 
-**Elevated access:**
+**Elevated access (admin permissions):**
 
 - `users.view_all`
 - `users.edit_any`
 - `users.deactivate`
+- `users.reactivate`
 
-No access is granted based on role name alone.
+No access is granted based on role name alone. Self-scope access must be enforced through `requireSelfScope()` plus RLS.
 
 ## Lifecycle Rules
 
-User lifecycle states must be explicitly defined and enforced:
+User lifecycle uses two stable states:
 
-- `active`
-- `deactivated`
-- `reactivated`
+- `active` — user can authenticate and use the system
+- `deactivated` — user cannot authenticate or use existing sessions
+
+State transitions are recorded as events (`user.account_deactivated`, `user.account_reactivated`). Reactivation restores the user to `active` state.
+
+**Deactivation effects (CRITICAL):**
+
+- Active sessions must be revoked (`auth.session_revoked`)
+- Tokens must be invalidated
+- Login must be blocked while deactivated
+- Audit history must be preserved
+- Reactivation restores authentication eligibility but does not restore previously revoked sessions
 
 **Deactivation rules:**
 
@@ -77,13 +87,14 @@ None owned by this module.
 
 ## Permissions
 
-| Permission | Description |
-|-----------|-------------|
-| `users.view_self` | View own profile |
-| `users.edit_self` | Edit own profile |
-| `users.view_all` | View all user profiles |
-| `users.edit_any` | Edit any user profile |
-| `users.deactivate` | Deactivate user accounts |
+| Permission | Description | Enforced By |
+|-----------|-------------|-------------|
+| `users.view_self` | View own profile | `requireSelfScope()`, RLS |
+| `users.edit_self` | Edit own profile | `requireSelfScope()`, RLS |
+| `users.view_all` | View all user profiles | `checkPermission()` |
+| `users.edit_any` | Edit any user profile | `checkPermission()` |
+| `users.deactivate` | Deactivate user accounts | `checkPermission()`, `requireRecentAuth()` |
+| `users.reactivate` | Reactivate deactivated accounts | `checkPermission()`, `requireRecentAuth()` |
 
 ## Dependencies
 
@@ -94,7 +105,7 @@ None owned by this module.
 
 ## Used By / Affects
 
-admin-panel, user-panel, auth-related account lifecycle flows.
+admin-panel, user-panel, auth module (deactivation triggers session/token invalidation).
 
 ## Risks If Modified
 

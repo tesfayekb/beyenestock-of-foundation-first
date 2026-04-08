@@ -331,6 +331,58 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related tests** | Role assign/revoke allow/deny suite |
 | **Lifecycle** | active |
 
+#### `/admin/users/:id` — User Detail / Edit
+
+| Field | Value |
+|-------|-------|
+| **Page** | User Detail and Edit |
+| **Module** | admin-panel |
+| **Classification** | privileged |
+| **Auth required** | Yes |
+| **Permission required** | `admin.access` + `users.view_all` / `users.edit_any` |
+| **Scope** | system-wide |
+| **Panel** | admin-panel |
+| **Related functions** | `getUserProfile()`, `updateUserProfile()`, `checkPermission()` |
+| **Related events** | `user.profile_updated` |
+| **Related tests** | User detail view/edit allow/deny suite |
+| **Lifecycle** | active |
+
+#### `/admin/users/:id/deactivate` — User Deactivation
+
+| Field | Value |
+|-------|-------|
+| **Page** | User Deactivation (action within User Management) |
+| **Module** | admin-panel |
+| **Classification** | privileged, destructive |
+| **Auth required** | Yes |
+| **Permission required** | `admin.access` + `users.deactivate` |
+| **Scope** | system-wide |
+| **Panel** | admin-panel |
+| **Reauth required** | Yes |
+| **Related functions** | `deactivateUser()`, `checkPermission()`, `requireRecentAuth()` |
+| **Related events** | `user.account_deactivated`, `auth.session_revoked` |
+| **Related risks** | User access disruption |
+| **Related tests** | Deactivation allow/deny suite, post-deactivation lockout test |
+| **Lifecycle** | active |
+
+#### `/admin/users/:id/reactivate` — User Reactivation
+
+| Field | Value |
+|-------|-------|
+| **Page** | User Reactivation (action within User Management) |
+| **Module** | admin-panel |
+| **Classification** | privileged |
+| **Auth required** | Yes |
+| **Permission required** | `admin.access` + `users.reactivate` |
+| **Scope** | system-wide |
+| **Panel** | admin-panel |
+| **Reauth required** | Yes |
+| **Related functions** | `reactivateUser()`, `checkPermission()`, `requireRecentAuth()` |
+| **Related events** | `user.account_reactivated` |
+| **Related risks** | Premature access restoration |
+| **Related tests** | Reactivation allow/deny suite, post-reactivation access test |
+| **Lifecycle** | active |
+
 #### `/admin/roles` — Role Management
 
 | Field | Value |
@@ -523,6 +575,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | `/admin/jobs/emergency` | privileged, destructive | `jobs.emergency` | System-wide job halt |
 | `/admin/config` | privileged, destructive | `admin.config` | System behavior changes |
 | `/admin/users/:id/roles` | privileged, destructive | `roles.assign` / `roles.revoke` | Privilege escalation risk |
+| `/admin/users/:id/deactivate` | privileged, destructive | `users.deactivate` | User access removal |
 | `/admin/jobs/deadletter` | privileged, destructive | `jobs.deadletter.manage` | Failure resolution impact |
 | `/login` | public | — | Authentication entry point |
 
@@ -542,9 +595,11 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 |-------|-----------|---------|
 | `/admin/config` | `admin.config` | Yes |
 | `/admin/users/:id/roles` | `roles.assign` / `roles.revoke` | Yes |
+| `/admin/users/:id/deactivate` | `users.deactivate` | Yes |
+| `/admin/users/:id/reactivate` | `users.reactivate` | Yes |
 | `/admin/jobs/deadletter` | `jobs.deadletter.manage` | Yes |
 | `/admin/jobs/emergency` | `jobs.emergency` | Yes |
-| `/settings/security` | *(authenticated)* | Yes |
+| `/settings/security` | `mfa.self_manage`, `session.self_manage` | Yes |
 
 ---
 
