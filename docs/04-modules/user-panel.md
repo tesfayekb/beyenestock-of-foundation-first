@@ -52,20 +52,25 @@ The following require enhanced controls:
 - Audit logging required
 - Validation and sanitization required
 
+## Module-Local Components
+
+| Component | Purpose |
+|-----------|---------|
+| `UserLayout` | Layout wrapper with user navigation (module-local, not cross-module shared) |
+
 ## Shared Functions
 
-| Function | Purpose | Used By |
-|----------|---------|---------|
-| `UserLayout` | Layout wrapper with user navigation | User pages |
-| `requireSelfScope()` | Enforces self-only access | User panel routes / handlers |
+| Function | Purpose | Used By | Defined In |
+|----------|---------|---------|------------|
+| `requireSelfScope(userId)` | Enforces self-only access | user-panel, user-management | [Function Index](../07-reference/function-index.md) |
 
 ## Events
 
-| Event | Emitted When | Consumed By |
-|-------|-------------|-------------|
-| `user_panel.settings_changed` | User updates settings | audit-logging |
-| `user_panel.session_revoked` | User revokes a session | audit-logging |
-| `user_panel.mfa_updated` | MFA settings changed | audit-logging |
+| Event | Emitted When | Consumed By | Notes |
+|-------|-------------|-------------|-------|
+| `user_panel.settings_changed` | User updates settings | audit-logging | |
+| `auth.session_revoked` | User revokes a session | audit-logging, health-monitoring | Owned by auth module; user panel triggers the action |
+| `user_panel.mfa_updated` | MFA settings changed (enable/disable/reconfigure) | audit-logging | Self-service MFA management event |
 
 ## Jobs
 
@@ -73,13 +78,13 @@ None owned by this module.
 
 ## Permissions
 
-| Permission | Description |
-|-----------|-------------|
-| `profile.self_manage` | Manage own profile/settings |
-| `session.self_manage` | View/revoke own sessions |
-| `mfa.self_manage` | Manage own MFA settings |
+| Permission | Description | Enforced By | Route(s) | Events |
+|-----------|-------------|-------------|----------|--------|
+| `profile.self_manage` | Manage own profile/settings | `requireSelfScope()`, `checkPermission()` | `/settings` | `user_panel.settings_changed` |
+| `session.self_manage` | View/revoke own sessions | `requireSelfScope()`, `checkPermission()` | `/settings/security` | `auth.session_revoked` |
+| `mfa.self_manage` | Manage own MFA settings | `requireSelfScope()`, `checkPermission()` | `/settings/security` | `user_panel.mfa_updated` |
 
-**Note:** These are self-scope permissions, not broad administrative permissions.
+**Note:** These are self-scope permissions defined in [permission-index.md](../07-reference/permission-index.md). Enforcement uses `requireSelfScope()` + `checkPermission()` — never role-based gating.
 
 ## Dependencies
 

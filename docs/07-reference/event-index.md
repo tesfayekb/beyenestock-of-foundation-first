@@ -655,6 +655,26 @@ Key event chains showing upstream triggers and downstream effects:
 
 > **Note:** Session revocation events are emitted as `auth.session_revoked` (auth module owns session lifecycle). User panel triggers the action but does not own the event.
 
+#### `user_panel.mfa_updated` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | MEDIUM |
+| **Owner module** | user-panel |
+| **Consumers** | audit-logging |
+| **Description** | User changed their own MFA settings (enable, disable, reconfigure) |
+| **Payload schema** | `{ user_id: uuid, timestamp: datetime, action: enum[enabled, disabled, reconfigured], mfa_type: enum[totp, sms] }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure — MFA changes are security-relevant |
+| **Observability** | Logged, traced |
+| **Related risks** | RSK-001 (credential compromise — MFA downgrade) |
+| **Related tests** | MFA update emission test, payload validation test |
+| **Lifecycle** | active |
+
 ### Audit Events
 
 #### `audit.logged` — v1

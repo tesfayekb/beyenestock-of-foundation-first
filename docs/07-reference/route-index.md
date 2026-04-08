@@ -255,12 +255,12 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Module** | user-panel |
 | **Classification** | authenticated |
 | **Auth required** | Yes |
-| **Permission required** | *(authenticated session only)* |
+| **Permission required** | `profile.self_manage` |
 | **Scope** | self |
 | **Panel** | user-panel |
-| **Related functions** | `getCurrentUser()`, `getUserProfile()`, `updateUserProfile()` |
+| **Related functions** | `requireAuth()`, `requireSelfScope()`, `getUserProfile()`, `updateUserProfile()` |
 | **Related events** | `user_panel.settings_changed` |
-| **Related tests** | Settings render test, update flow test |
+| **Related tests** | Settings render test, update flow test, self-scope denial test |
 | **Lifecycle** | active |
 
 #### `/settings/security` — MFA Settings
@@ -271,12 +271,12 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Module** | user-panel |
 | **Classification** | authenticated |
 | **Auth required** | Yes |
-| **Permission required** | *(authenticated session only)* |
+| **Permission required** | `mfa.self_manage`, `session.self_manage` |
 | **Scope** | self |
 | **Panel** | user-panel |
 | **Reauth required** | Yes (sensitive security action) |
-| **Related events** | `auth.mfa_enrolled`, `user_panel.session_revoked` |
-| **Related tests** | MFA enrollment tests, session revocation tests |
+| **Related functions** | `requireAuth()`, `requireRecentAuth()`, `requireSelfScope()` |
+| **Related events** | `auth.mfa_enrolled`, `user_panel.mfa_updated`, `auth.session_revoked` |
 | **Lifecycle** | active |
 
 ### Admin Panel Routes (Privileged)
