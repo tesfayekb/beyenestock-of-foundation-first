@@ -73,6 +73,13 @@ No single layer is sufficient on its own.
 - APIs and jobs must be safe to retry
 - Side effects must be controlled and predictable
 
+### 10. Permission-Driven Authorization
+
+- Access decisions must be based on **permissions**, not hardcoded role names
+- Business logic must not check for specific roles (e.g., `'admin'`)
+- Roles are containers of permissions — permissions are the enforcement unit
+- `superadmin` is the only exception (implicit all-permission grant)
+
 ### 9. Schema-Driven Design
 
 - Database schema is the source of truth
