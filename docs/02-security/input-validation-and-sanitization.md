@@ -4,48 +4,106 @@
 
 ## Purpose
 
-Defines rules for validating and sanitizing all user input.
+Defines enforced rules for validating, sanitizing, and safely handling all input entering the system.
 
 ## Scope
 
-All user-facing inputs: forms, URL parameters, API payloads, file uploads.
+All external input sources:
 
-## Rules
+- Forms
+- API payloads
+- URL parameters (query + path)
+- Headers
+- Cookies
+- File uploads
+- External integrations
 
-### Validation
+## Enforcement Rule (CRITICAL)
 
-1. All input MUST be validated server-side (edge functions / RLS)
-2. Client-side validation is for UX only — never a security boundary
-3. Use Zod schemas for type-safe validation
-4. Validation schemas are defined once and shared between client and server
-5. Reject unknown fields — no permissive parsing
+- All input MUST follow these rules
+- Any violation results in an **INVALID** implementation
+- No input may be trusted without validation and sanitization
+- Validation rules override convenience or performance
 
-### Sanitization
+## Input Handling Pipeline
 
-1. HTML content: strip all tags unless explicitly allowlisted
-2. SQL: never construct queries with string concatenation (use parameterized queries)
-3. URLs: validate protocol (only `https://`)
-4. File uploads: validate MIME type, file size, and extension server-side
-5. JSON: parse with strict schemas, reject malformed payloads
+All input must follow this sequence:
 
-### Validation Schema Pattern
+1. **Normalize**
+2. **Validate**
+3. **Sanitize**
+4. **Authorize** (if applicable)
+5. **Process**
+
+## Normalization
+
+- Trim whitespace
+- Normalize casing where applicable (e.g., emails)
+- Canonicalize formats before validation
+
+## Validation Rules
+
+- All input MUST be validated server-side
+- Client-side validation is UX only
+- Use Zod schemas for all validation
+- Validation schemas are shared between client and server
+- Reject unknown fields (strict parsing)
+- No implicit type coercion unless explicitly defined
+- All fields must have explicit constraints (length, format, type)
+
+## Sanitization Rules
+
+- **HTML:** strip all tags unless explicitly allowlisted
+- **Output encoding** required for any rendered content
+- **URLs:** allow only safe protocols (`https://`)
+- **JSON:** strict parsing, reject malformed payloads
+- **File uploads:**
+  - Validate MIME type, extension, and size
+  - Store outside executable paths
+  - Prevent direct execution
+- **Prevent injection:**
+  - No string concatenation in queries
+  - Always use parameterized queries
+
+## File Upload Security
+
+- Enforce file size limits
+- Restrict allowed MIME types
+- Store files in isolated storage
+- Do not trust client-provided metadata
+- (Optional) Integrate scanning for malicious content
+
+## Rate Limiting Integration
+
+- Apply rate limiting at API boundary
+- Enforce per-IP and per-user limits
+- Critical endpoints (auth, password reset) must have stricter limits
+
+## Forbidden Patterns
+
+- Dynamic query construction via string concatenation
+- Trusting client-side validation
+- Using unvalidated input in business logic
+- Unsafe parsing (`eval`, dynamic execution)
+- Accepting unknown fields without validation
+
+Violations = **INVALID** implementation.
+
+## Validation Schema Pattern
 
 ```typescript
-// Shared validation schema
 const createUserSchema = z.object({
   email: z.string().email().max(255),
   name: z.string().min(1).max(100).trim(),
   role: z.enum(['admin', 'moderator', 'user']).optional(),
-});
-
-// Use in both client forms AND edge functions
+}).strict();
 ```
 
-### Error Handling
+## Error Handling
 
 - Never expose internal errors to the client
-- Return structured error responses: `{ error: string, field?: string }`
-- Log full errors server-side with context
+- Return structured errors: `{ error: string, field?: string }`
+- Log full error details server-side with context
 
 ## Dependencies
 
@@ -54,11 +112,11 @@ const createUserSchema = z.object({
 
 ## Used By / Affects
 
-All modules that accept user input.
+All modules that accept or process external input.
 
 ## Risks If Changed
 
-HIGH — input validation is a primary security boundary.
+HIGH — improper validation or sanitization enables injection, XSS, and system compromise.
 
 ## Related Documents
 
