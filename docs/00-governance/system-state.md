@@ -35,8 +35,8 @@ Tracks:
 status: implementation in progress
 phase: development
 code_generation: allowed
-modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac (Phase 2 schema + helpers + RLS + seed + edge functions + client helpers)
-active_work: Phase 2 RBAC complete — schema, security helpers, RLS policies, seed data applied; edge functions verified; client-side helpers operational. Ready for Phase 3.
+modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac foundation (Phase 2 schema + helpers + RLS + seed + edge functions + client helpers — gate open, 4 of 12 items unchecked)
+active_work: Phase 2 RBAC foundation implemented — gate open. 4 unchecked items remain (allow/deny tests, DB-level RLS tests, cache invalidation verification, cross-tenant scope). Not formally ready for Phase 3 until gate closed or plan amended.
 current_plan_version: v4
 approved_plan_baseline: v4
 plan_status: approved
@@ -76,7 +76,7 @@ If inconsistency is detected → execution must **STOP** and be corrected.
 | Module | Status | Last Updated |
 |--------|--------|-------------|
 | auth | in progress (A+D implemented + hardened: shared functions, events, email gate; B+C deferred) | 2026-04-09 |
-| rbac | implemented (Phase 2: schema, helpers, RLS, seed, edge functions, client helpers) | 2026-04-09 |
+| rbac | foundation implemented (Phase 2: schema, helpers, RLS, seed, edge functions, client helpers — gate open) | 2026-04-09 |
 | user-management | not started | — |
 | admin-panel | not started | — |
 | user-panel | not started | — |
