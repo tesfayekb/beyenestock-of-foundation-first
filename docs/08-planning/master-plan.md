@@ -208,24 +208,169 @@ Implement role-based access control.
 
 ---
 
+## Development Phases
+
+### Phase 1 — Foundation (Auth + Infrastructure)
+
+**Modules:** PLAN-AUTH-001
+**Depends On:** PLAN-GOV-001 (implemented)
+
+**Milestones:**
+- Lovable Cloud enabled with database, auth, and storage
+- Email/password sign-up, sign-in, sign-out functional
+- Google OAuth and Apple Sign-In functional
+- MFA enrollment and verification operational
+- Password reset flow complete
+- Session management and token lifecycle working
+- Auth shared functions available (`getCurrentUser`, `requireAuth`, etc.)
+- All auth events emitting correctly
+
+**Phase Gate — must ALL pass before advancing:**
+- [ ] All auth user flows pass E2E tests
+- [ ] Auth failure modes tested (invalid session, expired token, failed MFA)
+- [ ] Auth events verified against event-index.md
+- [ ] Auth shared functions verified against function-index.md
+- [ ] Auth security validated per auth-security.md
+- [ ] No security scan findings on auth module
+
+---
+
+### Phase 2 — Access Control (RBAC)
+
+**Modules:** PLAN-RBAC-001
+**Depends On:** Phase 1 complete
+
+**Milestones:**
+- `user_roles` table created with RLS
+- `has_role()` security definer function operational
+- Role assignment and revocation working
+- Permission enforcement at API/edge function level
+- RLS policies enforced on all protected tables
+- Permission cache with tenant-scoped invalidation
+- V1 roles active: `superadmin`, `admin`, `user`
+
+**Phase Gate — must ALL pass before advancing:**
+- [ ] Every permission has allow + deny test
+- [ ] RLS tested at database level (not just API)
+- [ ] Cross-tenant isolation verified (zero rows, not errors)
+- [ ] Role change immediately reflected (cache invalidation verified)
+- [ ] Permission index matches implementation
+- [ ] No privilege escalation paths found
+
+---
+
+### Phase 3 — Core Services (User Management, Audit, API)
+
+**Modules:** PLAN-USRMGMT-001, PLAN-AUDIT-001, PLAN-API-001 (parallel)
+**Depends On:** Phase 2 complete
+
+**Milestones:**
+- User CRUD with account lifecycle management
+- Immutable audit trail recording all significant actions
+- Standardized API layer with consistent error handling and input validation
+- Audit log viewable by authorized roles
+- API versioning and response conventions established
+
+**Phase Gate — must ALL pass before advancing:**
+- [ ] User management flows pass E2E tests with RBAC enforcement
+- [ ] Audit entries verified for all auditable actions (reconciliation)
+- [ ] No sensitive data in audit logs (passwords, tokens, MFA secrets)
+- [ ] API input validation covers all endpoints
+- [ ] API error responses standardized
+- [ ] Route index matches all implemented routes
+
+---
+
+### Phase 4 — Admin & User Interfaces
+
+**Modules:** PLAN-ADMIN-001, PLAN-USRPNL-001
+**Depends On:** Phase 3 complete (Admin); Phase 1 complete (User Panel)
+
+**Milestones:**
+- Admin panel: user management, role management, audit log viewer, system health dashboard
+- User panel: profile management, settings, MFA configuration, session management
+- Admin actions enforced by RBAC (not UI-only)
+- All admin-privileged operations audited
+
+**Phase Gate — must ALL pass before advancing:**
+- [ ] Admin actions verified with correct and incorrect roles (allow + deny)
+- [ ] User panel flows pass E2E tests
+- [ ] No admin capability accessible without proper role
+- [ ] UI loading/error states for all async operations
+- [ ] Accessibility baseline met
+
+---
+
+### Phase 5 — Operations (Health Monitoring, Jobs)
+
+**Modules:** PLAN-HEALTH-001, PLAN-JOBS-001
+**Depends On:** Phase 1 complete (can run parallel with Phase 3/4)
+
+**Milestones:**
+- Health checks operational for all critical subsystems
+- Metrics tracking and alerting configured
+- Job scheduling via pg_cron operational
+- Retry logic, failure handling, and dead-letter queue functional
+- Kill switch and circuit breakers active
+
+**Phase Gate — must ALL pass before advancing:**
+- [ ] Health dashboard reflects real system state
+- [ ] Job idempotency and retry behavior tested
+- [ ] Poison job detection and isolation verified
+- [ ] Kill switch stops execution immediately
+- [ ] Health and job events emitting correctly
+
+---
+
+### Phase 6 — Hardening & System Validation
+
+**Modules:** All
+**Depends On:** Phases 1–5 complete
+
+**Milestones:**
+- Full security scan — zero critical/high findings
+- Performance baselines established (p95/p99 latency, bundle size)
+- Regression test suite complete for all critical paths
+- Cross-module integration verified end-to-end
+- All SSOT indexes accurate and complete
+
+**Phase Gate — release readiness:**
+- [ ] All E2E critical flows pass
+- [ ] Security adversarial tests pass (privilege escalation, injection, replay)
+- [ ] Performance within budget (LCP < 2.5s, CLS < 0.1)
+- [ ] All regression watchlist items have regression tests
+- [ ] All reference indexes verified against implementation
+- [ ] System-state.md reflects accurate module status
+
+---
+
+## Phase Gate Rules
+
+- No phase may advance without ALL gate conditions satisfied
+- Gate verification must be **explicit and documented** — not assumed
+- Failed gate conditions must be fixed and retested before advancing
+- Phase gate results logged in action-tracker.md
+- Auth, RBAC, and Security gates are **never waivable**
+
 ## Execution Order
 
-Based on dependency chains:
+Based on dependency chains and phases:
 
 1. ~~PLAN-GOV-001~~ (implemented)
-2. PLAN-AUTH-001
-3. PLAN-RBAC-001
-4. PLAN-USRMGMT-001, PLAN-AUDIT-001, PLAN-API-001 (parallel after RBAC)
-5. PLAN-ADMIN-001 (after RBAC + User Management)
-6. PLAN-USRPNL-001 (after Auth)
-7. PLAN-HEALTH-001, PLAN-JOBS-001 (independent, any time after GOV)
+2. **Phase 1:** PLAN-AUTH-001
+3. **Phase 2:** PLAN-RBAC-001
+4. **Phase 3:** PLAN-USRMGMT-001, PLAN-AUDIT-001, PLAN-API-001 (parallel)
+5. **Phase 4:** PLAN-ADMIN-001, PLAN-USRPNL-001
+6. **Phase 5:** PLAN-HEALTH-001, PLAN-JOBS-001 (can overlap with Phase 3/4)
+7. **Phase 6:** System-wide hardening and validation
 
 ## Execution Rules
 
 - Only `approved` or `approved-partial` sections may be executed
-- Execution must follow dependency order
+- Execution must follow phase order and dependency chain
 - No execution outside approved baseline
 - All changes must follow [change-control-policy.md](../00-governance/change-control-policy.md)
+- Phase gates are mandatory — no skipping
 
 ## Dependencies
 
