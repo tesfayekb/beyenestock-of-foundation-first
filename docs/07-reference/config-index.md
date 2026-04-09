@@ -286,7 +286,7 @@ Every config must define:
 | **Type** | `enum[]` |
 | **Module** | auth, rbac |
 | **Classification** | authorization-sensitive |
-| **Default** | `["admin"]` |
+| **Default** | `["admin", "superadmin"]` |
 | **Allowed values** | Valid `app_role` enum values |
 | **Invalid value behavior** | `fail-secure` — enforce MFA for all roles |
 | **Source** | code constant |

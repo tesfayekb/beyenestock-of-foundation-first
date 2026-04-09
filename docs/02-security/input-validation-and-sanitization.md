@@ -1,6 +1,6 @@
 # Input Validation and Sanitization
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-08
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09
 
 ## Purpose
 
@@ -98,7 +98,7 @@ Violations = **INVALID** implementation.
 const createUserSchema = z.object({
   email: z.string().email().max(255),
   name: z.string().min(1).max(100).trim(),
-  role: z.enum(['admin', 'moderator', 'user']).optional(),
+  role: z.enum(['admin', 'user']).optional(),
 }).strict();
 ```
 

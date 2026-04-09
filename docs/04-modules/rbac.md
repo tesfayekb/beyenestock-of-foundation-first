@@ -1,6 +1,6 @@
 # RBAC Module
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-08
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09
 
 ## Purpose
 
@@ -30,6 +30,7 @@ Authorization consists of:
 | Role | Description |
 |------|-------------|
 | `superadmin` | Full access to all current and future permissions |
+| `admin` | Administrative access — provisioned as a seed role during initial setup |
 | `user` | Default role with baseline access |
 
 **Rules:**
@@ -37,6 +38,8 @@ Authorization consists of:
 - Base roles cannot be deleted
 - Base roles cannot be modified
 - `superadmin` automatically has all permissions (including newly created ones)
+- `admin` is provisioned during system bootstrap and receives permissions as defined in [permission-index.md](../07-reference/permission-index.md)
+- `moderator` role is deferred to v2 (see DEC-018)
 
 ## Dynamic Roles
 
