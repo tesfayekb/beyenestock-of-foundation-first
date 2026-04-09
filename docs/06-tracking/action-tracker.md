@@ -236,6 +236,26 @@ Each action must include:
 | **Health Impact** | Improved |
 | **Status** | Verified |
 
+### ACT-007: Final Audit Remediation (v4 Polish)
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-09 |
+| **Type** | Documentation |
+| **Impact** | HIGH |
+| **Modules Affected** | rbac, input-validation, config-index, permission-index, all docs (metadata) |
+| **Docs Updated** | rbac.md, input-validation-and-sanitization.md, config-index.md, permission-index.md, 27 files (Last Reviewed dates), risk-register.md |
+| **Verification Type** | Manual review + automated grep verification |
+| **Evidence** | (1) Moderator removed from validation schema per DEC-018; (2) admin added as seed role in rbac.md; (3) MFA default corrected to ["admin","superadmin"]; (4) 15 missing UUID placeholders added (total now 28); (5) All 27 stale dates updated to 2026-04-09; (6) risk-register internal dates updated |
+| **Verified By** | Project Lead |
+| **Before State** | 6 issues (2 critical, 4 medium/low); score 97/100 |
+| **After State** | 0 remaining issues; score 100/100 |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert individual file changes |
+| **Blast Radius** | System-wide (documentation governance) |
+| **Health Impact** | Improved |
+| **Status** | Verified |
+
 ---
 
 ## Risk and Regression Integration
