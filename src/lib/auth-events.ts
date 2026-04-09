@@ -6,7 +6,7 @@
  * Will be wired to audit-logging module in Phase 3.
  */
 
-import { v4 as generateId } from 'crypto';
+
 
 export type AuthEventName =
   | 'auth.signed_up'
