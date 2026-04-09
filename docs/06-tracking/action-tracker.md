@@ -296,6 +296,32 @@ Each action must include:
 | **Health Impact** | Improved |
 | **Status** | Verified |
 
+### ACT-010: Phase 1 Auth Implementation (Email/Password + MFA)
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-09 |
+| **Type** | Feature |
+| **Impact** | HIGH |
+| **Modules Affected** | auth |
+| **Docs Updated** | master-plan.md, system-state.md, action-tracker.md |
+| **Verification Type** | Hybrid (code review + browser testing) |
+| **Verification Scope** | Immediate |
+| **Evidence** | Browser verification: Sign-in, Sign-up, Forgot-password, MFA-challenge, MFA-enroll pages all render correctly; Route protection verified (/ redirects to /sign-in); Supabase client connected; MFA enabled in Supabase dashboard (TOTP enabled, AAL1 limiting ON) |
+| **Verified By** | AI Agent + Project Lead |
+| **Before State** | No auth implementation; all routes unprotected |
+| **After State** | Email/password + TOTP MFA flows implemented; AuthContext with MFA tracking; RequireAuth guard with MFA redirect |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert auth-related files in src/ |
+| **Blast Radius** | Large (auth affects all protected routes) |
+| **Health Impact** | Improved |
+| **Related Routes** | /sign-in, /sign-up, /forgot-password, /reset-password, /mfa-challenge, /mfa-enroll |
+| **Related Functions** | signUp, signIn, signOut, resetPassword, updatePassword, checkMfaStatus, completeMfaChallenge |
+| **Related Events** | auth.signed_up, auth.signed_in, auth.signed_out, auth.password_reset, auth.mfa_enrolled |
+| **Status** | Verified |
+
+**Deferred items:** PLAN-AUTH-001-B (Google OAuth) and PLAN-AUTH-001-C (Apple Sign-In) — awaiting external credentials.
+
 ---
 
 ### Risk Resolution Tracking
