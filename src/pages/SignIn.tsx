@@ -22,7 +22,7 @@ export default function SignIn() {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await signIn(email, password);
+    const { error, mfaChallengeRequired } = await signIn(email, password);
 
     if (error) {
       toast({
@@ -31,6 +31,8 @@ export default function SignIn() {
         description: error.message,
       });
       setLoading(false);
+    } else if (mfaChallengeRequired) {
+      navigate('/mfa-challenge', { replace: true });
     } else {
       navigate(from, { replace: true });
     }
@@ -77,7 +79,7 @@ export default function SignIn() {
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing in…' : 'Sign in'}
+              {loading ? 'Signing in...' : 'Sign in'}
             </Button>
             <p className="text-sm text-muted-foreground">
               Don't have an account?{' '}

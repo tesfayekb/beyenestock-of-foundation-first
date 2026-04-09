@@ -11,6 +11,8 @@ import SignIn from "./pages/SignIn";
 import SignUp from "./pages/SignUp";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import MfaChallenge from "./pages/MfaChallenge";
+import MfaEnroll from "./pages/MfaEnroll";
 
 const queryClient = new QueryClient();
 
@@ -27,9 +29,11 @@ const App = () => (
             <Route path="/sign-up" element={<SignUp />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/mfa-challenge" element={<MfaChallenge />} />
 
             {/* Protected routes */}
             <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
+            <Route path="/mfa-enroll" element={<RequireAuth><MfaEnroll /></RequireAuth>} />
 
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
