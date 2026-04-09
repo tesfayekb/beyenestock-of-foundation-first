@@ -241,3 +241,4 @@ All implementation and execution decisions.
 - [Approved Decisions](approved-decisions.md)
 - [Plan Changelog](plan-changelog.md)
 - [Plan Review Log](plan-review-log.md)
+- [Feature Proposals](feature-proposals.md)
