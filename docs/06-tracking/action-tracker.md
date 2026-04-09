@@ -385,7 +385,7 @@ Each action must include:
 | Type | Count | High Impact |
 |------|-------|-------------|
 | Feature | 2 | 2 |
-| Documentation | 7 | 7 |
+| Documentation | 8 | 8 |
 | Fix | 0 | 0 |
 | Security | 1 | 1 |
 | Performance | 0 | 0 |
@@ -395,8 +395,8 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 11 |
-| Completed (unverified) | 0 |
+| Verified | 10 |
+| Completed (unverified) | 1 |
 | In Progress | 0 |
 | Rolled Back | 0 |
 
@@ -404,7 +404,7 @@ Each action must include:
 
 - Regressions introduced: 0
 - Regressions resolved: 0
-- Open (unverified) actions: 0
+- Open (unverified) actions: 1
 - High-impact actions this period: 11
 
 _Updated as actions are added._
