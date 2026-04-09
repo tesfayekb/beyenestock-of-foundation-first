@@ -80,3 +80,4 @@ HIGH — unresolved ambiguity leads to inconsistent implementation and system dr
 
 - [Approved Decisions](approved-decisions.md)
 - [Plan Review Log](plan-review-log.md)
+- [Feature Proposals](feature-proposals.md)

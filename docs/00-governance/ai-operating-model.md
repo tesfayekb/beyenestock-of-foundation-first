@@ -34,6 +34,7 @@ Before performing ANY task, the AI must read these documents in order:
 8. Must produce the mandatory output format after every task
 9. Must produce the plan revision output format after every plan update
 10. If required documents (module, dependency, or reference) are missing or unclear, the AI must STOP and request clarification instead of making assumptions
+11. Must NOT implement any feature not in the approved master plan — must follow the Feature Proposal Protocol in `docs/08-planning/feature-proposals.md`
 
 ## Mandatory AI Output Format (Every Task)
 
@@ -121,3 +122,4 @@ HIGH — changes here alter AI behavior across the entire project.
 - [Constitution](constitution.md)
 - [Change Control Policy](change-control-policy.md)
 - [Definition of Done](definition-of-done.md)
+- [Feature Proposals](../08-planning/feature-proposals.md)
