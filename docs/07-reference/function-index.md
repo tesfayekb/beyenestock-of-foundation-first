@@ -345,58 +345,62 @@ When changing any indexed function:
 | **Observability** | Latency (p95/p99), error rate, denial rate |
 | **Lifecycle** | active |
 
-#### `requireVerifiedEmail()`
+#### `requireVerifiedEmail()` / `isEmailVerified()`
 
 | Field | Value |
 |-------|-------|
-| **Type** | function |
+| **Type** | function + component guard |
 | **Classification** | security-critical |
 | **Owner module** | auth |
-| **Signature** | `() → void` (throws `403` if email unverified) |
-| **Returns** | void; throws `403 Forbidden` if user's email is not verified |
+| **Signature (utility)** | `isEmailVerified(user: User | null) → boolean` |
+| **Signature (component)** | `<RequireVerifiedEmail>{children}</RequireVerifiedEmail>` — renders verification prompt if email unverified |
+| **Returns** | Utility: `boolean`. Component: renders children if verified, blocks with UI prompt if not. |
 | **Purity** | impure |
-| **Side effects** | DB read (email verification status), may emit `auth.failed_attempt` on denial |
+| **Side effects** | Reads `user.email_confirmed_at` from auth state |
 | **Transactional** | No |
-| **Fail behavior** | fail-secure — throw 403 |
-| **Used by** | All protected routes requiring verified email |
+| **Fail behavior** | fail-secure — returns `false` / blocks access if unable to determine verification status |
+| **Used by** | All protected routes requiring verified email (`/`, `/mfa-enroll`) |
 | **Blast radius** | system-wide |
 | **Criticality** | CRITICAL |
 | **Approval required** | Yes — Lead |
-| **Callable from** | request-path |
-| **Upstream deps** | `requireAuth()` |
-| **Related routes** | All protected routes |
-| **Related events** | `auth.failed_attempt` |
+| **Callable from** | ui (component guard), request-path (utility) |
+| **Upstream deps** | `requireAuth()` (component is always wrapped inside `<RequireAuth>`) |
+| **Related routes** | `/`, `/mfa-enroll`, all future protected routes |
+| **Related events** | — |
 | **Related risks** | RISK-001 (unverified account abuse) |
-| **Related tests** | Email verification enforcement tests, 403 response tests |
-| **Observability** | Denial rate, error rate |
+| **Related tests** | Email verification enforcement tests, unverified user block test |
+| **Observability** | Denial rate |
 | **Lifecycle** | active |
+| **Implementation** | Utility: `src/lib/auth-guards.ts`. Component: `src/components/auth/RequireVerifiedEmail.tsx` |
 
-#### `requireRecentAuth()`
+#### `requireRecentAuth()` / `isRecentlyAuthenticated()` / `requiresReauthentication()`
 
 | Field | Value |
 |-------|-------|
-| **Type** | function |
+| **Type** | function (utility pair) |
 | **Classification** | security-critical |
 | **Owner module** | auth |
-| **Signature** | `() → void` (throws `401` if auth is stale) |
-| **Returns** | void; throws `401 Unauthorized` if last authentication is older than configured threshold |
-| **Purity** | impure |
-| **Side effects** | DB read (session timestamp), may emit `auth.failed_attempt` on denial |
+| **Signature** | `isRecentlyAuthenticated(user: User | null, thresholdMs?: number) → boolean` |
+| **Signature (inverse)** | `requiresReauthentication(user: User | null, thresholdMs?: number) → boolean` |
+| **Returns** | `isRecentlyAuthenticated`: `true` if last sign-in within threshold (default 5 min). `requiresReauthentication`: inverse. |
+| **Purity** | pure (reads user object passed in, no DB call) |
+| **Side effects** | None — reads `user.last_sign_in_at` from provided user object |
 | **Transactional** | No |
-| **Fail behavior** | fail-secure — throw 401 (re-authentication required) |
-| **Used by** | admin-panel, user-panel (sensitive actions) |
+| **Fail behavior** | fail-secure — returns `false` / `true` (requires re-auth) if unable to determine |
+| **Used by** | admin-panel, user-panel (sensitive actions: password change, MFA disable, account deletion) |
 | **Blast radius** | large |
 | **Criticality** | CRITICAL |
 | **Approval required** | Yes — Lead |
-| **Callable from** | request-path |
+| **Callable from** | request-path, ui |
 | **Upstream deps** | `requireAuth()` |
 | **Related routes** | Destructive routes, admin-critical routes |
 | **Related permissions** | Admin-critical permissions |
-| **Related events** | `auth.failed_attempt` |
+| **Related events** | — (caller responsible for emitting events on denial) |
 | **Related risks** | RISK-001 (session hijacking mitigation), RISK-003 |
 | **Related tests** | Re-auth enforcement tests, stale session tests |
 | **Observability** | Denial rate, re-auth frequency |
 | **Lifecycle** | active |
+| **Implementation** | `src/lib/auth-guards.ts` |
 
 #### `getSessionContext()`
 
@@ -405,23 +409,50 @@ When changing any indexed function:
 | **Type** | function |
 | **Classification** | security-critical |
 | **Owner module** | auth |
-| **Signature** | `() → SessionContext` |
-| **Returns** | `{ user_id, session_id, ip_address, device, created_at, last_active_at }` |
+| **Signature** | `() → Promise<SessionContext | null>` |
+| **Returns** | `{ user: User, session: Session, accessToken: string, expiresAt: number | undefined, isEmailVerified: boolean, lastSignInAt: string | undefined }` or `null` if no valid session |
 | **Purity** | impure |
-| **Side effects** | DB read (session metadata) |
+| **Side effects** | DB read (session metadata via Supabase auth) |
 | **Transactional** | No |
-| **Fail behavior** | fail-secure — throw 401 if no valid session |
+| **Fail behavior** | fail-secure — return `null` (unauthenticated) |
 | **Used by** | All modules (auth context, audit enrichment, rate limiting) |
 | **Blast radius** | system-wide |
 | **Criticality** | CRITICAL |
 | **Approval required** | Yes — Lead |
-| **Callable from** | request-path |
-| **Upstream deps** | `requireAuth()` |
+| **Callable from** | request-path, ui |
 | **Related routes** | All authenticated routes |
 | **Related risks** | RISK-003 (session hijacking) |
 | **Related tests** | Session context tests, metadata accuracy tests |
 | **Observability** | Latency, session validity check rate |
 | **Lifecycle** | active |
+| **Implementation** | `src/lib/auth-guards.ts` |
+
+#### `checkMfaStatus()`
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | security-critical |
+| **Owner module** | auth |
+| **Signature** | `() → Promise<'none' | 'enrolled' | 'challenge_required'>` |
+| **Returns** | Current MFA enrollment/challenge state for the authenticated user |
+| **Purity** | impure |
+| **Side effects** | DB read (MFA authenticator assurance level via Supabase auth) |
+| **Transactional** | No |
+| **Fail behavior** | fail-secure — return `'none'` on error (no elevated access) |
+| **Used by** | auth (AuthContext), MFA pages (MfaEnroll, MfaChallenge) |
+| **Blast radius** | large |
+| **Criticality** | HIGH |
+| **Approval required** | Yes — Lead |
+| **Callable from** | ui |
+| **Upstream deps** | `getCurrentUser()` |
+| **Related routes** | `/mfa-enroll`, `/mfa-challenge` |
+| **Related events** | `auth.mfa_enrolled` |
+| **Related risks** | RISK-001 (MFA bypass) |
+| **Related tests** | MFA status check tests, AAL level tests |
+| **Observability** | Error rate |
+| **Lifecycle** | active |
+| **Implementation** | `src/contexts/AuthContext.tsx` (as `getMfaStatus()` internal + `checkMfaStatus` exposed via context) |
 
 ### Authorization Functions
 

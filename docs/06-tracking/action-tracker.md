@@ -371,6 +371,29 @@ Each action must include:
 | **Related Routes** | /sign-in, /sign-up, /forgot-password, /reset-password, /mfa-challenge, /mfa-enroll |
 | **Status** | Verified |
 
+### ACT-013: Pre-Phase-2 Cross-Reference Audit — Reference Index Reconciliation
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-09 |
+| **Type** | Documentation |
+| **Impact** | HIGH |
+| **Modules Affected** | auth (route-index, function-index) |
+| **Docs Updated** | route-index.md, function-index.md, action-tracker.md |
+| **Verification Type** | Manual cross-reference audit: all 6 reference indexes compared against actual codebase |
+| **Verification Scope** | Immediate |
+| **Evidence** | **Audit scope:** route-index.md, function-index.md, event-index.md, permission-index.md, config-index.md, env-var-index.md cross-referenced against App.tsx, AuthContext.tsx, auth-events.ts, auth-guards.ts, RequireAuth.tsx, RequireVerifiedEmail.tsx, MfaEnroll.tsx. **5 mismatches found and fixed:** (1) Route `/` listed as `public/no auth` but code wraps with RequireAuth+RequireVerifiedEmail → corrected to `authenticated`; (2) `getSessionContext()` return shape in index didn't match code (`user_id, session_id, ip_address, device` vs actual `user, session, accessToken, expiresAt, isEmailVerified, lastSignInAt`) → corrected; (3) `getSessionContext()` fail behavior listed as "throw 401" but code returns `null` → corrected to "fail-secure — return null"; (4) `requireVerifiedEmail()` and `requireRecentAuth()` signatures didn't reflect actual implementation (component guard + utility pattern) → corrected with dual signatures; (5) `checkMfaStatus()` used by auth + MFA pages (cross-module) but missing from function index → added. **No mismatches found in:** event-index.md (all 8 auth events match code), permission-index.md (no permissions implemented yet, expected), config-index.md (governance definitions only, expected), env-var-index.md (4 env vars match usage). |
+| **Verified By** | AI Agent |
+| **Before State** | 5 mismatches between reference indexes and codebase |
+| **After State** | All reference indexes reconciled with actual implementation |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert route-index.md and function-index.md changes |
+| **Blast Radius** | Medium (documentation accuracy) |
+| **Health Impact** | Improved — eliminates doc-code drift before Phase 2 |
+| **Related Functions** | getSessionContext, isEmailVerified, isRecentlyAuthenticated, requiresReauthentication, checkMfaStatus |
+| **Related Routes** | / |
+| **Status** | Verified |
+
 ---
 
 ### Risk Resolution Tracking
@@ -408,7 +431,7 @@ Each action must include:
 | Type | Count | High Impact |
 |------|-------|-------------|
 | Feature | 2 | 2 |
-| Documentation | 8 | 8 |
+| Documentation | 9 | 9 |
 | Fix | 1 | 1 |
 | Security | 1 | 1 |
 | Performance | 0 | 0 |
@@ -418,7 +441,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 12 |
+| Verified | 13 |
 | Completed (unverified) | 0 |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -428,7 +451,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 0
 - Open (unverified) actions: 0
-- High-impact actions this period: 12
+- High-impact actions this period: 13
 
 _Updated as actions are added._
 
