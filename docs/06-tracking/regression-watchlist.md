@@ -425,6 +425,7 @@ The following **MUST** create Action Tracker entries:
 | 3 | RW-003 | Shared function changes | High | 0 |
 | 4 | RW-004 | Job retry configuration | High | 0 |
 | 5 | RW-005 | Audit event completeness | High | 0 |
+| 6 | RW-006 | Health monitoring blind spot | High | 0 |
 
 _Updated as items are added, triggered, or resolved._
 
