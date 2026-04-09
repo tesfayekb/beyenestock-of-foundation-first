@@ -283,6 +283,50 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related tests** | Role deletion allow/deny suite, base role protection tests |
 | **Lifecycle** | active |
 
+#### `permissions.assign`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-permissions-assign` (actual UUID assigned at DB creation) |
+| **Module** | rbac |
+| **Description** | Allows assigning permissions to roles. Governs permission-to-role mutation via privileged server-side RPCs. |
+| **Classification** | admin-critical |
+| **Scope** | system-wide |
+| **Default roles** | admin, superadmin |
+| **Used by** | admin-panel (role-permission management), `assign-permission-to-role` edge function |
+| **Blast radius** | system-wide |
+| **Approval required** | Yes — Lead |
+| **Audit required** | Yes |
+| **Reauth required** | Yes |
+| **Related routes** | `/admin/roles/:id/permissions` |
+| **Related functions** | `has_permission()`, `assign_permission_to_role()` |
+| **Related events** | `rbac.permission_assigned` |
+| **Related risks** | RISK-002 (privilege escalation via permission grant) |
+| **Related tests** | Permission assignment allow/deny suite |
+| **Lifecycle** | active |
+
+#### `permissions.revoke`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-permissions-revoke` (actual UUID assigned at DB creation) |
+| **Module** | rbac |
+| **Description** | Allows revoking permissions from roles. Separate from assign to enable split governance. |
+| **Classification** | admin-critical, destructive |
+| **Scope** | system-wide |
+| **Default roles** | admin, superadmin |
+| **Used by** | admin-panel (role-permission management), `revoke-permission-from-role` edge function |
+| **Blast radius** | system-wide |
+| **Approval required** | Yes — Lead |
+| **Audit required** | Yes |
+| **Reauth required** | Yes |
+| **Related routes** | `/admin/roles/:id/permissions` |
+| **Related functions** | `has_permission()`, `revoke_permission_from_role()` |
+| **Related events** | `rbac.permission_revoked` |
+| **Related risks** | RISK-002 (privilege escalation — access removal) |
+| **Related tests** | Permission revocation allow/deny suite |
+| **Lifecycle** | active |
+
 ### User Management Permissions
 
 #### `users.view_all`

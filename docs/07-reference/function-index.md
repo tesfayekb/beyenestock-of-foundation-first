@@ -456,19 +456,42 @@ When changing any indexed function:
 
 ### Authorization Functions
 
-#### `has_role(user_id, role)`
+#### `is_superadmin(user_id)`
 
 | Field | Value |
 |-------|-------|
 | **Type** | db-function |
 | **Classification** | authorization-critical |
 | **Owner module** | rbac |
-| **Signature** | `(user_id: uuid, role: app_role) → boolean` |
-| **Returns** | `true` if user has the specified role |
+| **Signature** | `(user_id: uuid) → boolean` |
+| **Returns** | `true` if user has the `superadmin` role |
 | **Purity** | impure (DB read) |
-| **Side effects** | DB read (user_roles table) |
+| **Side effects** | DB read (user_roles + roles tables) |
 | **Transactional** | No |
-| **Fail behavior** | fail-secure — return `false` on error |
+| **Fail behavior** | fail-secure — return `false` on null/error |
+| **Used by** | `has_permission()`, RLS policies |
+| **Blast radius** | system-wide |
+| **Criticality** | CRITICAL |
+| **Approval required** | Yes — Lead |
+| **Callable from** | request-path, job-path |
+| **Related risks** | RISK-002 (privilege escalation) |
+| **Related tests** | Superadmin check tests, null input tests |
+| **Observability** | Error rate |
+| **Lifecycle** | active |
+
+#### `has_role(user_id, role_key)`
+
+| Field | Value |
+|-------|-------|
+| **Type** | db-function |
+| **Classification** | authorization-critical |
+| **Owner module** | rbac |
+| **Signature** | `(user_id: uuid, role_key: text) → boolean` |
+| **Returns** | `true` if user has the specified role (by key string, not enum) |
+| **Purity** | impure (DB read) |
+| **Side effects** | DB read (user_roles + roles tables) |
+| **Transactional** | No |
+| **Fail behavior** | fail-secure — return `false` on null/error |
 | **Used by** | All RLS policies |
 | **Blast radius** | system-wide |
 | **Criticality** | CRITICAL |
@@ -477,30 +500,79 @@ When changing any indexed function:
 | **Related permissions** | All role-gated permissions |
 | **Related risks** | RISK-002 (privilege escalation), RLS bypass |
 | **Related watchlist** | RW-001 |
-| **Related tests** | RLS policy tests, RBAC unit tests |
+| **Related tests** | RLS policy tests, RBAC unit tests, null input tests |
 | **Observability** | Error rate, denial rate anomaly detection |
 | **Lifecycle** | active |
 
-#### `useUserRole()`
+#### `has_permission(user_id, permission_key)`
+
+| Field | Value |
+|-------|-------|
+| **Type** | db-function |
+| **Classification** | authorization-critical |
+| **Owner module** | rbac |
+| **Signature** | `(user_id: uuid, permission_key: text) → boolean` |
+| **Returns** | `true` if superadmin (logical inheritance) OR user has explicit permission mapping. `false` on null inputs, nonexistent keys, or errors. |
+| **Purity** | impure (DB read) |
+| **Side effects** | DB read (user_roles + roles + role_permissions + permissions) |
+| **Transactional** | No |
+| **Fail behavior** | fail-secure — return `false` on null/error/nonexistent key |
+| **Used by** | RLS policies, all edge functions, `get_my_authorization_context()` |
+| **Blast radius** | system-wide |
+| **Criticality** | CRITICAL |
+| **Approval required** | Yes — Lead |
+| **Callable from** | request-path, job-path |
+| **Upstream deps** | `is_superadmin()` |
+| **Related permissions** | All permission index entries |
+| **Related risks** | RISK-002 (privilege escalation) |
+| **Related watchlist** | RW-001 |
+| **Related tests** | Permission check tests, superadmin inheritance tests, null/malformed input tests |
+| **Observability** | Denial rate, anomaly detection |
+| **Lifecycle** | active |
+
+#### `get_my_authorization_context()`
+
+| Field | Value |
+|-------|-------|
+| **Type** | db-function |
+| **Classification** | authorization-critical |
+| **Owner module** | rbac |
+| **Signature** | `() → jsonb` |
+| **Returns** | `{ roles: text[], permissions: text[], is_superadmin: boolean }` for `auth.uid()` only. Returns null on error. |
+| **Purity** | impure (DB read) |
+| **Side effects** | DB read (user_roles + roles + role_permissions + permissions) |
+| **Transactional** | No |
+| **Fail behavior** | fail-secure — return null on error |
+| **Used by** | `useUserRoles()` hook (client) |
+| **Blast radius** | large |
+| **Criticality** | HIGH |
+| **Approval required** | Yes — Lead |
+| **Callable from** | ui (via RPC) |
+| **Upstream deps** | `is_superadmin()` |
+| **Related tests** | Authorization context tests, scope limitation tests |
+| **Observability** | Latency, error rate |
+| **Lifecycle** | active |
+
+#### `useUserRoles()`
 
 | Field | Value |
 |-------|-------|
 | **Type** | hook |
 | **Classification** | ui-shared |
 | **Owner module** | rbac |
-| **Signature** | `() → { role: app_role | null, loading: boolean }` |
-| **Returns** | Current user's role and loading state |
-| **Purity** | impure (state + DB) |
-| **Side effects** | DB read via subscription/query |
+| **Signature** | `() → { roles: string[], permissions: string[], isSuperadmin: boolean, loading: boolean }` |
+| **Returns** | Current user's effective roles, permissions, and superadmin status via `get_my_authorization_context()` RPC — no raw table stitching |
+| **Purity** | impure (state + RPC) |
+| **Side effects** | RPC call to `get_my_authorization_context()` |
 | **Transactional** | No |
-| **Fail behavior** | fail-secure — return `null` role (no elevated access) |
-| **Used by** | admin-panel, user-panel, layout |
+| **Fail behavior** | fail-secure — return empty arrays, `isSuperadmin: false` on error |
+| **Used by** | admin-panel, user-panel, layout, `RequirePermission` component |
 | **Blast radius** | large |
 | **Criticality** | HIGH |
 | **Approval required** | Yes |
 | **Callable from** | ui-only |
-| **Upstream deps** | `getCurrentUser()`, `has_role()` |
-| **Related tests** | Role display tests, conditional UI tests |
+| **Upstream deps** | `get_my_authorization_context()` |
+| **Related tests** | Role display tests, conditional UI tests, error fallback tests |
 | **Lifecycle** | active |
 
 #### `requireRole(role)`
@@ -952,7 +1024,10 @@ When changing any indexed function:
 | `requireVerifiedEmail()` | security-critical | system-wide | Email verification gate for all protected routes |
 | `requireRecentAuth()` | security-critical | large | Re-auth gate for sensitive/destructive actions |
 | `getSessionContext()` | security-critical | system-wide | Session metadata for all modules |
+| `is_superadmin()` | authorization-critical | system-wide | Superadmin logical inheritance depends on this |
 | `has_role()` | authorization-critical | system-wide | All RLS policies depend on this |
+| `has_permission()` | authorization-critical | system-wide | All permission checks depend on this |
+| `get_my_authorization_context()` | authorization-critical | large | Client authorization context depends on this |
 | `checkPermission()` | authorization-critical | system-wide | All permission checks depend on this |
 | `requireSelfScope()` | authorization-critical | large | Self-scope enforcement for user-owned resources |
 | `logAuditEvent()` | audit-critical | system-wide | Entire audit trail depends on this |
