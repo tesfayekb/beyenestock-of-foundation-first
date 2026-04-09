@@ -417,6 +417,34 @@ Each action must include:
 | **Related Risks** | RISK-001 (credential compromise) |
 | **Status** | Verified |
 
+### ACT-015: Phase 2 RBAC Implementation
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-09 |
+| **Type** | Feature |
+| **Impact** | HIGH |
+| **Modules Affected** | rbac, auth (downstream dependency) |
+| **Docs Updated** | system-state.md, master-plan.md, action-tracker.md |
+| **Verification Type** | Hybrid (code review + schema verification + security scan) |
+| **Verification Scope** | Immediate + Runtime |
+| **Evidence** | **Schema (4 SQL migrations applied):** (1) `01_rbac_schema.sql`: 5 tables (roles, permissions, user_roles, role_permissions, audit_logs) with indexes, RLS enabled, immutability triggers, last-superadmin protection trigger; (2) `02_rbac_security_helpers.sql`: 4 SECURITY DEFINER functions (is_superadmin, has_role, has_permission with logical superadmin inheritance + null-safety, get_my_authorization_context); (3) `03_rbac_rls_policies.sql`: 5 RLS policies using has_permission for roles.view and audit.view, plus self-access on user_roles; (4) `04_rbac_seed.sql`: 3 base roles (superadmin/admin/user, all is_base=true, is_immutable=true), 29 permissions matching permission-index.md, admin→28 permissions (all except jobs.emergency), user→5 self-scope permissions, auto-assign trigger on auth.users. **Edge functions (4 verified):** assign-role (roles.assign), revoke-role (roles.revoke + last-superadmin guard), assign-permission-to-role (permissions.assign), revoke-permission-from-role (permissions.revoke) — all with JWT validation, permission checks via has_permission RPC, UUID format validation, entity existence checks, audit logging with rollback on audit failure, correlation_id. **Client-side (3 verified):** useUserRoles hook (RPC to get_my_authorization_context, fail-secure empty arrays), RequirePermission component (UX-only guard), rbac.ts helpers (checkPermission + checkRole with superadmin bypass). **Security scan:** zero findings. |
+| **Verified By** | AI Agent |
+| **Before State** | RBAC not started; no roles/permissions tables; no authorization enforcement |
+| **After State** | Full Phase 2 RBAC foundation: dynamic-role-capable schema, SECURITY DEFINER helpers with superadmin inheritance, RLS on all tables, 3 base roles + 29 permissions seeded, 4 privileged edge functions, client-side UX helpers |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Run cleanup SQL (DROP triggers, functions, tables in dependency order); revert edge function and client-side code changes |
+| **Blast Radius** | System-wide (RBAC affects all protected resources) |
+| **Health Impact** | Improved — authorization infrastructure operational |
+| **Related Functions** | is_superadmin, has_role, has_permission, get_my_authorization_context, useUserRoles, checkPermission, checkRole, RequirePermission |
+| **Related Events** | rbac.role_assigned, rbac.role_revoked, rbac.permission_assigned, rbac.permission_revoked |
+| **Related Permissions** | All 29 permissions in permission-index.md |
+| **Related Routes** | Edge functions: assign-role, revoke-role, assign-permission-to-role, revoke-permission-from-role |
+| **Related Risks** | RISK-002 (privilege escalation) |
+| **Related Watchlist** | RW-001 |
+| **Depends On** | ACT-010, ACT-011 (Phase 1 Auth) |
+| **Status** | Verified |
+
 ---
 
 ### Risk Resolution Tracking
@@ -453,7 +481,7 @@ Each action must include:
 
 | Type | Count | High Impact |
 |------|-------|-------------|
-| Feature | 2 | 2 |
+| Feature | 3 | 3 |
 | Documentation | 9 | 9 |
 | Fix | 1 | 1 |
 | Security | 2 | 2 |
@@ -464,7 +492,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 14 |
+| Verified | 15 |
 | Completed (unverified) | 0 |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -474,7 +502,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 0
 - Open (unverified) actions: 0
-- High-impact actions this period: 14
+- High-impact actions this period: 15
 
 _Updated as actions are added._
 

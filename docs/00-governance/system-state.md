@@ -35,8 +35,8 @@ Tracks:
 status: implementation in progress
 phase: development
 code_generation: allowed
-modules_implemented: none (auth partial — A+D implemented + hardened, B+C deferred)
-active_work: Phase 1 hardening complete — shared functions, event emission, email verification enforcement implemented. Ready for Phase 2 (RBAC) as approved-partial transition.
+modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac (Phase 2 schema + helpers + RLS + seed + edge functions + client helpers)
+active_work: Phase 2 RBAC complete — schema, security helpers, RLS policies, seed data applied; edge functions verified; client-side helpers operational. Ready for Phase 3.
 current_plan_version: v4
 approved_plan_baseline: v4
 plan_status: approved
@@ -76,7 +76,7 @@ If inconsistency is detected → execution must **STOP** and be corrected.
 | Module | Status | Last Updated |
 |--------|--------|-------------|
 | auth | in progress (A+D implemented + hardened: shared functions, events, email gate; B+C deferred) | 2026-04-09 |
-| rbac | not started | — |
+| rbac | implemented (Phase 2: schema, helpers, RLS, seed, edge functions, client helpers) | 2026-04-09 |
 | user-management | not started | — |
 | admin-panel | not started | — |
 | user-panel | not started | — |
