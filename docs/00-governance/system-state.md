@@ -35,8 +35,8 @@ Tracks:
 status: implementation in progress
 phase: development
 code_generation: allowed
-modules_implemented: none
-active_work: Phase 1 — PLAN-AUTH-001 (Authentication Module) in progress
+modules_implemented: none (auth partial — A+D implemented, B+C deferred)
+active_work: Phase 1 — PLAN-AUTH-001 (Auth-A Email/Password + Auth-D MFA implemented; Auth-B Google OAuth + Auth-C Apple deferred pending credentials)
 current_plan_version: v4
 approved_plan_baseline: v4
 plan_status: approved

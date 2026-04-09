@@ -42,7 +42,7 @@ Create full SSOT documentation system.
 ---
 
 ### PLAN-AUTH-001: Authentication Module
-**Status:** `approved`
+**Status:** `approved-partial`
 **Risk Level:** HIGH
 **Module Doc:** [auth.md](../04-modules/auth.md)
 
@@ -59,10 +59,10 @@ Implement authentication system.
 - User Panel
 
 **Subsections:**
-- PLAN-AUTH-001-A: Email/Password
-- PLAN-AUTH-001-B: Google OAuth
-- PLAN-AUTH-001-C: Apple Sign-In
-- PLAN-AUTH-001-D: MFA (Authenticator)
+- PLAN-AUTH-001-A: Email/Password — `implemented`
+- PLAN-AUTH-001-B: Google OAuth — `deferred` (awaiting credentials)
+- PLAN-AUTH-001-C: Apple Sign-In — `deferred` (awaiting credentials)
+- PLAN-AUTH-001-D: MFA (Authenticator) — `implemented`
 
 **Acceptance Criteria:**
 - Secure login/logout
