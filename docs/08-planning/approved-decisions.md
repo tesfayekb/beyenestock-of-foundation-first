@@ -241,6 +241,17 @@ If any field is missing → the decision is **INVALID**.
 
 ---
 
+### DEC-020: OAuth Providers — Google + Apple Only (v1)
+- **Plan Section:** PLAN-AUTH-001
+- **Decision Type:** architecture
+- **Date Approved:** 2026-04-09
+- **Decision:** V1 OAuth providers limited to Google and Apple only. No additional social providers (GitHub, Facebook, Discord, etc.) in v1. Email/Password is the primary method; Google and Apple are supplementary. Lovable Cloud supports these natively. Resolves OQ-001.
+- **Affected Modules / Systems:** auth, user-panel
+- **Status:** active
+- **Superseded By:** —
+
+---
+
 ## Decision Integrity Rules
 
 - Every approved plan section MUST have a corresponding `DEC-NNN` entry
