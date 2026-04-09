@@ -342,7 +342,7 @@ The system should support automatic mapping of changed modules to relevant watch
 | Caching | ≥ 1 item | RW-001 (via cache) |
 | Shared Functions | ≥ 1 item | RW-003 |
 | Admin Panel | Covered via module items | RW-001, RW-005 |
-| Health Monitoring | Should add when system active | — |
+| Health Monitoring | ≥ 1 item | RW-006 |
 
 **Gap Detection:** Absence of watchlist item for a fragile module = coverage gap → must be addressed.
 
