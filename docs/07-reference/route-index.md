@@ -188,11 +188,11 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related tests** | Landing page render test |
 | **Lifecycle** | active |
 
-#### `/login` — Login
+#### `/sign-in` — Sign In
 
 | Field | Value |
 |-------|-------|
-| **Page** | Login |
+| **Page** | Sign In |
 | **Module** | auth |
 | **Classification** | public |
 | **Auth required** | No |
@@ -203,7 +203,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related risks** | RISK-001 (credential compromise) |
 | **Lifecycle** | active |
 
-#### `/signup` — Sign Up
+#### `/sign-up` — Sign Up
 
 | Field | Value |
 |-------|-------|
