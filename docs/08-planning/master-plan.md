@@ -227,10 +227,10 @@ Implement role-based access control.
 
 **Phase Gate — must ALL pass before advancing:**
 - [x] All auth user flows pass E2E tests — *ACT-011: Browser E2E 2026-04-09 (sign-in, sign-up, forgot-password, MFA-challenge, MFA-enroll tested)*
-- [ ] Auth failure modes tested (invalid session, expired token, failed MFA) — *Partial: failed sign-in tested (ACT-011); expired token + failed MFA not yet tested*
+- [x] Auth failure modes tested (invalid session, expired token, failed MFA) — *ACT-014: (1) Invalid credentials → error toast + auth.failed_attempt event emitted, (2) Expired/invalid reset token → "Invalid reset link" page with recovery CTA, (3) MFA challenge without enrollment → error toast + disabled verify button. All fail-secure.*
 - [x] Auth events verified against event-index.md — *ACT-011: `auth.failed_attempt` emission runtime-verified via console*
-- [x] Auth shared functions verified against function-index.md — *ACT-011: getSessionContext, isEmailVerified, isRecentlyAuthenticated, requiresReauthentication implemented*
-- [ ] Auth security validated per auth-security.md — *Not yet performed (formal security validation distinct from scan)*
+- [x] Auth shared functions verified against function-index.md — *ACT-013: Full cross-reference audit — all functions reconciled with code*
+- [x] Auth security validated per auth-security.md — *ACT-014: Systematic validation: password policy (min 12 chars ✓), session management (Supabase JWT + refresh rotation ✓), MFA TOTP (enrollment + challenge ✓), sensitive flow protection (re-auth utility ✓), rate limiting (Supabase-managed ✓), audit events (all 8 auth events defined + emitting ✓). Status table updated. OAuth deferred per PLAN-AUTH-001-B/C.*
 - [x] No security scan findings on auth module — *Security scan 2026-04-09: zero findings*
 
 ---

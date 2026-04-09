@@ -26,10 +26,10 @@ All authentication flows:
 
 | Method | Priority | Status |
 |--------|----------|--------|
-| Email + Password | Required | Not started |
-| Google OAuth | Required | Not started |
-| Apple Sign-In | Required | Not started |
-| MFA (TOTP) | Required | Not started |
+| Email + Password | Required | Implemented (Phase 1) |
+| Google OAuth | Required | Deferred (awaiting credentials — PLAN-AUTH-001-B) |
+| Apple Sign-In | Required | Deferred (awaiting credentials — PLAN-AUTH-001-C) |
+| MFA (TOTP) | Required | Implemented (Phase 1) |
 
 ## Password Policy
 
