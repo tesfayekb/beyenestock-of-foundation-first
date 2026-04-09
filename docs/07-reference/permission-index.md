@@ -330,6 +330,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-users-deactivate` (actual UUID assigned at DB creation) |
 | **Module** | user-management |
 | **Description** | Allows deactivating user accounts. Reversible but high-impact. |
 | **Classification** | admin-critical, destructive |
@@ -350,6 +351,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-users-reactivate` (actual UUID assigned at DB creation) |
 | **Module** | user-management |
 | **Description** | Allows reactivating deactivated user accounts. Distinct from deactivation — separate authority boundary. |
 | **Classification** | admin-critical |
@@ -479,6 +481,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-admin-access` (actual UUID assigned at DB creation) |
 | **Module** | admin-panel |
 | **Description** | Gates access to the entire admin panel. Required for all admin routes. |
 | **Classification** | security-critical |
@@ -499,6 +502,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-admin-config` (actual UUID assigned at DB creation) |
 | **Module** | admin-panel |
 | **Description** | Allows modifying governed system configuration via admin panel. Does not imply secret/env mutation. |
 | **Classification** | admin-critical |
@@ -520,6 +524,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-audit-view` (actual UUID assigned at DB creation) |
 | **Module** | audit-logging |
 | **Description** | Allows viewing audit log entries in the admin panel |
 | **Classification** | read-only |
@@ -539,6 +544,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-audit-export` (actual UUID assigned at DB creation) |
 | **Module** | audit-logging |
 | **Description** | Allows exporting audit log data. Compliance-sensitive — exported data may contain PII. |
 | **Classification** | compliance-sensitive |
@@ -559,6 +565,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-monitoring-view` (actual UUID assigned at DB creation) |
 | **Module** | health-monitoring |
 | **Description** | Allows viewing health dashboards and system status |
 | **Classification** | read-only |
@@ -578,6 +585,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-monitoring-configure` (actual UUID assigned at DB creation) |
 | **Module** | health-monitoring |
 | **Description** | Allows configuring alert thresholds and monitoring parameters |
 | **Classification** | operational |
@@ -598,6 +606,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-jobs-view` (actual UUID assigned at DB creation) |
 | **Module** | jobs-and-scheduler |
 | **Description** | Allows viewing job status, history, and queue state |
 | **Classification** | read-only |
@@ -616,6 +625,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-jobs-trigger` (actual UUID assigned at DB creation) |
 | **Module** | jobs-and-scheduler |
 | **Description** | Allows manually triggering job execution |
 | **Classification** | operational |
@@ -635,6 +645,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-jobs-pause` (actual UUID assigned at DB creation) |
 | **Module** | jobs-and-scheduler |
 | **Description** | Allows pausing scheduled job execution |
 | **Classification** | operational |
@@ -654,6 +665,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-jobs-resume` (actual UUID assigned at DB creation) |
 | **Module** | jobs-and-scheduler |
 | **Description** | Allows resuming paused job execution |
 | **Classification** | operational |
@@ -672,6 +684,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-jobs-retry` (actual UUID assigned at DB creation) |
 | **Module** | jobs-and-scheduler |
 | **Description** | Allows manually retrying failed jobs |
 | **Classification** | operational |
@@ -691,6 +704,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-jobs-deadletter-manage` (actual UUID assigned at DB creation) |
 | **Module** | jobs-and-scheduler |
 | **Description** | Allows managing dead-lettered jobs: replay, discard, investigate |
 | **Classification** | admin-critical, destructive |
@@ -711,6 +725,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-jobs-emergency` (actual UUID assigned at DB creation) |
 | **Module** | jobs-and-scheduler |
 | **Description** | Allows activating the job kill switch — halts all job execution system-wide. Emergency use only. |
 | **Classification** | security-critical, destructive |
