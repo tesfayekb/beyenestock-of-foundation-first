@@ -120,7 +120,7 @@ For shared contracts (functions, permissions, routes, events, config keys, env v
 
 Do not invent new shared functions, permissions, routes, events, config keys, or env vars unless they are added to the appropriate reference index in the same governed change.
 
-## REFERENCE INDEX MAINTENANCE
+## REFERENCE INDEX MAINTENANCE AND RECONCILIATION
 
 When modifying code that affects shared components, you MUST update the relevant indexes:
 
@@ -130,6 +130,20 @@ When modifying code that affects shared components, you MUST update the relevant
 - `docs/07-reference/event-index.md` — system events
 - `docs/07-reference/config-index.md` — configuration keys
 - `docs/07-reference/env-var-index.md` — environment variables
+
+**Reconciliation rule:** When implementing code that corresponds to reference index entries, the actual implementation (names, paths, signatures) MUST match the index. If you use a different name/path than what the index specifies, you MUST update the index to match reality. Mismatches between indexes and code are INVALID.
+
+## PHASE GATE VERIFICATION PROTOCOL (MANDATORY)
+
+After completing ANY implementation task that falls within a phase (as defined in `master-plan.md` Development Phases):
+
+1. **Open the phase gate checklist** in `master-plan.md` for the current phase
+2. **Check each gate item** — does this task satisfy or partially satisfy any gate condition?
+3. **Update the checkbox** from `[ ]` to `[x]` with an evidence reference (ACT-NNN + brief description)
+4. **If partially satisfied**, leave as `[ ]` but add an italicized note showing partial progress
+5. **Record the gate update** in your action tracker entry under a `phase_gates_updated` field
+
+This is not optional. Failure to update phase gates after phase-relevant work is a governance violation (ACT-012 root cause).
 
 ## DEPENDENCY ORDER (Implementation Sequence)
 
