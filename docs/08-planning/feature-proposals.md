@@ -8,6 +8,8 @@ Structured intake for unplanned features. Any feature not already in `master-pla
 
 This document prevents scope creep, unauthorized feature additions, and AI drift.
 
+**Scope boundary:** This document is ONLY for new features or capability expansion. Modifications to existing approved plan sections must follow the change-control workflow, not the feature proposal protocol.
+
 ## Scope
 
 All new feature ideas, enhancements, and capability requests that are NOT currently tracked in the approved master plan.
