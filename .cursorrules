@@ -238,6 +238,17 @@ These are not optional. They define the testing contract for this project.
 - Input validation on all user-facing forms (client + server)
 - Proper HTTP status codes and error responses
 
+## PHASE GATE VERIFICATION PROTOCOL (MANDATORY)
+
+After ANY implementation task that completes or advances a plan section:
+
+1. **Update phase gate checkboxes** in `docs/08-planning/master-plan.md` with evidence references (ACT-NNN)
+2. **Reconcile reference indexes** — verify that `docs/07-reference/` entries (routes, functions, events, permissions) match actual code. Mismatches are INVALID.
+3. **Update action tracker** — ensure `docs/06-tracking/action-tracker.md` reflects current status with accurate evidence
+4. **Verify summary dashboard** — confirm counts in the action tracker summary match the detailed register
+
+Failure to complete this protocol means the task is NOT done, regardless of whether the code works. This is a governance requirement (ACT-012).
+
 ## FINAL WARNING
 
-If you skip reading governance docs, generate code when blocked, drop plan sections, fail to update documentation, skip testing, or produce code that is not auditable/diagnosable/testable — the work is INVALID and must be reverted. This is not advisory. This is mandatory.
+If you skip reading governance docs, generate code when blocked, drop plan sections, fail to update documentation, skip phase gate verification, skip testing, or produce code that is not auditable/diagnosable/testable — the work is INVALID and must be reverted. This is not advisory. This is mandatory.
