@@ -5,12 +5,19 @@
 
 ## STOP — READ BEFORE DOING ANYTHING
 
-Before writing, modifying, or deleting ANY file (code or documentation), you MUST:
+Before writing, modifying, or deleting ANY file (code or documentation), you MUST read these in order:
 
-1. Read `docs/00-governance/system-state.md` — this defines what is allowed RIGHT NOW
-2. Read `docs/00-governance/constitution.md` — these are the 11 non-negotiable rules
-3. Read `docs/08-planning/approved-decisions.md` — these are binding decisions
-4. Read `docs/08-planning/master-plan.md` — this is the approved execution plan
+1. `docs/00-governance/constitution.md` — the 11 non-negotiable rules
+2. `docs/00-governance/system-state.md` — current phase and what is allowed RIGHT NOW
+3. `docs/08-planning/approved-decisions.md` — binding decisions
+4. `docs/08-planning/master-plan.md` — the approved execution plan
+
+If ANY required document is missing or unclear → **STOP and ask for clarification.** Do not assume.
+
+## TASK TYPE BRANCHING
+
+- **Review-only task** (no file edits): No action tracker updates unless instructed. No output format required unless requested.
+- **Change task** (any file edit): Full 9-step workflow required. Output format mandatory.
 
 ## EXECUTION GATES (HARD BLOCKS)
 
@@ -28,33 +35,23 @@ For every task — no matter how small — read these in order:
 
 1. `docs/00-governance/constitution.md` (11 rules)
 2. `docs/00-governance/system-state.md` (current phase + gates)
-3. `docs/08-planning/approved-decisions.md` (binding decisions: DEC-001 through DEC-019+)
+3. `docs/08-planning/approved-decisions.md` (binding decisions)
 4. `docs/08-planning/master-plan.md` (plan sections with stable IDs)
 5. Relevant module docs from `docs/04-modules/` (for the module you're working on)
 6. `docs/01-architecture/dependency-map.md` (if shared logic is involved)
 7. Relevant reference indexes from `docs/07-reference/` (if shared components involved)
 
-If ANY required document is missing or unclear → **STOP and ask for clarification.** Do not assume.
-
 ## CHANGE CONTROL (9-Step Workflow)
 
-Every change must follow the 9-step workflow in `docs/00-governance/change-control-policy.md`:
-
-1. **Identify** — What is being changed and why?
-2. **Classify** — Impact: Low / Medium / High
-3. **Assess Dependencies** — Check `dependency-map.md` and module cross-references
-4. **Check Constraints** — Verify against constitution, approved decisions, system state
-5. **Plan** — Define scope, affected modules, documentation updates needed
-6. **Execute** — Make the change
-7. **Update Documentation** — Update ALL affected docs (module docs, reference indexes, tracking)
-8. **Verify** — Record evidence of correctness
-9. **Log** — Create action tracker entry in `docs/06-tracking/action-tracker.md`
+Follow the exact 9-step workflow in `docs/00-governance/change-control-policy.md` without reinterpretation or reordering. Do not restate or paraphrase it here — the canonical source is the policy document.
 
 HIGH-impact changes require pre/post state tracking, blast radius assessment, and rollback plan.
 
-## OUTPUT FORMAT (Mandatory After Every Task)
+Auth, RBAC, and Security modules are ALWAYS classified as HIGH impact regardless of change scope.
 
-After completing any task, produce this output:
+## OUTPUT FORMAT (Mandatory After Every Change Task)
+
+After completing any task that modifies files, produce this output. Optional for pure review/verification tasks unless explicitly requested.
 
 ```
 ## Change Summary
@@ -78,6 +75,8 @@ After completing any task, produce this output:
 
 ## PLAN REVISION FORMAT (When Modifying master-plan.md)
 
+This format supplements but does not replace Constitution Rules 8/9/10, Approved Decisions, and Plan Merge/Preservation rules. Stable IDs must be preserved. Approved sections may only be superseded per Constitution Rule 8.
+
 ```
 ## Plan Version
 [New version identifier]
@@ -94,26 +93,32 @@ After completing any task, produce this output:
 ## Sections Removed (ID, justification, prior approval reference)
 [List]
 
-## Approved Decisions Affected (by DEC-NNN ID)
+## Approved Decisions Affected (by decision ID, or successor if superseded)
 [List]
 
 ## Review Required (yes/no, which section IDs)
 [List]
 ```
 
-## NON-NEGOTIABLE RULES (from Constitution)
+## CONSTITUTIONAL COMPLIANCE
 
-1. Every document has exactly one owner
-2. No undocumented features — code without docs is invalid
-3. Every change follows the change control workflow
-4. Approved plan sections cannot be dropped without explicit supersession
-5. Execution only from approved baseline
-6. Plan revisions are merges, not rewrites — stable IDs preserved
-7. Roles MUST be in a separate `user_roles` table — NEVER on profile/users table
-8. If required documents are missing or unclear → STOP, do not assume
-9. Feature scope is locked (auth, RBAC, admin/user panels, audit, monitoring, API, jobs) — no expansion without approval
-10. Moderator role is deferred to v2 (DEC-018) — do not implement
-11. MFA recovery: 10 codes, 8 alphanumeric characters (DEC-017)
+Obey all 11 constitutional rules exactly as written in `docs/00-governance/constitution.md`. This file does not redefine them.
+
+Key reminders (non-authoritative — the Constitution is the source of truth):
+
+- Roles MUST be in a separate `user_roles` table — NEVER on profile/users table
+- Feature scope is locked — no expansion without approval
+- Moderator role is deferred to v2 per active decision record — do not implement
+- MFA recovery follows the active decision record (currently: 10 codes, 8 alphanumeric chars)
+- If required documents are missing or unclear → STOP, do not assume
+
+## AUTHORITY HIERARCHY
+
+For shared contracts (functions, permissions, routes, events, config keys, env vars), **reference indexes are authoritative**. Module docs must align to them, not the other way around.
+
+## NO INVENTION WITHOUT INDEXING
+
+Do not invent new shared functions, permissions, routes, events, config keys, or env vars unless they are added to the appropriate reference index in the same governed change.
 
 ## REFERENCE INDEX MAINTENANCE
 
@@ -128,7 +133,9 @@ When modifying code that affects shared components, you MUST update the relevant
 
 ## DEPENDENCY ORDER (Implementation Sequence)
 
-Implementation MUST follow this dependency chain:
+Implementation must follow the dependency order defined in `docs/08-planning/master-plan.md`. Do NOT implement a module before its dependencies are complete.
+
+Current sequence (non-authoritative convenience summary — master-plan.md is canonical):
 
 1. ~~PLAN-GOV-001~~ (implemented)
 2. PLAN-AUTH-001 (Authentication)
@@ -137,8 +144,6 @@ Implementation MUST follow this dependency chain:
 5. PLAN-ADMIN-001 (after RBAC + User Management)
 6. PLAN-USRPNL-001 (after Auth)
 7. PLAN-HEALTH-001, PLAN-JOBS-001 (independent, any time after GOV)
-
-Do NOT implement a module before its dependencies are complete.
 
 ## DOCUMENTATION LOCATIONS
 
