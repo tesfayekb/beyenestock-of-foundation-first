@@ -301,10 +301,10 @@ Implement role-based access control.
 
 ---
 
-### Phase 5 — Operations (Health Monitoring, Jobs)
+### Phase 5 — Operations & Reliability (Health Monitoring, Jobs)
 
 **Modules:** PLAN-HEALTH-001, PLAN-JOBS-001
-**Depends On:** Phase 1 complete (can run parallel with Phase 3/4)
+**Depends On:** Phase 1 complete (minimum); Phase 3 recommended for full integration (audit events, API execution layer)
 
 **Milestones:**
 - Health checks operational for all critical subsystems
@@ -341,6 +341,7 @@ Implement role-based access control.
 - [ ] All regression watchlist items have regression tests
 - [ ] All reference indexes verified against implementation
 - [ ] System-state.md reflects accurate module status
+- [ ] Full observability coverage — all critical paths emit events and logs with traceability (correlation_id)
 
 ---
 
@@ -348,9 +349,12 @@ Implement role-based access control.
 
 - No phase may advance without ALL gate conditions satisfied
 - Gate verification must be **explicit and documented** — not assumed
-- Failed gate conditions must be fixed and retested before advancing
+- Failed gate conditions must be fixed and retested before advancing — no partial progression with known failures
+- If a phase gate fails, changes must be **rolled back or corrected** before re-validation
+- Gate verification must include **evidence** (test results, logs, screenshots, or metrics) — evidence must be traceable in action-tracker.md or linked artifacts
 - Phase gate results logged in action-tracker.md
 - Auth, RBAC, and Security gates are **never waivable**
+- Schema changes after Phase 3 require **HIGH-impact change control** with rollback plan
 
 ## Execution Order
 
