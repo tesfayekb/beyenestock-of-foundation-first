@@ -1,6 +1,6 @@
 # Permission Index
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-08 | **Status:** Living Document | **Index Version:** `perm-v1.0`
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09 | **Status:** Living Document | **Index Version:** `perm-v1.1`
 
 ## Purpose
 
@@ -202,6 +202,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-roles-revoke` (actual UUID assigned at DB creation) |
 | **Module** | rbac |
 | **Description** | Allows revoking roles from users. Separate from assign to enable split governance. |
 | **Classification** | admin-critical, destructive |
@@ -223,6 +224,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-roles-view` (actual UUID assigned at DB creation) |
 | **Module** | rbac |
 | **Description** | Allows viewing role assignments and role definitions |
 | **Classification** | read-only |
@@ -307,6 +309,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 
 | Field | Value |
 |-------|-------|
+| **Permission UUID** | `perm-uuid-users-edit-any` (actual UUID assigned at DB creation) |
 | **Module** | user-management |
 | **Description** | Allows editing any user's profile data. Does not include role changes or account lifecycle. |
 | **Classification** | admin-critical |
