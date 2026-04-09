@@ -160,6 +160,28 @@ docs/
 └── 08-planning/      — Master plan, approved decisions, changelog, review log
 ```
 
+## VERSION CONTROL — BRANCHING RULES (MANDATORY)
+
+All implementation work MUST be done in feature branches, NOT on the main/default branch.
+
+- **Branch naming**: `feature/PLAN-{MODULE}-{NNN}-{short-description}` (e.g., `feature/PLAN-AUTH-001-email-password`)
+- **One branch per feature/phase**: Each implementation task or phase gate gets its own branch
+- **No direct commits to main**: All work merges via pull request after phase gate verification
+- **Branch scope**: Each branch should correspond to a single plan section or sub-task — do not bundle unrelated changes
+- **Clean history**: Branches must pass all tests before merge. Failed branches must be fixed, not force-merged.
+
+## DEPENDENCY COMPATIBILITY — NO UNSUPPORTED SOFTWARE (MANDATORY)
+
+Do NOT install packages, tools, or dependencies that may not be supported by other AI platforms or standard toolchains working on this project.
+
+- **Only use well-established, actively maintained npm packages** — no experimental, abandoned, or niche libraries
+- **No platform-specific tooling** that locks the project to a single AI IDE or environment
+- **No packages requiring native binaries** unless explicitly approved (e.g., no node-gyp dependencies)
+- **Prefer packages already in the project** (`package.json`) before adding new ones
+- **Before adding ANY new dependency**: verify it is actively maintained (updated within last 12 months), has >1000 weekly npm downloads, and does not introduce security vulnerabilities
+- **Document new dependencies**: Every new package added must be justified in the change summary output format
+- **No version pinning to pre-release/alpha/beta** unless explicitly approved
+
 ## FEATURE PROPOSAL PROTOCOL (MANDATORY)
 
 If you identify a feature, enhancement, or capability that is NOT in the approved `master-plan.md`:
