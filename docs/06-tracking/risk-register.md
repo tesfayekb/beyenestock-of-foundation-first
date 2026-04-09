@@ -129,7 +129,7 @@ Each risk must include:
 | **Residual Risk** | Low |
 | **Related Risks** | RISK-005, RISK-006 |
 | **Status** | Mitigated → Monitored |
-| **Last Reviewed** | 2026-04-08 |
+| **Last Reviewed** | 2026-04-09 |
 
 ### RISK-002: Context Drift Across AI Sessions
 
@@ -149,7 +149,7 @@ Each risk must include:
 | **Residual Risk** | Medium |
 | **Related Risks** | RISK-004, RISK-007 |
 | **Status** | Mitigated → Monitored |
-| **Last Reviewed** | 2026-04-08 |
+| **Last Reviewed** | 2026-04-09 |
 
 ### RISK-003: Silent Behavior Change in Shared Functions
 
@@ -169,7 +169,7 @@ Each risk must include:
 | **Residual Risk** | Low |
 | **Related Risks** | RISK-002 |
 | **Status** | Mitigated → Monitored |
-| **Last Reviewed** | 2026-04-08 |
+| **Last Reviewed** | 2026-04-09 |
 
 ### RISK-004: Approved Plan Sections Dropped in Revisions
 
@@ -189,7 +189,7 @@ Each risk must include:
 | **Residual Risk** | Medium |
 | **Related Risks** | RISK-002, RISK-007 |
 | **Status** | Mitigated → Monitored |
-| **Last Reviewed** | 2026-04-08 |
+| **Last Reviewed** | 2026-04-09 |
 
 ### RISK-005: Cross-Tenant Data Leakage via Cache
 
@@ -209,7 +209,7 @@ Each risk must include:
 | **Residual Risk** | Low |
 | **Related Risks** | RISK-001, RISK-006 |
 | **Status** | Mitigated → Monitored |
-| **Last Reviewed** | 2026-04-08 |
+| **Last Reviewed** | 2026-04-09 |
 
 ### RISK-006: RLS Policy Bypass Under Load or Schema Change
 
@@ -229,7 +229,7 @@ Each risk must include:
 | **Residual Risk** | Low |
 | **Related Risks** | RISK-001, RISK-005 |
 | **Status** | Mitigated → Monitored |
-| **Last Reviewed** | 2026-04-08 |
+| **Last Reviewed** | 2026-04-09 |
 
 ### RISK-007: AI Hallucination Affecting Code or Documentation
 
@@ -249,7 +249,7 @@ Each risk must include:
 | **Residual Risk** | Medium |
 | **Related Risks** | RISK-002, RISK-004 |
 | **Status** | Mitigated → Monitored |
-| **Last Reviewed** | 2026-04-08 |
+| **Last Reviewed** | 2026-04-09 |
 
 ### RISK-008: Job System Failure Cascading to Audit/Health
 
@@ -269,7 +269,7 @@ Each risk must include:
 | **Residual Risk** | Low |
 | **Related Risks** | RISK-009 |
 | **Status** | Mitigated → Monitored |
-| **Last Reviewed** | 2026-04-08 |
+| **Last Reviewed** | 2026-04-09 |
 
 ### RISK-009: Performance Degradation Under Tenant Growth
 
@@ -289,7 +289,7 @@ Each risk must include:
 | **Residual Risk** | Medium |
 | **Related Risks** | RISK-006 |
 | **Status** | Assessed → Monitored |
-| **Last Reviewed** | 2026-04-08 |
+| **Last Reviewed** | 2026-04-09 |
 
 ---
 
