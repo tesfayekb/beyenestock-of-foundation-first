@@ -213,6 +213,7 @@ Each watchlist item should define early warning and post-occurrence signals:
 | RW-003 | Function signature change detected, no cross-module test update | Downstream module failures, unexpected behavior |
 | RW-004 | Retry config change without test, DLQ depth trend increasing | Duplicate execution, retry storm, job cascade |
 | RW-005 | Audit emission logic changed, error handling path modified | Missing audit entries in reconciliation |
+| RW-006 | Health check logic changed, alert threshold modified, monitoring config updated | False positive/negative alerts, monitoring blind spot, dashboard shows incorrect state |
 
 **Rule:** Leading indicators should be monitored proactively — catching them prevents the regression from materializing.
 
