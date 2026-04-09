@@ -1,31 +1,25 @@
+# ⛔ AI AGENTS — MANDATORY GOVERNANCE (READ FIRST)
+
+**You MUST read and obey the governance rules before ANY action.**
+
+| Platform | Rules File | Auto-Loaded |
+|----------|-----------|-------------|
+| **Lovable** | `.lovable/rules.md` | Yes |
+| **Cursor** | `.cursorrules` | Yes |
+| **Other** | Read `docs/00-governance/constitution.md` + `docs/00-governance/system-state.md` | Manual |
+
+**Current state:** `phase: documentation-only` · `code_generation: blocked` · Baseline: `v4`
+
+- **Do NOT generate code** — phase is documentation-only
+- **Do NOT implement unplanned features** — log in `docs/08-planning/feature-proposals.md` and STOP
+- **Do NOT skip the 9-step workflow** in `docs/00-governance/change-control-policy.md`
+- **Violations = INVALID work product, subject to revert**
+
+---
+
 # Project
 
-## ⚠️ AI Developer Instructions (MANDATORY)
-
-**Before performing ANY task**, AI agents MUST read the governance bootstrap file for their platform:
-
-| Platform | Bootstrap File | Format |
-|----------|---------------|--------|
-| **Lovable** | `.lovable/rules.md` | Auto-loaded by Lovable |
-| **Cursor** | `.cursorrules` | Auto-loaded by Cursor |
-
-These files enforce:
-- **Execution gates** — code generation is blocked until `system-state.md` allows it
-- **Mandatory reading order** — governance docs must be read before every task
-- **9-step change control** — every change follows the documented workflow
-- **Output format** — every task must produce the mandatory output format
-- **Plan integrity** — approved sections cannot be dropped, stable IDs preserved
-
-**If you are an AI and you skip these files, your work is INVALID.**
-
-### Quick Reference
-
-- **System State**: `docs/00-governance/system-state.md` — current phase and execution gates
-- **Constitution**: `docs/00-governance/constitution.md` — 11 non-negotiable rules
-- **Master Plan**: `docs/08-planning/master-plan.md` — approved execution plan (baseline v4)
-- **Approved Decisions**: `docs/08-planning/approved-decisions.md` — binding decisions (DEC-001+)
-
-### Documentation Structure
+## Documentation Structure
 
 ```
 docs/
@@ -37,5 +31,13 @@ docs/
 ├── 05-quality/       — Testing strategy, regression strategy
 ├── 06-tracking/      — Action tracker, risk register, regression watchlist
 ├── 07-reference/     — Function, permission, route, event, config, env var indexes
-└── 08-planning/      — Master plan, approved decisions, changelog, review log
+└── 08-planning/      — Master plan, approved decisions, changelog, review log, feature proposals
 ```
+
+## Quick Reference
+
+- **System State**: `docs/00-governance/system-state.md` — current phase and execution gates
+- **Constitution**: `docs/00-governance/constitution.md` — 11 non-negotiable rules
+- **Master Plan**: `docs/08-planning/master-plan.md` — approved execution plan (baseline v4)
+- **Approved Decisions**: `docs/08-planning/approved-decisions.md` — binding decisions (DEC-001+)
+- **Feature Proposals**: `docs/08-planning/feature-proposals.md` — intake for unplanned features
