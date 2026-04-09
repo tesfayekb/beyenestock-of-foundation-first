@@ -276,9 +276,27 @@ Each action must include:
 | **Health Impact** | Improved |
 | **Status** | Verified |
 
----
+### ACT-009: Feature Proposal Protocol Created
 
-## Risk and Regression Integration
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-09 |
+| **Type** | Documentation |
+| **Impact** | HIGH |
+| **Modules Affected** | governance (ai-operating-model, bootstrap files), planning (feature-proposals) |
+| **Docs Updated** | feature-proposals.md (created), .lovable/rules.md, .cursorrules, ai-operating-model.md, open-questions.md, action-tracker.md |
+| **Verification Type** | Manual review |
+| **Evidence** | Feature Proposal Protocol added to both bootstrap files; feature-proposals.md created with mandatory schema; AI operating model updated with rule 11; cross-references added |
+| **Verified By** | Project Lead |
+| **Before State** | No mechanism for AI to propose unplanned features — gap between scope lock and actionable workflow |
+| **After State** | Structured 6-step Feature Proposal Protocol enforced in bootstrap files; landing zone in docs/08-planning/feature-proposals.md |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Delete feature-proposals.md, revert bootstrap files and ai-operating-model.md |
+| **Blast Radius** | System-wide (AI behavior governance + planning) |
+| **Health Impact** | Improved |
+| **Status** | Verified |
+
+---
 
 ### Risk Resolution Tracking
 
@@ -315,7 +333,7 @@ Each action must include:
 | Type | Count | High Impact |
 |------|-------|-------------|
 | Feature | 1 | 1 |
-| Documentation | 6 | 6 |
+| Documentation | 7 | 7 |
 | Fix | 0 | 0 |
 | Security | 0 | 0 |
 | Performance | 0 | 0 |
@@ -325,7 +343,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 7 |
+| Verified | 8 |
 | Completed (unverified) | 0 |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -335,7 +353,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 0
 - Open (unverified) actions: 0
-- High-impact actions this period: 7
+- High-impact actions this period: 8
 
 _Updated as actions are added._
 
