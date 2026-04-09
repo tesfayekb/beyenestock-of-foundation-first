@@ -176,16 +176,19 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 
 ### Public Routes
 
-#### `/` — Landing
+#### `/` — Home (Authenticated Landing)
 
 | Field | Value |
 |-------|-------|
-| **Page** | Landing |
-| **Module** | — |
-| **Classification** | public |
-| **Auth required** | No |
-| **Panel** | public |
-| **Related tests** | Landing page render test |
+| **Page** | Index (Home) |
+| **Module** | auth |
+| **Classification** | authenticated |
+| **Auth required** | Yes |
+| **Permission required** | *(authenticated + verified email — no specific permission)* |
+| **Scope** | self |
+| **Panel** | user-panel |
+| **Related functions** | `requireAuth()`, `requireVerifiedEmail()` |
+| **Related tests** | Home page render test, unauthenticated deny test |
 | **Lifecycle** | active |
 
 #### `/sign-in` — Sign In
