@@ -366,6 +366,113 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related tests** | Reactivation allow/deny suite, post-reactivation access tests |
 | **Lifecycle** | active |
 
+### Self-Scope Permissions
+
+#### `users.view_self`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-users-view-self` (actual UUID assigned at DB creation) |
+| **Module** | user-management |
+| **Description** | Allows a user to view their own profile data. Self-scope only — cannot view other users. |
+| **Classification** | read-only |
+| **Scope** | self |
+| **Default roles** | user, admin, superadmin |
+| **Used by** | user-panel (profile view) |
+| **Blast radius** | small |
+| **Approval required** | No |
+| **Audit required** | No |
+| **Reauth required** | No |
+| **Related routes** | `/settings`, `/dashboard` |
+| **Related functions** | `requireSelfScope()`, `getUserProfile()` |
+| **Related tests** | Self-view allow test, cross-user deny test |
+| **Lifecycle** | active |
+
+#### `users.edit_self`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-users-edit-self` (actual UUID assigned at DB creation) |
+| **Module** | user-management |
+| **Description** | Allows a user to edit their own profile data. Self-scope only — cannot edit other users. |
+| **Classification** | operational |
+| **Scope** | self |
+| **Default roles** | user, admin, superadmin |
+| **Used by** | user-panel (profile edit) |
+| **Blast radius** | small |
+| **Approval required** | No |
+| **Audit required** | No |
+| **Reauth required** | No |
+| **Related routes** | `/settings` |
+| **Related functions** | `requireSelfScope()`, `updateUserProfile()` |
+| **Related events** | `user.profile_updated` |
+| **Related tests** | Self-edit allow test, cross-user deny test |
+| **Lifecycle** | active |
+
+#### `profile.self_manage`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-profile-self-manage` (actual UUID assigned at DB creation) |
+| **Module** | user-panel |
+| **Description** | Allows a user to manage their own profile and settings. Composite permission covering self-view and self-edit in user panel context. |
+| **Classification** | operational |
+| **Scope** | self |
+| **Default roles** | user, admin, superadmin |
+| **Used by** | user-panel (settings page) |
+| **Blast radius** | small |
+| **Approval required** | No |
+| **Audit required** | No |
+| **Reauth required** | No |
+| **Related routes** | `/settings` |
+| **Related functions** | `requireSelfScope()`, `checkPermission()` |
+| **Related events** | `user_panel.settings_changed` |
+| **Related tests** | Self-manage allow test, cross-user deny test |
+| **Lifecycle** | active |
+
+#### `mfa.self_manage`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-mfa-self-manage` (actual UUID assigned at DB creation) |
+| **Module** | user-panel |
+| **Description** | Allows a user to manage their own MFA settings (enroll, disable, reconfigure). Self-scope only. |
+| **Classification** | operational |
+| **Scope** | self |
+| **Default roles** | user, admin, superadmin |
+| **Used by** | user-panel (MFA settings) |
+| **Blast radius** | small |
+| **Approval required** | No |
+| **Audit required** | Yes |
+| **Reauth required** | Yes |
+| **Related routes** | `/settings/security` |
+| **Related functions** | `requireSelfScope()`, `requireRecentAuth()`, `checkPermission()` |
+| **Related events** | `user_panel.mfa_updated`, `auth.mfa_enrolled` |
+| **Related risks** | RISK-001 (credential compromise — MFA downgrade) |
+| **Related tests** | MFA self-manage allow test, re-auth enforcement test, cross-user deny test |
+| **Lifecycle** | active |
+
+#### `session.self_manage`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-session-self-manage` (actual UUID assigned at DB creation) |
+| **Module** | user-panel |
+| **Description** | Allows a user to view and revoke their own active sessions. Self-scope only. |
+| **Classification** | operational |
+| **Scope** | self |
+| **Default roles** | user, admin, superadmin |
+| **Used by** | user-panel (security settings) |
+| **Blast radius** | small |
+| **Approval required** | No |
+| **Audit required** | Yes |
+| **Reauth required** | Yes |
+| **Related routes** | `/settings/security` |
+| **Related functions** | `requireSelfScope()`, `requireRecentAuth()`, `checkPermission()` |
+| **Related events** | `auth.session_revoked` |
+| **Related tests** | Session self-manage allow test, re-auth enforcement test, cross-user deny test |
+| **Lifecycle** | active |
+
 ### Admin Permissions
 
 #### `admin.access`
