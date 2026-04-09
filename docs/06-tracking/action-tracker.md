@@ -322,6 +322,31 @@ Each action must include:
 
 **Deferred items:** PLAN-AUTH-001-B (Google OAuth) and PLAN-AUTH-001-C (Apple Sign-In) — awaiting external credentials.
 
+### ACT-011: Phase 1 Auth Hardening (Shared Functions, Events, Email Verification)
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-09 |
+| **Type** | Security |
+| **Impact** | HIGH |
+| **Modules Affected** | auth |
+| **Docs Updated** | system-state.md, action-tracker.md |
+| **Verification Type** | Code review |
+| **Verification Scope** | Immediate |
+| **Evidence** | Implemented: `getSessionContext()` in `src/lib/auth-guards.ts`; `isEmailVerified()` / `requireVerifiedEmail` component guard in `src/components/auth/RequireVerifiedEmail.tsx`; `isRecentlyAuthenticated()` / `requiresReauthentication()` in `src/lib/auth-guards.ts`; Auth event emission system in `src/lib/auth-events.ts` (emitSignedUp, emitSignedIn, emitSignedOut, emitFailedAttempt, emitPasswordReset, emitMfaEnrolled, emitMfaRecovered, emitSessionRevoked); AuthContext wired to emit events on all auth actions; `RequireVerifiedEmail` guard wraps protected routes in App.tsx |
+| **Verified By** | AI Agent |
+| **Before State** | Shared functions documented but not implemented; no event emission; no email verification enforcement |
+| **After State** | All Phase 1 shared functions implemented; event emission active; email verification gate on protected routes |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert src/lib/auth-events.ts, src/lib/auth-guards.ts, src/components/auth/RequireVerifiedEmail.tsx, revert AuthContext and App.tsx changes |
+| **Blast Radius** | Large |
+| **Health Impact** | Improved — closes docs-to-code gap |
+| **Related Functions** | getSessionContext, isEmailVerified, isRecentlyAuthenticated, requiresReauthentication, emitSignedUp, emitSignedIn, emitSignedOut, emitFailedAttempt, emitPasswordReset, emitMfaEnrolled |
+| **Related Events** | auth.signed_up, auth.signed_in, auth.signed_out, auth.failed_attempt, auth.password_reset, auth.mfa_enrolled |
+| **Status** | Verified |
+
+**Remaining Phase 1 items:** OAuth (B+C deferred), MFA recovery codes (planned), live E2E testing, security scan.
+
 ---
 
 ### Risk Resolution Tracking
