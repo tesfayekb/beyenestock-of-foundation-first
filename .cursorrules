@@ -160,6 +160,18 @@ docs/
 └── 08-planning/      — Master plan, approved decisions, changelog, review log
 ```
 
+## FEATURE PROPOSAL PROTOCOL (MANDATORY)
+
+If you identify a feature, enhancement, or capability that is NOT in the approved `master-plan.md`:
+
+1. **STOP** — do NOT implement it, do NOT modify the master plan, do NOT create code or schema
+2. **Log a proposal** in `docs/08-planning/feature-proposals.md` using the mandatory schema
+3. **Notify** the user that a feature proposal has been logged and requires review
+4. **Wait** for explicit approval from the project lead
+5. **Only after approval**: integrate into master-plan.md (with stable ID, DEC entry, changelog entry) and THEN implement via normal 9-step workflow
+
+This applies to ALL unplanned features — no matter how small, useful, or obvious they seem. Scope is locked. No exceptions.
+
 ## FINAL WARNING
 
 If you skip reading governance docs, generate code when blocked, drop plan sections, or fail to update documentation — the work is INVALID and must be reverted. This is not advisory. This is mandatory.
