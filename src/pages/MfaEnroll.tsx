@@ -91,64 +91,67 @@ export default function MfaEnroll() {
   if (step === 'verify') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Set up authenticator</CardTitle>
-          <CardDescription>
-            Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code.
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleVerify}>
-          <CardContent className="space-y-6">
-            <div className="flex justify-center">
-              <img src={qrCode} alt="MFA QR Code" className="h-48 w-48 rounded-lg border border-border" />
-            </div>
-            <div className="space-y-1 text-center">
-              <p className="text-xs text-muted-foreground">Or enter this secret manually:</p>
-              <code className="block rounded bg-muted px-3 py-2 text-xs font-mono break-all select-all">
-                {secret}
-              </code>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="code">Verification code</Label>
-              <Input
-                id="code"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]{6}"
-                maxLength={6}
-                placeholder="000000"
-                value={verifyCode}
-                onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
-                required
-                autoComplete="one-time-code"
-                className="text-center text-lg tracking-widest"
-              />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button type="submit" className="w-full" disabled={loading || verifyCode.length !== 6}>
-              {loading ? 'Verifying...' : 'Verify and enable MFA'}
-            </Button>
-          </CardFooter>
-        </form>
-      </Card>
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Set up authenticator</CardTitle>
+            <CardDescription>
+              Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.), then enter the 6-digit code.
+            </CardDescription>
+          </CardHeader>
+          <form onSubmit={handleVerify}>
+            <CardContent className="space-y-6">
+              <div className="flex justify-center">
+                <img src={qrCode} alt="MFA QR Code" className="h-48 w-48 rounded-lg border border-border" />
+              </div>
+              <div className="space-y-1 text-center">
+                <p className="text-xs text-muted-foreground">Or enter this secret manually:</p>
+                <code className="block rounded bg-muted px-3 py-2 text-xs font-mono break-all select-all">
+                  {secret}
+                </code>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="code">Verification code</Label>
+                <Input
+                  id="code"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ''))}
+                  required
+                  autoComplete="one-time-code"
+                  className="text-center text-lg tracking-widest"
+                />
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button type="submit" className="w-full" disabled={loading || verifyCode.length !== 6}>
+                {loading ? 'Verifying...' : 'Verify and enable MFA'}
+              </Button>
+            </CardFooter>
+          </form>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Enable two-factor authentication</CardTitle>
-        <CardDescription>
-          Add an extra layer of security to your account using an authenticator app.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Button onClick={handleEnroll} className="w-full" disabled={loading}>
-          {loading ? 'Setting up...' : 'Set up authenticator app'}
-        </Button>
-      </CardContent>
-    </Card>
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl">Enable two-factor authentication</CardTitle>
+          <CardDescription>
+            Add an extra layer of security to your account using an authenticator app.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={handleEnroll} className="w-full" disabled={loading}>
+            {loading ? 'Setting up...' : 'Set up authenticator app'}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
