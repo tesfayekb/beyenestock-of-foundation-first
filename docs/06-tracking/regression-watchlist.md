@@ -229,6 +229,7 @@ Each watchlist item should map to specific SSOT artifacts for instant test targe
 | RW-003 | Routes consuming shared functions | Per function | All shared functions (function-index) | — |
 | RW-004 | Admin job management routes | `jobs.*` | Job execution functions | `job.failed`, `job.dead_lettered` |
 | RW-005 | All mutation routes | `audit.view`, `audit.export` | `logAuditEvent()` | `audit.logged`, `audit.write_failed` |
+| RW-006 | `/admin/monitoring`, `/admin/monitoring/config`, `GET /health` | `monitoring.view`, `monitoring.configure` | `getSystemHealth()`, `evaluateAlerts()`, `getMetrics()` | `health.alert_triggered`, `health.status_changed`, `health.monitoring_failed` |
 
 **Rule:** When reviewing a change, match changed SSOT artifacts against watchlist traceability to identify all relevant items.
 
