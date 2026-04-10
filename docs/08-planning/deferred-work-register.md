@@ -403,6 +403,54 @@ At each phase boundary (before advancing to the next phase):
 
 ---
 
+### DW-014: Denial Audit Logging
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-014 |
+| **Date Deferred** | 2026-04-10 |
+| **Source Plan Section** | PLAN-AUDIT-001 |
+| **Source Phase** | Phase 3 — Core Services (Audit) |
+| **Title** | Audit log entries for permission denials |
+| **Reason Deferred** | Gate 1 reviewer noted denied actions are enforced but not logged to audit trail. Current behavior is fail-secure (403 returned) but denials are not auditable. |
+| **Blocking Dependencies** | None — logAuditEvent infrastructure exists; requires adding calls on PermissionDeniedError catch paths |
+| **Impact on Source Phase** | No impact — Phase 3 gates passed. This is a hardening improvement. |
+| **Future Owner Phase** | Phase 6 — Hardening & System Validation |
+| **Future Owner Module** | PLAN-AUDIT-001, PLAN-API-001 |
+| **Required Plan Realignment** | Phase 6 must add denial logging to handler.ts PermissionDeniedError catch path with user_id, permission, resource, correlation_id |
+| **Related Decisions** | — |
+| **Related Actions** | ACT-035 (Gate 1 reviewer note) |
+| **Required Tests for Closure** | Denied request → audit_logs entry with action='rbac.permission_denied'; log contains user_id, permission_key, correlation_id; no sensitive data in denial metadata |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-015: Superadmin High-Risk Action Explicit Permission
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-015 |
+| **Date Deferred** | 2026-04-10 |
+| **Source Plan Section** | PLAN-RBAC-001 |
+| **Source Phase** | Phase 3 — Core Services (RBAC) |
+| **Title** | Optional explicit permission requirement for high-risk superadmin actions |
+| **Reason Deferred** | Gate 1 reviewer noted superadmin bypasses all permission checks via is_superadmin(). High-risk actions (role changes, user deletion) have no additional gate even for superadmin. Design note, not a security vulnerability. |
+| **Blocking Dependencies** | Design decision on which actions require explicit permission even for superadmin |
+| **Impact on Source Phase** | No impact — Phase 3 gates passed. This is an A+ hardening recommendation. |
+| **Future Owner Phase** | Phase 6 — Hardening & System Validation |
+| **Future Owner Module** | PLAN-RBAC-001 |
+| **Required Plan Realignment** | Phase 6 must decide: which actions (if any) require explicit permission even for superadmin; whether to add a 'protected_action' flag to permissions |
+| **Related Decisions** | — |
+| **Related Actions** | ACT-035 (Gate 1 reviewer note) |
+| **Required Tests for Closure** | If implemented: superadmin without explicit permission → denied on protected action; superadmin with explicit permission → allowed |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
 - [Master Plan](master-plan.md)
 - [Approved Decisions](approved-decisions.md)
 - [Action Tracker](../06-tracking/action-tracker.md)
