@@ -1,7 +1,7 @@
 /**
  * update-profile — Update a user profile.
  *
- * Self-access: requires users.edit_self + self-scope enforcement.
+ * Self-access: requires users.edit_self + requireSelfScope() enforcement.
  * Admin access: requires users.edit_any (any user).
  *
  * PATCH /update-profile
@@ -10,7 +10,7 @@
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
-import { checkPermissionOrThrow } from '../_shared/authorization.ts'
+import { checkPermissionOrThrow, requireSelfScope } from '../_shared/authorization.ts'
 import { logAuditEvent } from '../_shared/audit.ts'
 import { supabaseAdmin } from '../_shared/supabase-admin.ts'
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
@@ -41,7 +41,9 @@ Deno.serve(createHandler(async (req: Request) => {
   const isSelf = targetUserId === ctx.user.id
 
   if (isSelf) {
+    // Layered enforcement: permission + self-scope
     await checkPermissionOrThrow(ctx.user.id, 'users.edit_self')
+    requireSelfScope(ctx, targetUserId)
   } else {
     await checkPermissionOrThrow(ctx.user.id, 'users.edit_any')
   }
