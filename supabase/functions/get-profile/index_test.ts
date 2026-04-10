@@ -25,16 +25,29 @@ function fnUrl(fn: string, query?: Record<string, string>): string {
   return `${base}?${new URLSearchParams(query)}`;
 }
 
-/** Sign in and return a JWT */
-async function signIn(email: string, password: string): Promise<string> {
-  const res = await fetch(`${BASE}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': ANON_KEY },
-    body: JSON.stringify({ email, password }),
-  });
-  const data = await res.json();
-  if (!data.access_token) throw new Error(`Sign-in failed for ${email}: ${JSON.stringify(data)}`);
-  return data.access_token;
+/** Sign in and return a JWT. Returns null if credentials unavailable. */
+async function signIn(email: string, password: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${BASE}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': ANON_KEY },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    return data.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const TEST_EMAIL = Deno.env.get('TEST_ADMIN_EMAIL') ?? 'tesfayekb@gmail.com'
+const TEST_PASSWORD = Deno.env.get('TEST_ADMIN_PASSWORD') ?? 'Admin123456!'
+
+/** Get an admin token or skip the test */
+async function requireAdminToken(): Promise<string> {
+  const token = await signIn(TEST_EMAIL, TEST_PASSWORD);
+  if (!token) throw new Error('SKIP: Could not obtain admin token — credentials unavailable in this environment');
+  return token;
 }
 
 // ═══════════════════════════════════════════════════════════════
