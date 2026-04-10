@@ -25,7 +25,7 @@ const QUERY_PARAM_KEYS = ['limit', 'action', 'actor_id', 'target_type', 'target_
 Deno.serve(createHandler(async (req: Request): Promise<Response> => {
   if (req.method !== 'GET') {
     const { apiError } = await import('../_shared/api-error.ts')
-    return apiError(405, 'Method not allowed')
+    return apiError(405, 'Method not allowed', { correlationId: crypto.randomUUID() })
   }
 
   const ctx = await authenticateRequest(req)
