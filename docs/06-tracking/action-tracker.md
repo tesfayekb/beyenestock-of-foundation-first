@@ -481,6 +481,29 @@ Each action must include:
 
 ---
 
+### ACT-018: Deferred Work Register — Creation and SSOT Wiring
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Documentation |
+| **Impact** | HIGH |
+| **Modules Affected** | governance (all), planning |
+| **Docs Updated** | deferred-work-register.md (created), master-plan.md, system-state.md, approved-decisions.md, plan-changelog.md, action-tracker.md |
+| **Verification Type** | Manual review + cross-reference audit |
+| **Verification Scope** | Immediate |
+| **Evidence** | (1) deferred-work-register.md created with mandatory schema, enforcement rules, phase boundary review protocol, and 7 seed entries (DW-001 through DW-007); (2) DW-001/DW-002 status corrected from `deferred` to `assigned` (explicit Phase 6 future owner); (3) master-plan.md updated: deferred subsections (PLAN-AUTH-001-B/C) and open gate items (Phase 2 items 9–12) linked to DW-NNN IDs; Carried-Forward Gate Item Rule added to Phase Gate Rules; (4) system-state.md updated with `deferred_work_open` field and plan version v5; (5) DEC-021 created establishing deferred work protocol as approved governance mechanism; (6) plan-changelog.md v4→v5 entry created with full diff; (7) All cross-references verified consistent. |
+| **Verified By** | AI Agent |
+| **Before State** | Deferred work scattered across plan statuses and decision notes; no formal carry-forward mechanism; no phase-boundary review protocol; carried-forward gate items had no interaction rule with phase advancement |
+| **After State** | Single authoritative registry for deferred approved work; formal lifecycle management (deferred → assigned → in-progress → implemented); carried-forward gate items explicitly constrain receiving phase; phase-boundary review mandatory |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Delete deferred-work-register.md; revert master-plan.md, system-state.md, approved-decisions.md, plan-changelog.md changes |
+| **Blast Radius** | System-wide (governance enhancement) |
+| **Health Impact** | Improved — eliminates deferred work tracking gap |
+| **Status** | Verified |
+
+---
+
 ### Risk Resolution Tracking
 
 - If action resolves a risk → must link risk ID in `related_risks`
