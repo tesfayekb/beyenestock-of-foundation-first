@@ -783,7 +783,7 @@ Each action must include:
 | Feature | 6 | 6 |
 | Documentation | 11 | 11 |
 | Fix | 2 | 2 |
-| Security | 5 | 5 |
+| Security | 6 | 6 |
 | Performance | 0 | 0 |
 | Regression | 0 | 0 |
 
@@ -791,8 +791,8 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 24 |
-| Completed (unverified) | 0 |
+| Verified | 23 |
+| Completed (pending runtime verification) | 2 |
 | In Progress | 0 |
 | Rolled Back | 0 |
 
@@ -800,8 +800,8 @@ Each action must include:
 
 - Regressions introduced: 0
 - Regressions resolved: 0
-- Open (unverified) actions: 0
-- High-impact actions this period: 24
+- Open (unverified) actions: 2 (ACT-027, ACT-028 — pending authenticated runtime tests)
+- High-impact actions this period: 25
 
 _Updated as actions are added._
 
