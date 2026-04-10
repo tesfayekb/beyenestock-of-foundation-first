@@ -655,15 +655,15 @@ When changing any indexed function:
 | **Lifecycle** | active |
 | **Usage note** | **Default server-side authorization primitive.** All Phase 3+ business endpoints use this for permission enforcement. Distinct from client-side `checkPermission()` which is UX-only. |
 
-#### `requireSelfScope(targetUserId)`
+#### `requireSelfScope(ctx, targetUserId)`
 
 | Field | Value |
 |-------|-------|
 | **Type** | function |
 | **Classification** | authorization-critical |
 | **Owner module** | rbac |
-| **Signature** | `(targetUserId: string) → void` (throws `403` if mismatch) |
-| **Returns** | void; throws `403 Forbidden` if authenticated user's ID does not match `targetUserId`. Actor is derived internally from authenticated request context — callers do not pass both IDs. |
+| **Signature** | `(ctx: { user: { id: string } }, targetUserId: string) → void` (throws `403` if mismatch) |
+| **Returns** | void; throws `403 Forbidden` if `ctx.user.id` does not match `targetUserId`. Actor is derived from the authenticated context object — callers pass the context returned by `authenticateRequest()`, not a raw user ID. |
 | **Purity** | impure |
 | **Side effects** | DB read (current user context), emits `rbac.permission_denied` on mismatch |
 | **Transactional** | No |

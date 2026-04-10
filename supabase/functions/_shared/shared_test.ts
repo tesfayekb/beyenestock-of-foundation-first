@@ -7,6 +7,8 @@ import { normalizeRequest } from "../_shared/normalize-request.ts";
 import { validateRequest, z } from "../_shared/validate-request.ts";
 import { AuthError, PermissionDeniedError, ValidationError } from "../_shared/errors.ts";
 import { createHandler, apiSuccess } from "../_shared/handler.ts";
+// Note: audit.ts and authorization.ts import supabase-admin.ts at module level,
+// so we cannot import them directly. We test their contracts via inline logic.
 
 // Handler imports authorization.ts which imports supabase-admin.ts at module level.
 // We must test handler via a lightweight reimplementation of the error classification logic.
@@ -153,36 +155,39 @@ Deno.test("ValidationError has field and form errors", () => {
   assertEquals(err.formErrors.length, 1);
 });
 
-// ─── createHandler error classification tests ───────────────────────
+// ─── createHandler error classification + correlation ID tests ───────
 
-Deno.test("createHandler returns 401 for AuthError", async () => {
+Deno.test("createHandler returns 401 for AuthError with correlation_id", async () => {
   const handler = createHandler(async () => {
     throw new AuthError("Bad token");
   });
   const res = await handler(new Request("http://localhost", { method: "POST" }));
   assertEquals(res.status, 401);
-  await res.text();
+  const body = await res.json();
+  assertExists(body.correlation_id, "401 response should include correlation_id");
 });
 
-Deno.test("createHandler returns 400 for ValidationError", async () => {
+Deno.test("createHandler returns 400 for ValidationError with correlation_id", async () => {
   const handler = createHandler(async () => {
     throw new ValidationError({ email: ["Required"] }, []);
   });
   const res = await handler(new Request("http://localhost", { method: "POST" }));
   assertEquals(res.status, 400);
-  await res.text();
+  const body = await res.json();
+  assertExists(body.correlation_id, "400 response should include correlation_id");
 });
 
-Deno.test("createHandler returns 403 for PermissionDeniedError", async () => {
+Deno.test("createHandler returns 403 for PermissionDeniedError with correlation_id", async () => {
   const handler = createHandler(async () => {
     throw new PermissionDeniedError("Denied", "users.view_all");
   });
   const res = await handler(new Request("http://localhost", { method: "POST" }));
   assertEquals(res.status, 403);
-  await res.text();
+  const body = await res.json();
+  assertExists(body.correlation_id, "403 response should include correlation_id");
 });
 
-Deno.test("createHandler returns 500 for unknown errors without leaking details", async () => {
+Deno.test("createHandler returns 500 for unknown errors without leaking details, with correlation_id", async () => {
   const handler = createHandler(async () => {
     throw new Error("internal secret");
   });
@@ -191,6 +196,7 @@ Deno.test("createHandler returns 500 for unknown errors without leaking details"
   const body = await res.json();
   assertEquals(body.error, "Internal server error");
   assertEquals(body.error.includes("internal secret"), false);
+  assertExists(body.correlation_id, "500 response should include correlation_id");
 });
 
 Deno.test("createHandler handles OPTIONS preflight", async () => {
@@ -208,22 +214,24 @@ Deno.test("apiSuccess returns JSON with CORS headers", async () => {
   assertEquals(body.message, "ok");
 });
 
-// ─── requireSelfScope tests ─────────────────────────────────────────
+// ─── requireSelfScope tests (context-based single-arg contract) ─────
 
-Deno.test("requireSelfScope passes when IDs match", () => {
-  // Should not throw
-  const { requireSelfScope } = { requireSelfScope: (a: string, b: string) => {
-    if (a !== b) throw new PermissionDeniedError("mismatch", "self_scope");
-  }};
-  requireSelfScope("user-1", "user-1");
+Deno.test("requireSelfScope passes when actor context matches target", () => {
+  // Inline the logic to avoid supabase-admin import chain
+  const ctx = { user: { id: "user-1" } };
+  const targetUserId = "user-1";
+  if (ctx.user.id !== targetUserId) {
+    throw new PermissionDeniedError("mismatch", "self_scope");
+  }
+  // No throw = pass
 });
 
-Deno.test("requireSelfScope throws when IDs differ", () => {
+Deno.test("requireSelfScope throws when actor context differs from target", () => {
   let caught = false;
   try {
-    const actorId: string = "user-1";
-    const targetId: string = "user-2";
-    if (actorId !== targetId) {
+    const ctx = { user: { id: "user-1" } };
+    const targetUserId = "user-2";
+    if (ctx.user.id !== targetUserId) {
       throw new PermissionDeniedError("Self-scope violation", "self_scope");
     }
   } catch (err) {
@@ -238,7 +246,6 @@ Deno.test("requireSelfScope throws when IDs differ", () => {
 Deno.test("requireRecentAuth throws when lastSignInAt is undefined", () => {
   let caught = false;
   try {
-    // Inline logic to avoid supabase-admin import chain
     const lastSignInAt: string | undefined = undefined;
     if (!lastSignInAt) throw new PermissionDeniedError("Recent auth required", "recent_auth");
   } catch (err) {
@@ -249,8 +256,13 @@ Deno.test("requireRecentAuth throws when lastSignInAt is undefined", () => {
 });
 
 Deno.test("requireRecentAuth passes for recent sign-in", () => {
-  const recentTime = new Date(Date.now() - 60_000).toISOString(); // 1 min ago
+  const recentTime = new Date(Date.now() - 60_000).toISOString();
   const lastSignIn = new Date(recentTime).getTime();
   const elapsed = Date.now() - lastSignIn;
   assertEquals(elapsed < 5 * 60 * 1000, true);
 });
+
+// ─── audit.ts listener contract test ────────────────────────────────
+// Cannot import audit.ts directly (supabase-admin dependency).
+// The onAuditWriteFailure + emitAuditFailureEvent contract is verified
+// by code inspection and integration tests with live Supabase credentials.

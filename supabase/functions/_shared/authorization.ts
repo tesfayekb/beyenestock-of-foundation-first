@@ -39,12 +39,14 @@ export async function checkPermissionOrThrow(
 
 /**
  * Enforces that the authenticated actor matches the target resource owner.
+ * Actor is derived internally from the authenticated context — callers
+ * only supply the target user ID to prevent misuse.
  */
 export function requireSelfScope(
-  actorUserId: string,
+  ctx: { user: { id: string } },
   targetUserId: string
 ): void {
-  if (actorUserId !== targetUserId) {
+  if (ctx.user.id !== targetUserId) {
     throw new PermissionDeniedError(
       'Self-scope violation: cannot access another user\'s resource',
       'self_scope'

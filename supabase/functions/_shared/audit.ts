@@ -66,16 +66,18 @@ export async function logAuditEvent(
       .single()
 
     if (error) {
-      console.error('[AUDIT] Write failed:', error.message, {
-        action: params.action,
-        correlationId: params.correlationId,
-      })
-      return {
+      const failure: AuditWriteFailure = {
         success: false,
         code: 'AUDIT_WRITE_FAILED',
         reason: error.message,
         correlationId: params.correlationId,
       }
+      console.error('[AUDIT] Write failed:', error.message, {
+        action: params.action,
+        correlationId: params.correlationId,
+      })
+      emitAuditFailureEvent(params, failure)
+      return failure
     }
 
     return {
@@ -85,16 +87,18 @@ export async function logAuditEvent(
     }
   } catch (err) {
     const reason = err instanceof Error ? err.message : 'Unknown audit error'
-    console.error('[AUDIT] Unexpected failure:', reason, {
-      action: params.action,
-      correlationId: params.correlationId,
-    })
-    return {
+    const failure: AuditWriteFailure = {
       success: false,
       code: 'AUDIT_UNEXPECTED_ERROR',
       reason,
       correlationId: params.correlationId,
     }
+    console.error('[AUDIT] Unexpected failure:', reason, {
+      action: params.action,
+      correlationId: params.correlationId,
+    })
+    emitAuditFailureEvent(params, failure)
+    return failure
   }
 }
 
@@ -116,4 +120,39 @@ function sanitizeMetadata(
     }
   }
   return sanitized
+}
+
+// ─── Audit failure event emission ───────────────────────────────────
+
+/** Registered listeners for audit failure events */
+type AuditFailureListener = (
+  params: AuditEventParams,
+  failure: AuditWriteFailure
+) => void
+
+const auditFailureListeners: AuditFailureListener[] = []
+
+/**
+ * Register a listener for audit.write_failed events.
+ * Used by monitoring/alerting infrastructure.
+ */
+export function onAuditWriteFailure(listener: AuditFailureListener): void {
+  auditFailureListeners.push(listener)
+}
+
+/**
+ * Emit audit.write_failed event to all registered listeners.
+ * Never throws — listener errors are logged but do not propagate.
+ */
+function emitAuditFailureEvent(
+  params: AuditEventParams,
+  failure: AuditWriteFailure
+): void {
+  for (const listener of auditFailureListeners) {
+    try {
+      listener(params, failure)
+    } catch (listenerErr) {
+      console.error('[AUDIT] Failure listener error:', listenerErr)
+    }
+  }
 }
