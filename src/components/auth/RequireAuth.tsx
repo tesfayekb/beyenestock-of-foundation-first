@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading, mfaStatus } = useAuth();
