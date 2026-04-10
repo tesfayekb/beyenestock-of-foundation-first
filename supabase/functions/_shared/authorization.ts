@@ -7,6 +7,9 @@
  * requireRecentAuth — Sensitive action guard
  *
  * All are fail-secure: deny on error.
+ *
+ * Enforcement rule: All authorization denials MUST throw PermissionDeniedError.
+ * Manual apiError(403, ...) returns from authorization logic are prohibited.
  */
 import { supabaseAdmin } from './supabase-admin.ts'
 import { PermissionDeniedError } from './errors.ts'
@@ -16,7 +19,7 @@ import { PermissionDeniedError } from './errors.ts'
 /**
  * Default server-side authorization primitive.
  * Checks has_permission() SQL security definer function.
- * Throws PermissionDeniedError (403) on denial.
+ * Throws PermissionDeniedError (403) on denial — includes userId for audit.
  */
 export async function checkPermissionOrThrow(
   userId: string,
@@ -30,7 +33,8 @@ export async function checkPermissionOrThrow(
   if (error || data !== true) {
     throw new PermissionDeniedError(
       `Permission denied: ${permissionKey}`,
-      permissionKey
+      permissionKey,
+      { userId, reason: 'missing_permission' }
     )
   }
 }
@@ -49,7 +53,8 @@ export function requireSelfScope(
   if (ctx.user.id !== targetUserId) {
     throw new PermissionDeniedError(
       'Self-scope violation: cannot access another user\'s resource',
-      'self_scope'
+      'self_scope',
+      { userId: ctx.user.id, reason: 'self_scope_violation' }
     )
   }
 }
@@ -72,7 +77,8 @@ export async function requireRole(
   if (error || data !== true) {
     throw new PermissionDeniedError(
       `Role required: ${roleKey}`,
-      roleKey
+      roleKey,
+      { userId, reason: 'missing_permission' }
     )
   }
 }
@@ -87,12 +93,14 @@ const DEFAULT_RECENT_AUTH_THRESHOLD_MS = 5 * 60 * 1000
  */
 export function requireRecentAuth(
   lastSignInAt: string | undefined,
-  thresholdMs: number = DEFAULT_RECENT_AUTH_THRESHOLD_MS
+  thresholdMs: number = DEFAULT_RECENT_AUTH_THRESHOLD_MS,
+  userId?: string
 ): void {
   if (!lastSignInAt) {
     throw new PermissionDeniedError(
       'Recent authentication required',
-      'recent_auth'
+      'recent_auth',
+      { userId, reason: 'recent_auth_required' }
     )
   }
 
@@ -102,7 +110,8 @@ export function requireRecentAuth(
   if (elapsed > thresholdMs) {
     throw new PermissionDeniedError(
       'Session too old for this action — please re-authenticate',
-      'recent_auth'
+      'recent_auth',
+      { userId, reason: 'recent_auth_required' }
     )
   }
 }
