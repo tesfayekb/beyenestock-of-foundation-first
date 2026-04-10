@@ -317,8 +317,8 @@ At each phase boundary (before advancing to the next phase):
 | DW-001 | Google OAuth | Phase 1 | Phase 6 | `assigned` |
 | DW-002 | Apple Sign-In | Phase 1 | Phase 6 | `assigned` |
 | DW-003 | Permission Allow/Deny Tests | Phase 2 | Phase 3 | `assigned` |
-| DW-004 | DB-Level RLS Verification | Phase 2 | Phase 3 | `assigned` |
-| DW-005 | Cross-Tenant Isolation Scope | Phase 2 | `unassigned` | `deferred` |
+| DW-004 | DB-Level RLS Verification | Phase 2 | Phase 3 | `implemented` |
+| DW-005 | Cross-Tenant Isolation Scope | Phase 2 | N/A (DEC-022) | `cancelled` |
 | DW-006 | Cache Invalidation Verification | Phase 2 | Phase 3 | `assigned` |
 | DW-007 | Moderator Role | Phase 2 | `unassigned` (v2) | `deferred` |
 | DW-008 | MFA Recovery Codes | Phase 1 | Phase 4 | `assigned` |

@@ -35,12 +35,12 @@ Tracks:
 status: implementation in progress
 phase: development
 code_generation: allowed
-modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac foundation only (code-reviewed, NOT runtime-verified, gate open — 4 of 12 items unchecked)
-active_work: Phase 2 RBAC foundation code-reviewed — gate NOT closed. ACT-015 effective status corrected to Code-Reviewed per ACT-016. Remaining gate items tracked in ACT-017. Carried-forward items (DW-003/004/006) are prerequisite sub-gates for Phase 3. Phase 3 advancement NOT justified under current plan rules until gate closed or plan formally amended via change control.
-current_plan_version: v5
-approved_plan_baseline: v5
+modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac foundation (code-reviewed + DB-level RLS verified, gate 10/12 checked — 2 items remaining: DW-003 allow tests partial, DW-006 role-change reflection)
+active_work: Phase 2 RBAC gate closure in progress. DB-level RLS verified (ACT-019). DW-005 resolved via DEC-022 (N/A single-tenant). DW-004 implemented (ACT-019). Edge functions NOT deployed — blocks DW-003 allow tests, DW-006 role-change verification, and full gate closure. Phase 3 advancement still requires remaining gate items.
+current_plan_version: v6
+approved_plan_baseline: v6
 plan_status: approved
-deferred_work_open: [DW-001, DW-002, DW-003, DW-004, DW-005, DW-006, DW-007, DW-008, DW-009, DW-010]
+deferred_work_open: [DW-001, DW-002, DW-003, DW-006, DW-007, DW-008, DW-009, DW-010]
 last_updated: 2026-04-10
 ```
 
