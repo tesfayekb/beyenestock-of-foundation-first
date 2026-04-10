@@ -1,6 +1,6 @@
 # Event Index
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09 | **Status:** Living Document | **Event Schema Version:** `evt-v1.1`
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-10 | **Status:** Living Document | **Event Schema Version:** `evt-v1.2`
 
 ## Purpose
 
@@ -637,6 +637,25 @@ Key event chains showing upstream triggers and downstream effects:
 | **Observability** | Logged, traced |
 | **Lifecycle** | active |
 
+#### `user.deactivation_rolled_back` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | MEDIUM |
+| **Owner module** | user-management |
+| **Consumers** | audit-logging, admin-panel |
+| **Description** | User deactivation rolled back after downstream failure (e.g., session revocation failed) |
+| **Payload schema** | `{ user_id: uuid, timestamp: datetime, reason: string, rollback_success: boolean, original_reason: string }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure — rollback events are safety-critical |
+| **Observability** | Logged, traced |
+| **Related risks** | RISK-004 (infrastructure failure) |
+| **Lifecycle** | active |
+
 ### Admin Events
 
 #### `admin.config_changed` — v1
@@ -757,6 +776,24 @@ Key event chains showing upstream triggers and downstream effects:
 | **Action tracker** | Yes — creates entry (audit integrity failure) |
 | **Related risks** | RISK-004 (infrastructure failure) |
 | **Related tests** | Audit write failure emission, fallback store test |
+| **Lifecycle** | active |
+
+#### `audit.exported` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | audit |
+| **Severity** | MEDIUM |
+| **Owner module** | audit-logging |
+| **Consumers** | audit-logging (self-audit), admin-panel |
+| **Description** | Audit logs exported by authorized user — records who exported what filters |
+| **Payload schema** | `{ actor_id: uuid, timestamp: datetime, filters: { action?: string, actor_id?: string, target_type?: string, date_from?: string, date_to?: string }, max_rows: integer }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Log warning — export itself succeeds regardless |
+| **Observability** | Logged, traced |
 | **Lifecycle** | active |
 
 ### Health Monitoring Events
