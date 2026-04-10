@@ -706,7 +706,7 @@ Each action must include:
 | **Docs Updated** | route-index.md, database-migration-ledger.md (MIG-012), action-tracker.md |
 | **Verification Type** | Deno tests (15/25 pass infrastructure; 10 authenticated tests skip in sandbox — require live credentials) + deployment verified |
 | **Verification Scope** | Immediate + Runtime |
-| **Evidence** | **6 fixes applied:** (1) `requireSelfScope(ctx, targetUserId)` now called in both get-profile and update-profile for self-access paths — layered with permission check; (2) Deactivation fail-closed on session revocation: if signOut fails, status is rolled back to 'active' with compensating audit event `user.deactivation_rolled_back`; (3) MIG-012 applied: `check_user_active_before_login` trigger wired to `auth.users` BEFORE UPDATE (fires on `last_sign_in_at` change), blocking deactivated users; self-scope RLS policies on profiles re-created; (4) Rate limiting added: `_shared/rate-limit.ts` with 3 classes (relaxed=120/min, standard=60/min, strict=10/min); `createHandler` accepts `{ rateLimit }` option; deactivate-user and reactivate-user use strict; (5) Route-index classification drift fixed: `protected` → `authenticated (self-scope) / privileged (admin)` for get-profile and update-profile; (6) Unused imports removed from get-profile. **15/15 infrastructure tests pass:** 5 unauth denial, 5 method denial, 5 CORS preflight. **10 authenticated tests structured** for: validation errors (3), self-access (2), admin access (2), deactivation boundaries (3) — skip in sandbox, runnable with real credentials. |
+| **Evidence** | **6 fixes applied:** (1) `requireSelfScope(ctx, targetUserId)` now called in both get-profile and update-profile for self-access paths — layered with permission check; (2) Deactivation fail-closed on session revocation: if signOut fails, status is rolled back to 'active' with compensating audit event `user.deactivation_rolled_back`; (3) MIG-012 applied: `check_user_active_before_login` trigger wired to `auth.users` BEFORE UPDATE (fires on `last_sign_in_at` change), blocking deactivated users; self-scope RLS policies on profiles re-created; (4) Rate limiting added: `_shared/rate-limit.ts` with 3 classes (relaxed=120/min, standard=60/min, strict=10/min); `createHandler` accepts `{ rateLimit }` option; deactivate-user and reactivate-user use strict; (5) Route-index classification drift fixed; (6) Unused imports removed from get-profile. **15/15 infrastructure tests pass:** 5 unauth denial, 5 method denial, 5 CORS preflight. **10 authenticated tests structured** but skip in sandbox — require live credentials for runtime verification. |
 | **Verified By** | AI Agent |
 | **Before State** | No requireSelfScope calls; session revocation best-effort; login-block unattached; no rate limiting; route classification drift |
 | **After State** | Full layered self-scope enforcement; fail-closed deactivation with compensating rollback; login-block trigger live; rate limiting on all endpoints; docs reconciled |
@@ -717,7 +717,32 @@ Each action must include:
 | **Related Functions** | requireSelfScope, checkRateLimit, check_user_active_on_login |
 | **Related Permissions** | users.view_self, users.edit_self, users.view_all, users.edit_any, users.deactivate, users.reactivate |
 | **Depends On** | ACT-026 |
-| **Status** | Verified |
+| **Status** | Completed (infrastructure verified; 10 authenticated tests pending runtime execution — see ACT-028) |
+
+---
+
+### ACT-028: Stage 3C — Second Hardening Pass (Route SSOT, Rate Limiter, Docs Alignment)
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Security |
+| **Impact** | HIGH |
+| **Modules Affected** | user-management, api |
+| **Docs Updated** | route-index.md, action-tracker.md |
+| **Verification Type** | Code review + DB query + deployment verification |
+| **Verification Scope** | Immediate + Runtime (pending authenticated tests) |
+| **Evidence** | **4 items addressed:** (1) Route classification SSOT fixed: `authenticated (self-scope) / privileged (admin)` → `authenticated, privileged` using only approved classification tokens from the route classification model; added explicit Note field documenting layered admin.access architecture (frontend panel gates on admin.access; API enforces granular permissions). (2) Rate limiter hardened: user-aware key derivation (IP + JWT sub composite), structured telemetry logging on rate limit hits (class, key, IP, request count, timestamp), documented limitations (in-memory, per-isolate, cold-start reset) and upgrade path (Redis/Upstash). (3) admin.access reconciliation: documented as intentional layered architecture — frontend admin panel checks admin.access at entry; backend API endpoints check granular users.* permissions directly; this is correct per separation of concerns. (4) ACT-027 status corrected from `Verified` to `Completed` — 10 authenticated tests require runtime credentials. **DB verification:** `check_user_active_before_login` trigger confirmed live on `auth.users` (tgenabled=O). **Remaining for A+ closure:** (a) Sign in and run authenticated curl tests for all 10 cases; (b) Deactivate test user and prove login blocked; (c) Re-run Deno tests with TEST_ADMIN_EMAIL/PASSWORD. |
+| **Verified By** | AI Agent |
+| **Before State** | Route classification used compound non-standard tokens; rate limiter IP-only with no telemetry; ACT-027 status overstated |
+| **After State** | Route classification uses only approved SSOT tokens; rate limiter user-aware with telemetry; ACT-027 status accurately reflects verification state |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert route-index.md and rate-limit.ts changes |
+| **Blast Radius** | Small (documentation + rate-limit improvement) |
+| **Health Impact** | Improved — doc-code alignment tighter, status honesty improved |
+| **Related Functions** | checkRateLimit, deriveKey |
+| **Depends On** | ACT-027 |
+| **Status** | Completed (code/docs verified; authenticated runtime tests blocked on credentials) |
 
 ---
 
