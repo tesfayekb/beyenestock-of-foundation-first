@@ -316,19 +316,41 @@ Implement role-based access control.
 
 **Modules:** PLAN-ADMIN-001, PLAN-USRPNL-001
 **Depends On:** Phase 3 complete (Admin); Phase 1 complete (User Panel)
+**Plan Document:** [Stage 4 Plan](stage-4-plan.md)
+
+**Prerequisites:**
+- UI governance docs created and approved: `ui-architecture.md`, `ui-design-system.md`, `component-inventory.md`
 
 **Milestones:**
-- Admin panel: user management, role management, audit log viewer, system health dashboard
-- User panel: profile management, settings, MFA configuration, session management
+- Admin panel: user management, role management, audit log viewer
+- User panel: profile management, settings, MFA configuration
 - Admin actions enforced by RBAC (not UI-only)
 - All admin-privileged operations audited
+- Shared dashboard shell across admin and user panels
 
 **Phase Gate — must ALL pass before advancing:**
+
+*Functional gates:*
 - [ ] Admin actions verified with correct and incorrect roles (allow + deny)
 - [ ] User panel flows pass E2E tests
 - [ ] No admin capability accessible without proper role
-- [ ] UI loading/error states for all async operations
-- [ ] Accessibility baseline met
+- [ ] UI loading/error states for all async operations (skeleton/error/empty — no spinners)
+- [ ] Accessibility baseline met (WCAG AA contrast, keyboard nav, focus indicators, ARIA labels)
+
+*Design-system gates:*
+- [ ] Shared DashboardLayout shell used by ALL Phase 4 pages — no exceptions
+- [ ] Light and dark themes both complete and visually consistent
+- [ ] No page introduces off-system colors or components
+- [ ] Cards/tables/forms/dialogs built from governed shared components only
+- [ ] Sticky sidebar and sticky top nav verified in desktop and mobile
+- [ ] All async states use standardized LoadingSkeleton/ErrorState/EmptyState
+- [ ] All destructive flows use governed ConfirmActionDialog
+- [ ] Component inventory doc matches actual implemented components
+
+*Contract gates:*
+- [ ] Route index lifecycle updated to `active` for all implemented routes
+- [ ] Permission index and implementation reconciled — no ungoverned permission keys
+- [ ] `text-gradient`, `glass` utilities do NOT exist in codebase
 
 ---
 

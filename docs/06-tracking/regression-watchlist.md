@@ -450,7 +450,32 @@ The following **MUST** create Action Tracker entries:
 | 5 | RW-005 | Audit event completeness | High | 0 |
 | 6 | RW-006 | Health monitoring blind spot | High | 0 |
 
+| 7 | RW-007 | UI design system compliance | High | 0 |
+
 _Updated as items are added, triggered, or resolved._
+
+---
+
+### RW-007: UI Design System Compliance
+
+| Field | Value |
+|-------|-------|
+| **Area** | UI (Phase 4) |
+| **Risk Description** | Phase 4 pages may introduce off-system colors, page-local component variants, ungoverned dialog/table/form patterns, or route/permission keys not in SSOT indexes |
+| **Regression Class** | UX |
+| **Priority** | High |
+| **Affected Modules** | admin-panel, user-panel |
+| **Trigger Conditions** | Any Phase 4 page creation or modification |
+| **Detection Method** | Code review: grep for raw Tailwind palette colors, check imports against component inventory, verify routes against route-index |
+| **Required Checks** | (1) No raw colors (`bg-red-*`, `text-blue-*`, `bg-[#...]`) in component code. (2) All tables use `DataTable`. (3) All destructive flows use `ConfirmActionDialog`. (4) All async states use governed LoadingSkeleton/ErrorState/EmptyState. (5) All routes exist in route-index. (6) All permission keys exist in permission-index. |
+| **Verification Type** | Code review + manual |
+| **Related Tests** | Visual regression checklist (Phase 4 closure) |
+| **Related Risk** | RISK-013 |
+| **Recurrence Count** | 0 |
+| **Owner** | Project Lead |
+| **Added Date** | 2026-04-10 |
+| **Last Verified** | 2026-04-10 (initial creation) |
+| **Status** | Active |
 
 ---
 

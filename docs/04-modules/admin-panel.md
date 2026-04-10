@@ -78,11 +78,22 @@ Admin panel must surface:
 - All data must be paginated
 - UI must not bypass backend authorization
 
+## Shell & Component Rules
+
+| Rule | Description |
+|------|-------------|
+| **Shell** | Admin pages MUST use shared `DashboardLayout` — no module-local shell |
+| **Components** | All admin pages use governed components from [Component Inventory](../07-reference/component-inventory.md) |
+| **Tables** | All admin tables use shared `DataTable` — no page-local table implementations |
+| **Dialogs** | All destructive actions use shared `ConfirmActionDialog` |
+| **Async states** | All loading/error/empty states use governed `LoadingSkeleton`/`ErrorState`/`EmptyState` |
+| **Visual system** | All styling per [UI Design System](../07-reference/ui-design-system.md) — no raw colors, no page-local variants |
+
 ## Module-Local Components
 
 | Component | Purpose |
 |-----------|---------|
-| `AdminLayout` | Layout wrapper with admin navigation (module-local, not cross-module shared) |
+| `AdminLayout` | Route wrapper: shared DashboardLayout + admin nav config + RequirePermission(`admin.access`) |
 | `AdminGuard` | Panel-local wrapper around `requireAuth()` + `checkPermission('admin.access')` (module-local) |
 
 ## Events

@@ -1,11 +1,13 @@
-# Phase 4 — Admin & User Interfaces Plan (v1)
+# Phase 4 — Admin & User Interfaces Plan (v2)
 
 > **Status:** PROPOSED — awaiting approval  
 > **Owner:** AI  
 > **Created:** 2026-04-10  
+> **Revised:** 2026-04-10 (v2 — SSOT reconciliation + design governance)  
 > **Scope:** PLAN-ADMIN-001 (Admin Panel) + PLAN-USRPNL-001 (User Panel)  
 > **Baseline:** Executes against approved plan baseline v9  
-> **Design Reference:** [Apex Marketplace](/projects/7feff7b5-c4c9-4ec9-8b62-41d2f462aa64) — sidebar + top nav + content area layout, TailAdmin-inspired dark chrome, bold & modern aesthetic
+> **Design Reference:** TailAdmin-class enterprise dashboard — sidebar + top nav + content area layout, professional bold aesthetic  
+> **Supersedes:** Stage 4 Plan v1
 
 ---
 
@@ -15,23 +17,53 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 
 ---
 
+## SSOT Reconciliation Record
+
+This plan was reconciled against the following authoritative indexes on 2026-04-10:
+
+| Index | Version | Reconciliation Result |
+|-------|---------|----------------------|
+| `route-index.md` | route-v1.5 | v1 plan proposed conflicting paths (`/account/*`, `/admin/access/*`). v2 conforms to route-index paths. New routes added via change control. |
+| `permission-index.md` | perm-v1.1 | v1 plan used non-existent `roles.manage_permissions`. v2 uses governed `permissions.assign` / `permissions.revoke`. |
+| Route lifecycle | — | Unimplemented frontend routes reclassified from `active` to `planned` in route-index. |
+
+---
+
+## Prerequisites (MUST complete before Stage 4A code)
+
+### Governance Docs Required
+
+| Doc | Path | Purpose |
+|-----|------|---------|
+| UI Architecture | `docs/01-architecture/ui-architecture.md` | Shell structure, scroll ownership, responsive behavior |
+| UI Design System | `docs/07-reference/ui-design-system.md` | Token map, typography, spacing, component patterns |
+| Component Inventory | `docs/07-reference/component-inventory.md` | Governed shared component list |
+
+**Rule:** These 3 docs must exist and be approved before any Stage 4A code is written.
+
+---
+
 ## Design System Foundation
 
-### Layout Architecture (from Apex Marketplace reference)
+### Layout Architecture
 
-- **Shell pattern:** Sidebar (collapsible icon mode) + top header + content area
+- **Shell pattern:** Sidebar (fixed/sticky, collapsible to icon strip) + top header (fixed/sticky) + content area (independent scroll)
 - **Sidebar:** Dark chrome (`bg-sidebar`), collapsible to icon strip, section headers, permission-filtered navigation, sign-out in footer
-- **Header:** Sticky top bar with sidebar trigger, search (desktop), theme toggle, notifications badge, user menu avatar
-- **Content area:** Light/dark adaptive background (`bg-content`), rounded top-left corner, breadcrumbs, nested `<Suspense>` for lazy route loading
-- **Mobile:** Bottom navigation bar, sidebar via sheet, responsive content padding
+- **Header:** Fixed top bar with sidebar trigger, search (desktop), theme toggle, notifications badge, user menu avatar
+- **Content area:** Light/dark adaptive background (`bg-background`), consistent padding, breadcrumbs, nested `<Suspense>` for lazy route loading
+- **Scroll ownership:** Content area only — sidebar and header never scroll
+- **Mobile:** Sidebar via sheet overlay, responsive content padding
 
-### Visual Direction: Bold & Modern
+### Visual Direction: Professional Bold
 
-- **Typography:** Display font (Bricolage Grotesque or similar) for headings, Inter for body, JetBrains Mono for code/IDs
-- **Color:** Brand color scale (10 shades), semantic tokens for success/warning/destructive/info
-- **Depth:** Content shadow (`--content-shadow`), card elevation, glass effects
-- **Motion:** `animate-in fade-in` transitions, collapsible animations, skeleton loading states
-- **Dark mode:** Full dark mode support with proper token switching
+One governed visual language across all pages:
+
+- **Typography:** One display font for headings, Inter for body, JetBrains Mono for code/IDs. Font choice documented in `ui-design-system.md`.
+- **Color:** Extend existing semantic tokens (background, foreground, card, primary, secondary, destructive, muted, accent, sidebar). Add brand accent scale and status tokens (success, warning, info). All HSL. No raw arbitrary colors in components.
+- **Depth:** Content shadow, card elevation. NO glass effects. NO text-gradient utilities.
+- **Motion:** Subtle fade-in transitions, collapsible animations, skeleton loading states. `prefers-reduced-motion` respected. NO decorative motion.
+- **Dark mode:** Full dark mode support with proper token switching — required from day one, not deferred.
+- **Uniformity rule:** One card style, one table style, one dialog style, one form field style, one toast/alert style, one empty/loading/error state family. No page-local variants.
 
 ### Component Architecture
 
@@ -41,68 +73,102 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 | `DashboardSidebar` | Permission-filtered nav with sections | Admin, User panels |
 | `DashboardHeader` | Top bar (trigger, search, theme, user menu) | Admin, User panels |
 | `DashboardBreadcrumbs` | Route-aware breadcrumb trail | All dashboard pages |
+| `PageHeader` | Consistent page title + action buttons zone | All dashboard pages |
 | `StatCard` | Metric display card | Dashboard home pages |
 | `DataTable` | Sortable, filterable table with pagination | Users, Roles, Audit |
 | `UserMenu` | Avatar dropdown with profile/settings/sign-out | All authenticated pages |
-| `NavItem` type | Navigation config with permission gating | Admin, User configs |
+| `ConfirmActionDialog` | Standard destructive action confirmation | All destructive flows |
+| `EmptyState` | Standard icon + message for no-data | All list/table pages |
+| `ErrorState` | Standard error + retry button | All async operations |
+| `LoadingSkeleton` | Standard skeleton for async loading | All async operations |
+| `StatusBadge` | Color-coded status indicator | Users, Roles |
+
+**Rule:** Pages assemble from this component inventory. No page-local component variants permitted.
 
 ---
 
 ## Execution Stages
 
-### Stage 4A — Dashboard Shell & Design System
+### Stage 4A — Design System Governance + Dashboard Shell
 
-**Scope:** Layout infrastructure, design tokens, shared components
+**Scope:** Governance docs, design tokens, layout infrastructure, shared components
 
-**Deliverables:**
-1. Design system overhaul in `index.css`:
-   - Font imports (display + body + mono)
-   - Brand color scale (10 shades via `--brand-50` through `--brand-950`)
-   - Semantic tokens: `--header-*`, `--content-*`, `--shadow-*` variants
-   - Dark mode tokens
-   - Utility classes: `.font-display`, `.text-gradient`, `.glass`
+**Prerequisites (governance — must complete first):**
+1. Create and approve `docs/01-architecture/ui-architecture.md`
+2. Create and approve `docs/07-reference/ui-design-system.md`
+3. Create and approve `docs/07-reference/component-inventory.md`
+
+**Deliverables (implementation — after governance docs approved):**
+1. Design system extension in `index.css`:
+   - Font imports (display + body + mono — as specified in ui-design-system.md)
+   - Brand accent scale tokens
+   - Status semantic tokens: `--success`, `--warning`, `--info`
+   - Dark mode tokens (parity with light)
+   - Utility classes: `.font-display`, `.font-mono`
+   - NO `.text-gradient`, `.glass`, or decorative utilities
 2. `tailwind.config.ts` updates for new tokens
 3. Navigation type system: `NavItem` interface with permission gating
 4. `DashboardLayout` component (SidebarProvider + Sidebar + Header + Outlet)
 5. `DashboardSidebar` — permission-filtered, section headers, collapsible groups, active state
-6. `DashboardHeader` — sidebar trigger, user menu, theme toggle
+6. `DashboardHeader` — sidebar trigger, user menu, theme toggle (fixed/sticky)
 7. `UserMenu` component — avatar, display name, sign-out
-8. Admin navigation config (`admin-navigation.ts`)
-9. User navigation config (`user-navigation.ts`)
-10. Route setup: `/admin/*` and `/account/*` with lazy loading
-11. `AdminLayout` and `AccountLayout` wrappers
-12. `RequireAuth` + `RequirePermission` route guards integrated
+8. `PageHeader` component — consistent page title zone
+9. `ConfirmActionDialog` — standard destructive confirmation pattern
+10. `EmptyState`, `ErrorState`, `LoadingSkeleton` — standard async state components
+11. Admin navigation config (`admin-navigation.ts`)
+12. User navigation config (`user-navigation.ts`)
+13. Route setup: `/admin/*` and `/dashboard`, `/settings/*` with lazy loading
+14. `AdminLayout` and `UserLayout` wrappers (both using shared DashboardLayout)
+15. `RequireAuth` + `RequirePermission` route guards integrated
+16. Theme toggle (light/dark) with `next-themes`
 
 **Files Created/Modified:**
 
 | File | Action |
 |------|--------|
-| `src/index.css` | Major overhaul — design system tokens |
-| `tailwind.config.ts` | Add brand/header/content/shadow tokens |
+| `docs/01-architecture/ui-architecture.md` | New — shell contract |
+| `docs/07-reference/ui-design-system.md` | New — token map + component patterns |
+| `docs/07-reference/component-inventory.md` | New — governed component list |
+| `src/index.css` | Extend — add brand/status tokens, fonts |
+| `tailwind.config.ts` | Extend — add new token mappings |
 | `src/config/navigation.types.ts` | New — NavItem interface |
 | `src/config/admin-navigation.ts` | New — admin nav config |
 | `src/config/user-navigation.ts` | New — user nav config |
 | `src/layouts/DashboardLayout.tsx` | New — shell component |
 | `src/layouts/AdminLayout.tsx` | New — admin wrapper |
-| `src/layouts/AccountLayout.tsx` | New — user wrapper |
+| `src/layouts/UserLayout.tsx` | New — user wrapper |
 | `src/components/dashboard/DashboardSidebar.tsx` | New |
 | `src/components/dashboard/DashboardHeader.tsx` | New |
 | `src/components/dashboard/UserMenu.tsx` | New |
 | `src/components/dashboard/DashboardBreadcrumbs.tsx` | New |
+| `src/components/dashboard/PageHeader.tsx` | New |
 | `src/components/dashboard/StatCard.tsx` | New |
+| `src/components/dashboard/ConfirmActionDialog.tsx` | New |
+| `src/components/dashboard/EmptyState.tsx` | New |
+| `src/components/dashboard/ErrorState.tsx` | New |
+| `src/components/dashboard/LoadingSkeleton.tsx` | New |
 | `src/components/dashboard/index.ts` | New — barrel export |
-| `src/App.tsx` | Add admin/account route trees |
+| `src/App.tsx` | Add admin/user route trees |
 
 **Success Criteria:**
+- [ ] Governance docs created and approved before code
 - [ ] Admin and user shells render with correct layout
 - [ ] Sidebar collapses to icon mode and expands
+- [ ] Sidebar is fixed/sticky — does not scroll with content
+- [ ] Header is fixed/sticky — does not scroll with content
+- [ ] Content area scrolls independently
 - [ ] Navigation items filtered by user permissions
 - [ ] Active route highlighted in sidebar
 - [ ] User menu shows display name + sign-out
-- [ ] Dark mode toggle works
-- [ ] Mobile responsive (sidebar as sheet, bottom nav)
+- [ ] Dark mode toggle works — light and dark themes visually consistent
+- [ ] Mobile responsive (sidebar as sheet)
 - [ ] Lazy-loaded routes with skeleton fallback
 - [ ] No permission-filtered routes accessible via direct URL without permission
+- [ ] No raw colors outside semantic tokens in any component
+- [ ] No page-local modal/table/form variants
+- [ ] WCAG AA contrast in both themes
+- [ ] Focus states visible on all interactive controls
+- [ ] `text-gradient`, `glass` utilities do NOT exist in codebase
 
 ---
 
@@ -112,18 +178,18 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 
 **Deliverables:**
 1. `AdminDashboard` page — overview stats (total users, active, deactivated, roles breakdown)
-2. `UserListPage` — data table with:
+2. `UserListPage` — DataTable with:
    - Columns: display name, email, status, roles, created date
    - Search/filter by name, email, status
    - Pagination (server-side via `list-users` edge function)
    - Row click → user detail
 3. `UserDetailPage` — single user view:
    - Profile info (display name, avatar, email verified status, created/updated)
-   - Current roles (with role badges)
-   - Action buttons: deactivate/reactivate (with confirmation dialog)
-   - Audit trail for this user (filtered by `actor_id` or `target_id`)
+   - Current roles (with StatusBadge)
+   - Action buttons: deactivate/reactivate (with ConfirmActionDialog)
+   - Audit trail for this user (filtered)
 4. Deactivate/Reactivate flows:
-   - Confirmation dialog with reason input
+   - ConfirmActionDialog with reason input
    - Calls `deactivate-user` / `reactivate-user` edge functions
    - Toast feedback on success/failure
    - Optimistic UI update
@@ -137,6 +203,14 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 | Deactivate user | `deactivate-user` | `users.deactivate` |
 | Reactivate user | `reactivate-user` | `users.reactivate` |
 
+**Route Conformance (per route-index.md):**
+
+| Route | Route Index Entry | Lifecycle |
+|-------|------------------|-----------|
+| `/admin` | ✅ exists | planned → active |
+| `/admin/users` | ✅ exists | planned → active |
+| `/admin/users/:id` | ✅ exists | planned → active |
+
 **Files Created:**
 
 | File | Action |
@@ -147,17 +221,15 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 | `src/pages/admin/users/index.ts` | New |
 | `src/hooks/useUsers.ts` | New — React Query hooks for user API |
 | `src/hooks/useUserActions.ts` | New — deactivate/reactivate mutations |
-| `src/components/admin/UserStatusBadge.tsx` | New |
-| `src/components/admin/ConfirmActionDialog.tsx` | New |
 
 **Success Criteria:**
-- [ ] User list loads with pagination
+- [ ] User list loads with pagination using DataTable
 - [ ] Search and filter work correctly
 - [ ] User detail shows complete profile + roles
-- [ ] Deactivate/reactivate flows work with confirmation
-- [ ] Unauthorized users see "Access Denied" (not hidden routes)
-- [ ] Loading and error states for all async operations
-- [ ] Actions audit-logged (verified via audit log viewer later)
+- [ ] Deactivate/reactivate flows work with ConfirmActionDialog
+- [ ] Unauthorized users see "Access Denied" page
+- [ ] Loading → LoadingSkeleton, error → ErrorState, empty → EmptyState
+- [ ] All components from governed inventory — no page-local variants
 
 ---
 
@@ -166,18 +238,18 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 **Scope:** Role list, role detail with permissions, assign/revoke role from user
 
 **Deliverables:**
-1. `RoleListPage` — table of all roles:
+1. `RoleListPage` — DataTable of all roles:
    - Columns: name, key, is_base, is_immutable, permission count, user count
    - Click → role detail
 2. `RoleDetailPage` — single role view:
    - Role info (name, key, description, immutability status)
    - Assigned permissions list (with add/remove for non-immutable)
    - Users with this role
-3. `PermissionListPage` — read-only table of all permissions:
+3. `PermissionListPage` — read-only DataTable of all permissions:
    - Columns: key, description, roles that have it
 4. User role assignment (from UserDetailPage):
    - Assign role dialog (select from available roles)
-   - Revoke role (with confirmation)
+   - Revoke role (with ConfirmActionDialog)
    - Both call `assign-role` / `revoke-role` edge functions
 
 **API Integration:**
@@ -188,9 +260,17 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 | View role detail | Supabase client | `roles.view` |
 | Assign role to user | `assign-role` | `roles.assign` |
 | Revoke role from user | `revoke-role` | `roles.revoke` |
-| Assign permission to role | `assign-permission-to-role` | `roles.manage_permissions` |
-| Revoke permission from role | `revoke-permission-from-role` | `roles.manage_permissions` |
+| Assign permission to role | `assign-permission-to-role` | `permissions.assign` |
+| Revoke permission from role | `revoke-permission-from-role` | `permissions.revoke` |
 | List permissions | Supabase client (RLS: `roles.view`) | `roles.view` |
+
+**Route Conformance (per route-index.md):**
+
+| Route | Route Index Entry | Lifecycle | Notes |
+|-------|------------------|-----------|-------|
+| `/admin/roles` | ✅ exists | planned → active | |
+| `/admin/roles/:id` | ❌ missing | — | Add to route-index |
+| `/admin/permissions` | ❌ missing | — | Add to route-index |
 
 **Files Created:**
 
@@ -202,18 +282,18 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 | `src/pages/admin/access/index.ts` | New |
 | `src/hooks/useRoles.ts` | New — React Query hooks |
 | `src/hooks/useRoleActions.ts` | New — assign/revoke mutations |
-| `src/components/admin/RoleBadge.tsx` | New |
 | `src/components/admin/AssignRoleDialog.tsx` | New |
 | `src/components/admin/ManagePermissionsDialog.tsx` | New |
 
 **Success Criteria:**
-- [ ] Role list displays with correct counts
+- [ ] Role list displays with correct counts using DataTable
 - [ ] Role detail shows permissions and users
 - [ ] Assign/revoke role works with audit logging
 - [ ] Assign/revoke permission on role works
 - [ ] Immutable roles cannot have key/base/immutable fields changed
 - [ ] Self-superadmin-revocation blocked (409 from backend, friendly error in UI)
 - [ ] requireRecentAuth triggers re-authentication when needed
+- [ ] All dialogs use governed ConfirmActionDialog pattern
 
 ---
 
@@ -222,7 +302,7 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 **Scope:** Searchable, filterable audit log viewer
 
 **Deliverables:**
-1. `AuditLogPage` — data table with:
+1. `AuditLogPage` — DataTable with:
    - Columns: timestamp, action, actor (display name), target type, target ID
    - Expandable row → full metadata JSON viewer
    - Filters: action type, actor, date range, target type
@@ -237,6 +317,12 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 | Query audit logs | `query-audit-logs` | `audit.view` |
 | Export audit logs | `export-audit-logs` | `audit.export` |
 
+**Route Conformance (per route-index.md):**
+
+| Route | Route Index Entry | Lifecycle |
+|-------|------------------|-----------|
+| `/admin/audit` | ✅ exists | planned → active |
+
 **Files Created:**
 
 | File | Action |
@@ -248,12 +334,13 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 | `src/components/admin/AuditActionBadge.tsx` | New — color-coded action badges |
 
 **Success Criteria:**
-- [ ] Audit logs load with pagination
+- [ ] Audit logs load with pagination using DataTable
 - [ ] Filters work (action, actor, date range)
 - [ ] Metadata expandable and readable
-- [ ] Export downloads CSV/JSON
+- [ ] Export downloads CSV
 - [ ] Denial events visually distinct
 - [ ] No sensitive data displayed (metadata sanitization verified)
+- [ ] All async states use governed LoadingSkeleton/ErrorState/EmptyState
 
 ---
 
@@ -262,20 +349,18 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 **Scope:** Profile management, MFA configuration, session info
 
 **Deliverables:**
-1. `AccountDashboard` — welcome + quick links
-2. `ProfilePage` — view/edit own profile:
+1. `UserDashboard` page (at `/dashboard`) — welcome + quick links
+2. `ProfilePage` (at `/settings`) — view/edit own profile:
    - Display name (editable)
    - Avatar (display, future: upload)
    - Email (read-only)
    - Email verification status
    - Calls `update-profile` edge function
-3. `SecurityPage` — MFA configuration:
+3. `SecurityPage` (at `/settings/security`) — MFA + sessions:
    - Current MFA status
    - Link to enroll/unenroll TOTP
-   - Recovery codes display (when DW-008 is implemented)
-4. `SessionPage` — current session info:
-   - Last sign-in time
-   - Session metadata
+   - Session info (last sign-in, session metadata)
+   - Recovery codes placeholder (when DW-008 is implemented)
 
 **API Integration:**
 
@@ -286,15 +371,22 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 | MFA enroll | Supabase Auth MFA API | authenticated |
 | MFA unenroll | Supabase Auth MFA API | authenticated |
 
+**Route Conformance (per route-index.md):**
+
+| Route | Route Index Entry | Lifecycle |
+|-------|------------------|-----------|
+| `/dashboard` | ✅ exists | planned → active |
+| `/settings` | ✅ exists | planned → active |
+| `/settings/security` | ✅ exists | planned → active |
+
 **Files Created:**
 
 | File | Action |
 |------|--------|
-| `src/pages/account/AccountDashboard.tsx` | New |
-| `src/pages/account/ProfilePage.tsx` | New |
-| `src/pages/account/SecurityPage.tsx` | New |
-| `src/pages/account/SessionPage.tsx` | New |
-| `src/pages/account/index.ts` | New |
+| `src/pages/user/UserDashboard.tsx` | New |
+| `src/pages/user/ProfilePage.tsx` | New |
+| `src/pages/user/SecurityPage.tsx` | New |
+| `src/pages/user/index.ts` | New |
 | `src/hooks/useProfile.ts` | New — React Query hooks |
 | `src/hooks/useProfileMutations.ts` | New — update profile mutation |
 
@@ -303,46 +395,62 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 - [ ] MFA status displayed correctly
 - [ ] Profile update calls edge function with audit logging
 - [ ] Self-scope enforced (cannot edit other users' profiles)
-- [ ] Loading/error states for all operations
+- [ ] Loading/error states use governed components
 - [ ] Toast feedback on save
+- [ ] Same shell, dialog, form, card components as admin pages
 
 ---
 
 ## Cross-Stage Requirements
 
+### Shell Uniformity Rule
+
+Admin and user panels share the same:
+- `DashboardLayout` shell
+- `DashboardSidebar` component (different nav config)
+- `DashboardHeader` component
+- `ConfirmActionDialog` for destructive actions
+- `DataTable` for all tabular data
+- `EmptyState` / `ErrorState` / `LoadingSkeleton` for async states
+- Form field styles, card styles, badge styles
+
+User pages may simplify **content** (fewer fields, fewer actions), but NOT **shell language**.
+
 ### Accessibility Baseline
 - All interactive elements keyboard navigable
 - Focus visible indicators
 - ARIA labels on icon-only buttons
-- Color contrast meets WCAG AA
+- Color contrast meets WCAG AA in both themes
 - `prefers-reduced-motion` respected
 
 ### Error Handling Pattern
 - API errors → toast with user-friendly message
 - Permission denied → "Access Denied" page (not blank/hidden)
-- Network failure → retry button with error state
-- Loading → skeleton UI (not spinner)
+- Network failure → ErrorState with retry button
+- Loading → LoadingSkeleton (not spinner)
+
+### Auth Guard Loading
+- `RequireAuth` loading state should use LoadingSkeleton pattern (not spinner) — update when Stage 4A components are available
 
 ### Deferred Work Integration
-- **DW-008 (MFA Recovery Codes):** Stage 4E SecurityPage will include placeholder/section for recovery codes. Actual implementation depends on DW-008 being completed.
+- **DW-008 (MFA Recovery Codes):** Stage 4E SecurityPage will include placeholder for recovery codes.
 
 ---
 
-## Route Plan
+## Route Plan (Reconciled with route-index.md)
 
-| Route | Page | Permission | Stage |
-|-------|------|-----------|-------|
-| `/admin` | AdminDashboard | `users.view_all` | 4B |
-| `/admin/users` | UserListPage | `users.view_all` | 4B |
-| `/admin/users/:id` | UserDetailPage | `users.view_all` | 4B |
-| `/admin/access/roles` | RoleListPage | `roles.view` | 4C |
-| `/admin/access/roles/:id` | RoleDetailPage | `roles.view` | 4C |
-| `/admin/access/permissions` | PermissionListPage | `roles.view` | 4C |
-| `/admin/audit` | AuditLogPage | `audit.view` | 4D |
-| `/account` | AccountDashboard | authenticated | 4E |
-| `/account/profile` | ProfilePage | `users.view_self` | 4E |
-| `/account/security` | SecurityPage | authenticated | 4E |
-| `/account/sessions` | SessionPage | authenticated | 4E |
+| Route | Page | Permission | Stage | Route Index |
+|-------|------|-----------|-------|-------------|
+| `/admin` | AdminDashboard | `admin.access` + `users.view_all` | 4B | ✅ exists |
+| `/admin/users` | UserListPage | `admin.access` + `users.view_all` | 4B | ✅ exists |
+| `/admin/users/:id` | UserDetailPage | `admin.access` + `users.view_all` | 4B | ✅ exists |
+| `/admin/roles` | RoleListPage | `admin.access` + `roles.view` | 4C | ✅ exists |
+| `/admin/roles/:id` | RoleDetailPage | `admin.access` + `roles.view` | 4C | ➕ add |
+| `/admin/permissions` | PermissionListPage | `admin.access` + `roles.view` | 4C | ➕ add |
+| `/admin/audit` | AuditLogPage | `admin.access` + `audit.view` | 4D | ✅ exists |
+| `/dashboard` | UserDashboard | authenticated | 4E | ✅ exists |
+| `/settings` | ProfilePage | `profile.self_manage` | 4E | ✅ exists |
+| `/settings/security` | SecurityPage | `mfa.self_manage` + `session.self_manage` | 4E | ✅ exists |
 
 ---
 
@@ -360,13 +468,17 @@ Build the admin and user interface panels that consume all Phase 1–3.5 backend
 - Store roles/permissions in localStorage
 - Hardcode role names for access decisions (use permission checks)
 - Modify edge functions or database schema
+- Introduce components not in governed component inventory
+- Use raw colors outside semantic token system
+- Create page-local dialog/table/form/card variants
 
 ---
 
 ## Closure Outputs (post-execution)
 
 After all stages executed and verified:
-- `docs/07-reference/route-index.md` — add all new frontend routes
+- `docs/07-reference/route-index.md` — update lifecycle of new routes to `active`
+- `docs/07-reference/component-inventory.md` — reconcile with actual components
 - `docs/00-governance/system-state.md` — update module statuses
-- `docs/08-planning/master-plan.md` — update Phase 4 gate checkboxes
+- `docs/08-planning/master-plan.md` — update Phase 4 gate checkboxes with evidence
 - `docs/08-planning/deferred-work-register.md` — update DW-008 status if applicable

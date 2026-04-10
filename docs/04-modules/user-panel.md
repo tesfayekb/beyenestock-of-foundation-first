@@ -52,11 +52,20 @@ The following require enhanced controls:
 - Audit logging required
 - Validation and sanitization required
 
+## Shell & Component Rules
+
+| Rule | Description |
+|------|-------------|
+| **Shell** | User pages MUST use shared `DashboardLayout` — same shell as admin panel |
+| **Components** | Same dialog, form, card, state components as admin — per [Component Inventory](../07-reference/component-inventory.md) |
+| **Simplification** | User pages may have fewer nav items and simpler content, but NOT different shell language |
+| **Visual system** | All styling per [UI Design System](../07-reference/ui-design-system.md) — no raw colors, no page-local variants |
+
 ## Module-Local Components
 
 | Component | Purpose |
 |-----------|---------|
-| `UserLayout` | Layout wrapper with user navigation (module-local, not cross-module shared) |
+| `UserLayout` | Route wrapper: shared DashboardLayout + user nav config + RequireAuth (module-local) |
 
 ## Shared Functions
 

@@ -932,7 +932,29 @@ Each action must include:
 
 ---
 
-### Risk Resolution Tracking
+### ACT-036: Phase 4 SSOT Reconciliation & Design Governance
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Documentation |
+| **Impact** | HIGH |
+| **Modules Affected** | admin-panel, user-panel, governance |
+| **Docs Updated** | stage-4-plan.md (v1→v2), route-index.md (v1.5→v1.6), master-plan.md, admin-panel.md, user-panel.md, ui-architecture.md (new), ui-design-system.md (new), component-inventory.md (new), risk-register.md, regression-watchlist.md, action-tracker.md |
+| **Verification Type** | Manual review |
+| **Evidence** | (1) Route mismatch fixed: stage-4 plan now uses route-index paths (`/dashboard`, `/settings`, `/admin/roles`) instead of conflicting `/account/*`, `/admin/access/*`. (2) Permission mismatch fixed: `roles.manage_permissions` replaced with governed `permissions.assign`/`permissions.revoke`. (3) Lifecycle drift fixed: 19 unimplemented frontend routes changed from `active` to `planned` in route-index. (4) 2 new routes added: `/admin/roles/:id`, `/admin/permissions`. (5) 3 UI governance docs created. (6) Phase 4 gate upgraded with design-system and contract gates. (7) Module docs updated with shared shell rules. |
+| **Verified By** | AI Agent |
+| **Before State** | Stage 4 plan v1 with 3 SSOT contract mismatches (routes, permissions, lifecycle); no UI governance docs; weak Phase 4 gate (5 functional items only) |
+| **After State** | Stage 4 plan v2 fully reconciled with SSOT indexes; 3 governance docs created; Phase 4 gate expanded to 14 items (functional + design + contract); module docs reference shared shell |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Restore v1 plan, revert route-index to v1.5, revert module docs, delete governance docs |
+| **Blast Radius** | System-wide (planning + governance) |
+| **Health Impact** | Improved |
+| **Related Risks** | RISK-012 (new), RISK-013 (new) |
+| **Related Watchlist** | RW-007 (new) |
+| **Status** | Verified |
+
+---
 
 - If action resolves a risk → must link risk ID in `related_risks`
 - Risk register entry must be updated to reflect resolution
@@ -967,7 +989,7 @@ Each action must include:
 | Type | Count | High Impact |
 |------|-------|-------------|
 | Feature | 6 | 6 |
-| Documentation | 12 | 11 |
+| Documentation | 13 | 12 |
 | Fix | 4 | 2 |
 | Security | 10 | 10 |
 | Performance | 0 | 0 |
@@ -977,7 +999,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 32 |
+| Verified | 33 |
 | Superseded | 2 (ACT-027, ACT-028) |
 | In Progress | 0 |
 | Rolled Back | 0 |

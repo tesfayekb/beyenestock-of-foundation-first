@@ -586,7 +586,43 @@ Risks can amplify each other. The following dependency chains are tracked:
 
 ---
 
-## Rules
+### RISK-012: UI Contract Drift
+
+| Field | Value |
+|-------|-------|
+| **Type** | AI / Process |
+| **Description** | Stage 4 plan vs route-index/permission-index route and permission key mismatches. If undetected, implementation builds against wrong contracts. |
+| **Likelihood** | 3 (Possible) |
+| **Impact** | 4 (Major) |
+| **Risk Score** | 12 |
+| **Risk Level** | High |
+| **Detection** | SSOT reconciliation review before implementation |
+| **Current Controls** | Stage 4 plan v2 reconciled. Route-index v1.6 updated. Permission mismatch corrected. |
+| **Planned Mitigations** | Mandatory reconciliation check before each Stage 4 sub-stage begins |
+| **Related Actions** | ACT-036 |
+| **Owner** | Project Lead |
+| **Status** | Mitigated |
+| **Review Cadence** | Per-stage |
+
+### RISK-013: UI Inconsistency / Design Drift
+
+| Field | Value |
+|-------|-------|
+| **Type** | AI / Process |
+| **Description** | If design tokens/components are built before governed design-system docs exist, pages may have inconsistent visual language. |
+| **Likelihood** | 3 (Possible) |
+| **Impact** | 3 (Moderate) |
+| **Risk Score** | 9 |
+| **Risk Level** | Medium |
+| **Detection** | Visual review, component inventory reconciliation |
+| **Current Controls** | 3 governance docs created (ui-architecture.md, ui-design-system.md, component-inventory.md). Stage 4A prerequisite gate. |
+| **Planned Mitigations** | Component inventory reconciliation at Phase 4 closure. No page-local variants rule. |
+| **Related Actions** | ACT-036 |
+| **Owner** | Project Lead |
+| **Status** | Mitigated |
+| **Review Cadence** | Per-stage |
+
+---
 
 - New risks added immediately when identified — full metadata required within 24 hours
 - Risks are never deleted — only lifecycle-transitioned
