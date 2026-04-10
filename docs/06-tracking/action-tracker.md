@@ -477,7 +477,7 @@ Each action must include:
 | **Open Items** | (1) Deploy edge functions and runtime-verify all 4 (assign-role, revoke-role, assign-permission-to-role, revoke-permission-from-role) with real invocations; (2) Execute DB-level RLS verification (anonymous, regular user, admin, superadmin contexts — own-row vs cross-user visibility, audit log visibility); (3) Create representative permission allow/deny test matrix (at minimum: correct role allowed, wrong role denied, revoked permission denied); (4) Resolve cross-tenant gate item via change control (amend to N/A for v1 single-tenant, or satisfy with architecture justification). |
 | **Additional Follow-ups** | (a) Standardize role_id vs role_key mutation contract across docs/functions/index; (b) Implement requireRole() and requireSelfScope() per function-index.md; (c) Extract shared edge function utilities (auth, validation, audit, error formatting). |
 | **Depends On** | ACT-015 |
-| **Status** | In Progress |
+| **Status** | Verified (closed by ACT-020) |
 
 ---
 
@@ -593,7 +593,7 @@ Each action must include:
 | Feature | 4 | 4 |
 | Documentation | 11 | 11 |
 | Fix | 1 | 1 |
-| Security | 3 | 3 |
+| Security | 4 | 4 |
 | Performance | 0 | 0 |
 | Regression | 0 | 0 |
 
@@ -601,17 +601,17 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 18 |
+| Verified | 20 |
 | Completed (unverified) | 0 |
-| In Progress | 1 |
+| In Progress | 0 |
 | Rolled Back | 0 |
 
 ### Trend Indicators
 
 - Regressions introduced: 0
 - Regressions resolved: 0
-- Open (unverified) actions: 1 (ACT-017)
-- High-impact actions this period: 19
+- Open (unverified) actions: 0
+- High-impact actions this period: 20
 
 _Updated as actions are added._
 
