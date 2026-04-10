@@ -4,9 +4,9 @@ import { assertEquals, assertExists } from "https://deno.land/std@0.224.0/assert
 // Only import modules that DON'T trigger supabaseAdmin creation at import time
 import { apiError } from "../_shared/api-error.ts";
 import { normalizeRequest } from "../_shared/normalize-request.ts";
-import { validateRequest, ValidationError, z } from "../_shared/validate-request.ts";
-import { AuthError } from "../_shared/authenticate-request.ts";
-import { PermissionDeniedError } from "../_shared/authorization.ts";
+import { validateRequest, z } from "../_shared/validate-request.ts";
+import { AuthError, PermissionDeniedError, ValidationError } from "../_shared/errors.ts";
+import { createHandler, apiSuccess } from "../_shared/handler.ts";
 
 // Handler imports authorization.ts which imports supabase-admin.ts at module level.
 // We must test handler via a lightweight reimplementation of the error classification logic.
