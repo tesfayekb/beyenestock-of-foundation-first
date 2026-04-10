@@ -602,32 +602,30 @@ When changing any indexed function:
 | **Lifecycle** | active |
 | **Usage note** | **Rare infrastructure utility only.** Reserved for coarse administrative gating (e.g., admin panel route access). **MUST NOT** be used as the default authorization primitive for business endpoints — use `checkPermissionOrThrow()` instead. |
 
-#### `checkPermission(permission)`
+#### `checkPermission(context, permission)` *(client-side UX-only)*
 
 | Field | Value |
 |-------|-------|
 | **Type** | function |
-| **Classification** | authorization-critical |
+| **Classification** | ui-shared |
 | **Owner module** | rbac |
-| **Signature** | `(permission: string) → boolean` |
-| **Returns** | `true` if current user has the specified permission |
-| **Purity** | impure |
-| **Side effects** | DB read (role → permission mapping), emits `rbac.permission_denied` on denial |
+| **Signature** | `(context: AuthorizationContext | null, permission: string) → boolean` |
+| **Returns** | `true` if permission exists in cached authorization context. **UX-only — does NOT enforce access.** Server-side `checkPermissionOrThrow()` is authoritative. |
+| **Purity** | pure (reads cached context object) |
+| **Side effects** | None — reads from pre-fetched authorization context |
 | **Transactional** | No |
-| **Fail behavior** | fail-secure — return `false` on error |
-| **Used by** | All feature modules |
-| **Blast radius** | system-wide |
-| **Criticality** | CRITICAL |
-| **Approval required** | Yes — Lead |
-| **Callable from** | request-path, ui |
-| **Upstream deps** | `getCurrentUser()`, `has_role()` |
+| **Fail behavior** | fail-secure — return `false` on null context |
+| **Used by** | All feature modules (UI element visibility) |
+| **Blast radius** | medium |
+| **Criticality** | MEDIUM |
+| **Approval required** | No |
+| **Callable from** | ui-only |
+| **Upstream deps** | `useUserRoles()`, `get_my_authorization_context()` |
 | **Related permissions** | All permission index entries |
-| **Related events** | `rbac.permission_denied` |
-| **Related risks** | RISK-002 (privilege escalation) |
-| **Related watchlist** | RW-001 |
-| **Related tests** | Permission check tests, RBAC integration tests |
-| **Observability** | Denial rate, anomaly detection |
+| **Related tests** | Client permission check tests, UI visibility tests |
+| **Observability** | — |
 | **Lifecycle** | active |
+| **Implementation** | `src/lib/rbac.ts` |
 
 #### `checkPermissionOrThrow(userId, permissionKey)`
 
