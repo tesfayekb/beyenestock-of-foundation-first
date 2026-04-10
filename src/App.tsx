@@ -6,6 +6,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { RequireVerifiedEmail } from "@/components/auth/RequireVerifiedEmail";
+import { Suspense, lazy } from "react";
+import { LoadingSkeleton } from "@/components/dashboard/LoadingSkeleton";
+
+// Public pages (eagerly loaded)
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SignIn from "./pages/SignIn";
@@ -15,7 +19,25 @@ import ResetPassword from "./pages/ResetPassword";
 import MfaChallenge from "./pages/MfaChallenge";
 import MfaEnroll from "./pages/MfaEnroll";
 
+// Layouts (eagerly loaded — shell must be ready immediately)
+import { AdminLayout } from "./layouts/AdminLayout";
+import { UserLayout } from "./layouts/UserLayout";
+
+// Admin pages (lazy loaded)
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+
+// User pages (lazy loaded)
+const UserDashboard = lazy(() => import("./pages/user/UserDashboard"));
+const ProfilePage = lazy(() => import("./pages/user/ProfilePage"));
+const SecurityPage = lazy(() => import("./pages/user/SecurityPage"));
+
 const queryClient = new QueryClient();
+
+const LazyFallback = () => (
+  <div className="p-4 sm:p-6 lg:p-8">
+    <LoadingSkeleton variant="page" />
+  </div>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -32,7 +54,7 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/mfa-challenge" element={<MfaChallenge />} />
 
-            {/* Protected routes — require auth + verified email */}
+            {/* Protected — require auth + verified email */}
             <Route path="/" element={
               <RequireAuth>
                 <RequireVerifiedEmail>
@@ -47,6 +69,20 @@ const App = () => (
                 </RequireVerifiedEmail>
               </RequireAuth>
             } />
+
+            {/* Admin panel — shared DashboardLayout + admin nav + RequirePermission(admin.access) */}
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<Suspense fallback={<LazyFallback />}><AdminDashboard /></Suspense>} />
+            </Route>
+
+            {/* User panel — shared DashboardLayout + user nav + RequireAuth */}
+            <Route path="/dashboard" element={<UserLayout />}>
+              <Route index element={<Suspense fallback={<LazyFallback />}><UserDashboard /></Suspense>} />
+            </Route>
+            <Route path="/settings" element={<UserLayout />}>
+              <Route index element={<Suspense fallback={<LazyFallback />}><ProfilePage /></Suspense>} />
+              <Route path="security" element={<Suspense fallback={<LazyFallback />}><SecurityPage /></Suspense>} />
+            </Route>
 
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
