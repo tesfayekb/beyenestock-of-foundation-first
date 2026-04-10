@@ -158,11 +158,11 @@ At each phase boundary (before advancing to the next phase):
 | **Future Owner Module** | PLAN-RBAC-001 |
 | **Required Plan Realignment** | Must be completed before any Phase 3 module writes RLS-dependent queries |
 | **Related Decisions** | — |
-| **Related Actions** | ACT-017 |
+| **Related Actions** | ACT-017, ACT-019 |
 | **Required Tests for Closure** | Anonymous/anon-key query returns zero rows on protected tables; regular user sees only own user_roles; admin sees role-gated rows; superadmin sees all; write attempts without policy denied |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | ACT-019 |
+| **Implemented in Plan Version** | v6 |
 
 ---
 
@@ -181,12 +181,12 @@ At each phase boundary (before advancing to the next phase):
 | **Future Owner Phase** | `unassigned` — pending plan amendment via change control |
 | **Future Owner Module** | PLAN-RBAC-001 |
 | **Required Plan Realignment** | Amend Phase 2 gate item 11 via change control to reflect v1 single-tenant scope |
-| **Related Decisions** | — (requires new DEC-NNN) |
-| **Related Actions** | ACT-017 |
+| **Related Decisions** | DEC-022 |
+| **Related Actions** | ACT-017, ACT-019 |
 | **Required Tests for Closure** | If multi-tenancy introduced: zero-rows cross-tenant queries, tenant-scoped RLS policies |
-| **Status** | `deferred` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `cancelled` |
+| **Implemented by Action** | ACT-019 (resolved via DEC-022: N/A for v1) |
+| **Implemented in Plan Version** | v6 |
 
 ---
 
