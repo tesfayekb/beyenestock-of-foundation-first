@@ -691,6 +691,32 @@ Each action must include:
 | **Rollback Method** | Drop status column, remove RLS policies, delete edge functions, remove seeded permissions |
 | **Blast Radius** | Medium — new schema column + 5 new endpoints |
 | **Health Impact** | Improved — user lifecycle management operational |
+| **Status** | Completed (superseded by ACT-027 remediation) |
+
+---
+
+### ACT-027: Stage 3C Hardening — Self-Scope, Deactivation, Login-Block, Rate Limiting, Docs
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Security |
+| **Impact** | HIGH |
+| **Modules Affected** | user-management, api, auth |
+| **Docs Updated** | route-index.md, database-migration-ledger.md (MIG-012), action-tracker.md |
+| **Verification Type** | Deno tests (15/25 pass infrastructure; 10 authenticated tests skip in sandbox — require live credentials) + deployment verified |
+| **Verification Scope** | Immediate + Runtime |
+| **Evidence** | **6 fixes applied:** (1) `requireSelfScope(ctx, targetUserId)` now called in both get-profile and update-profile for self-access paths — layered with permission check; (2) Deactivation fail-closed on session revocation: if signOut fails, status is rolled back to 'active' with compensating audit event `user.deactivation_rolled_back`; (3) MIG-012 applied: `check_user_active_before_login` trigger wired to `auth.users` BEFORE UPDATE (fires on `last_sign_in_at` change), blocking deactivated users; self-scope RLS policies on profiles re-created; (4) Rate limiting added: `_shared/rate-limit.ts` with 3 classes (relaxed=120/min, standard=60/min, strict=10/min); `createHandler` accepts `{ rateLimit }` option; deactivate-user and reactivate-user use strict; (5) Route-index classification drift fixed: `protected` → `authenticated (self-scope) / privileged (admin)` for get-profile and update-profile; (6) Unused imports removed from get-profile. **15/15 infrastructure tests pass:** 5 unauth denial, 5 method denial, 5 CORS preflight. **10 authenticated tests structured** for: validation errors (3), self-access (2), admin access (2), deactivation boundaries (3) — skip in sandbox, runnable with real credentials. |
+| **Verified By** | AI Agent |
+| **Before State** | No requireSelfScope calls; session revocation best-effort; login-block unattached; no rate limiting; route classification drift |
+| **After State** | Full layered self-scope enforcement; fail-closed deactivation with compensating rollback; login-block trigger live; rate limiting on all endpoints; docs reconciled |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert edge function code; revert MIG-012 |
+| **Blast Radius** | Medium (security hardening of existing endpoints) |
+| **Health Impact** | Improved — closes all 6 review findings |
+| **Related Functions** | requireSelfScope, checkRateLimit, check_user_active_on_login |
+| **Related Permissions** | users.view_self, users.edit_self, users.view_all, users.edit_any, users.deactivate, users.reactivate |
+| **Depends On** | ACT-026 |
 | **Status** | Verified |
 
 ---
@@ -732,7 +758,7 @@ Each action must include:
 | Feature | 6 | 6 |
 | Documentation | 11 | 11 |
 | Fix | 2 | 2 |
-| Security | 4 | 4 |
+| Security | 5 | 5 |
 | Performance | 0 | 0 |
 | Regression | 0 | 0 |
 
@@ -740,7 +766,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 23 |
+| Verified | 24 |
 | Completed (unverified) | 0 |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -750,7 +776,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 0
 - Open (unverified) actions: 0
-- High-impact actions this period: 23
+- High-impact actions this period: 24
 
 _Updated as actions are added._
 

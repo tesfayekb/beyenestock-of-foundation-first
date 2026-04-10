@@ -661,7 +661,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 |-------|-------|
 | **Path** | `/get-profile` |
 | **Method** | `GET` |
-| **Classification** | protected |
+| **Classification** | authenticated (self-scope) / privileged (admin) |
 | **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
 | **Permission (self)** | `users.view_self` (self-scope) |
 | **Permission (admin)** | `users.view_all` (system-wide) |
@@ -680,7 +680,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 |-------|-------|
 | **Path** | `/update-profile` |
 | **Method** | `PATCH` |
-| **Classification** | protected |
+| **Classification** | authenticated (self-scope) / privileged (admin) |
 | **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
 | **Permission (self)** | `users.edit_self` (self-scope) |
 | **Permission (admin)** | `users.edit_any` (system-wide) |

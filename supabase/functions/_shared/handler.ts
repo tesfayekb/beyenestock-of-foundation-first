@@ -1,20 +1,40 @@
 /**
  * Edge function request handler — unified pipeline wrapper.
+ *
+ * Provides: CORS preflight, rate limiting, error classification,
+ * and correlation ID propagation.
  */
 import { corsHeaders } from './cors.ts'
 import { apiError } from './api-error.ts'
 import { AuthError, PermissionDeniedError, ValidationError } from './errors.ts'
+import { checkRateLimit, type RateLimitClass } from './rate-limit.ts'
 
 type HandlerFn = (req: Request) => Promise<Response>
 
+export interface HandlerOptions {
+  /** Rate limit class for this endpoint. Default: 'standard' */
+  rateLimit?: RateLimitClass
+}
+
 /**
- * Wraps an edge function handler with CORS + error classification.
+ * Wraps an edge function handler with CORS + rate limiting + error classification.
  * Propagates correlation IDs into all error responses when available.
  */
-export function createHandler(handler: HandlerFn): (req: Request) => Promise<Response> {
+export function createHandler(
+  handler: HandlerFn,
+  options?: HandlerOptions
+): (req: Request) => Promise<Response> {
+  const rateLimitClass = options?.rateLimit ?? 'standard'
+
   return async (req: Request): Promise<Response> => {
     if (req.method === 'OPTIONS') {
       return new Response('ok', { headers: corsHeaders })
+    }
+
+    // Rate limit check (before any auth or processing)
+    const rateLimitResponse = checkRateLimit(req, rateLimitClass)
+    if (rateLimitResponse) {
+      return rateLimitResponse
     }
 
     // Generate a correlation ID for the request lifecycle

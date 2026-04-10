@@ -1,7 +1,7 @@
 /**
  * get-profile — Fetch a user profile.
  *
- * Self-access: requires users.view_self + self-scope enforcement.
+ * Self-access: requires users.view_self + requireSelfScope() enforcement.
  * Admin access: requires users.view_all (any user).
  *
  * GET /get-profile?user_id=<uuid>
@@ -10,7 +10,6 @@
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
 import { checkPermissionOrThrow, requireSelfScope } from '../_shared/authorization.ts'
-import { logAuditEvent } from '../_shared/audit.ts'
 import { supabaseAdmin } from '../_shared/supabase-admin.ts'
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
 import { validateRequest } from '../_shared/validate-request.ts'
@@ -37,7 +36,9 @@ Deno.serve(createHandler(async (req: Request) => {
   const isSelf = targetUserId === ctx.user.id
 
   if (isSelf) {
+    // Layered enforcement: permission + self-scope
     await checkPermissionOrThrow(ctx.user.id, 'users.view_self')
+    requireSelfScope(ctx, targetUserId)
   } else {
     await checkPermissionOrThrow(ctx.user.id, 'users.view_all')
   }

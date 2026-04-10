@@ -52,5 +52,8 @@ export {
   sanitizeMetadataForExport,
 } from './audit-query-schemas.ts'
 
+// Rate limiting
+export { checkRateLimit, type RateLimitClass } from './rate-limit.ts'
+
 // Handler wrapper
-export { createHandler, apiSuccess } from './handler.ts'
+export { createHandler, apiSuccess, type HandlerOptions } from './handler.ts'

@@ -233,6 +233,23 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 
 ---
 
+### MIG-012: Login-Block Trigger + Self-Scope RLS
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-012 |
+| **Migration File** | Lovable-managed migration (auto-generated) |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-10 |
+| **Sequence Order** | 12 |
+| **Purpose** | Wire `check_user_active_on_login()` to auth.users trigger for actual login blocking; add self-scope RLS policies on profiles |
+| **Objects Affected** | Trigger: `check_user_active_before_login` on `auth.users`; RLS policies: `Users can read own profile` (re-created), `Users can update own profile` (re-created) |
+| **Status** | `active` |
+| **Linked Actions** | ACT-027 |
+| **Notes** | Login-block trigger fires on `last_sign_in_at` changes, raising exception for deactivated users. Self-scope RLS provides defense-in-depth alongside edge function requireSelfScope(). |
+
+---
+
 ### Tables (6)
 
 | Table | Created By | Status |
@@ -262,7 +279,7 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `validate_profile_status()` | MIG-011 | Active |
 | `check_user_active_on_login()` | MIG-011 | Active |
 
-### Triggers (7)
+### Triggers (8)
 
 | Trigger | Table | Function | Created By |
 |---------|-------|----------|-----------|
@@ -273,8 +290,9 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `prevent_last_superadmin_delete` | `user_roles` | `prevent_last_superadmin_delete` | MIG-001 |
 | `update_roles_updated_at` | `roles` | `update_updated_at` | MIG-001 |
 | `trg_validate_profile_status` | `profiles` | `validate_profile_status` | MIG-011 |
+| `check_user_active_before_login` | `auth.users` | `check_user_active_on_login` | MIG-012 |
 
-### RLS Policies (8)
+### RLS Policies (10)
 
 | Policy | Table | Created By |
 |--------|-------|-----------|
@@ -286,6 +304,8 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | Audit logs insert (authenticated, append-only) | `audit_logs` | MIG-010 |
 | Admins can view all profiles | `profiles` | MIG-011 |
 | Admins can update any profile | `profiles` | MIG-011 |
+| Users can read own profile (self-scope) | `profiles` | MIG-012 |
+| Users can update own profile (self-scope) | `profiles` | MIG-012 |
 
 ---
 

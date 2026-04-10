@@ -3,6 +3,7 @@
  *
  * Requires: users.deactivate permission + recent authentication.
  * High-risk: fail-closed audit (abort if audit write fails).
+ * Session revocation: fail-closed with compensating rollback.
  *
  * POST /deactivate-user
  * Body: { user_id: string, reason?: string }
@@ -11,6 +12,12 @@
  * - Sets profile status to 'deactivated'
  * - Revokes all active sessions via Supabase Admin API
  * - Logs audit event (fail-closed)
+ *
+ * Transaction semantics:
+ * - Audit write → fail-closed (abort before any mutation)
+ * - Status update → fail-closed
+ * - Session revocation → fail-closed with compensating rollback
+ *   (if session revocation fails, status is rolled back to 'active')
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
@@ -95,12 +102,49 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(500, 'Failed to deactivate user', { correlationId: ctx.correlationId })
   }
 
-  // Revoke all sessions via Admin API
+  // Revoke all sessions via Admin API — FAIL-CLOSED with compensating rollback
   const { error: signOutErr } = await supabaseAdmin.auth.admin.signOut(user_id)
   if (signOutErr) {
-    // Log but don't abort — status is already changed, session revocation is best-effort
-    console.error('[DEACTIVATE] Session revocation failed:', signOutErr.message, {
+    // Compensating rollback: restore status to 'active' since sessions are still live
+    console.error('[DEACTIVATE] Session revocation failed — rolling back status', {
       userId: user_id,
+      correlationId: ctx.correlationId,
+      error: signOutErr.message,
+    })
+
+    const { error: rollbackErr } = await supabaseAdmin
+      .from('profiles')
+      .update({ status: 'active' })
+      .eq('id', user_id)
+
+    if (rollbackErr) {
+      // Critical: status is 'deactivated' but sessions are live — log for manual intervention
+      console.error('[DEACTIVATE] CRITICAL: Rollback also failed — manual intervention required', {
+        userId: user_id,
+        correlationId: ctx.correlationId,
+        rollbackError: rollbackErr.message,
+      })
+    }
+
+    // Log compensating action for audit trail
+    await logAuditEvent({
+      actorId: ctx.user.id,
+      action: 'user.deactivation_rolled_back',
+      targetType: 'user',
+      targetId: user_id,
+      metadata: {
+        reason: 'Session revocation failed',
+        rollback_success: !rollbackErr,
+        original_reason: reason ?? null,
+      },
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+      correlationId: ctx.correlationId,
+    })
+
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(500, 'Deactivation failed: could not revoke sessions. Status restored.', {
+      code: 'SESSION_REVOCATION_FAILED',
       correlationId: ctx.correlationId,
     })
   }
@@ -110,4 +154,4 @@ Deno.serve(createHandler(async (req: Request) => {
     user_id,
     correlationId: ctx.correlationId,
   })
-}))
+}, { rateLimit: 'strict' }))
