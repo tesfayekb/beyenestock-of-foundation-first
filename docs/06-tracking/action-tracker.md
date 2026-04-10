@@ -856,6 +856,29 @@ Each action must include:
 | **Health Impact** | Improved — core behavior now runtime-proven |
 | **Related Actions** | ACT-029, ACT-030, ACT-031 |
 | **Related Watchlist** | RW-007 |
+| **Related Risks** | RISK-010 |
+| **Status** | Verified |
+
+### ACT-033: Orphaned Test-User Cleanup + Final Governance Closure
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Fix |
+| **Impact** | Low |
+| **Modules Affected** | user-management (operational) |
+| **Docs Updated** | action-tracker.md |
+| **Verification Type** | Runtime |
+| **Verification Scope** | Immediate |
+| **Evidence** | Programmatic cleanup via temporary `orphan-cleanup` edge function (deployed, executed, deleted). **Results:** (1) `test-3c-1775811220637@test.local` (d1e567db) — deleted ✅; (2) `lifecycle-admin-1775811989603@test.local` (34840559) — deleted ✅; (3) `test-52918be2@test-rbac.local` (3f0ab9e2) — profiles/roles/audit refs all removed, but `auth.admin.deleteUser()` returns "Database error deleting user" with zero remaining public-schema references. Root cause: Supabase-internal auth schema constraint (RISK-011 confirmed). **This user requires manual dashboard deletion.** Execution IDs: `9a7ed6a7-90b3-465a-aaae-5def31b73358`, Request ID: `019d76bf-6e73-7a0a-8b0f-83bba160fd95`. |
+| **Verified By** | AI Agent (runtime + DB query verification) |
+| **Before State** | 3 orphaned test users in auth.users (ACT-031) |
+| **After State** | 2/3 deleted programmatically; 1 requires manual dashboard deletion (3f0ab9e2 / test-52918be2@test-rbac.local) |
+| **Rollback Available** | N/A (cleanup is irreversible) |
+| **Blast Radius** | None |
+| **Health Impact** | Improved |
+| **Related Actions** | ACT-031 |
+| **Related Risks** | RISK-011 (confirmed: Supabase auth deletion fragility) |
 | **Status** | Verified |
 
 ---
