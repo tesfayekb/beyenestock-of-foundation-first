@@ -238,6 +238,78 @@ At each phase boundary (before advancing to the next phase):
 
 ---
 
+### DW-008: MFA Recovery Codes
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-008 |
+| **Date Deferred** | 2026-04-09 |
+| **Source Plan Section** | PLAN-AUTH-001-D |
+| **Source Phase** | Phase 1 — Foundation (Auth) |
+| **Title** | MFA recovery code generation, storage, and usage |
+| **Reason Deferred** | Core MFA (TOTP enroll + verify) prioritized first; recovery codes are secondary safety net |
+| **Blocking Dependencies** | MFA enrollment flow operational (done); hashed storage mechanism for recovery codes; UI for code display + regeneration |
+| **Impact on Source Phase** | Phase 1 closed as `approved-partial` — MFA enrollment works but recovery path not yet available |
+| **Future Owner Phase** | Phase 4 — Admin & User Interfaces (user-panel MFA configuration) |
+| **Future Owner Module** | PLAN-AUTH-001, PLAN-USRPNL-001 |
+| **Required Plan Realignment** | Phase 4 user-panel MFA configuration section must include recovery code generation, display, regeneration, and single-use consumption |
+| **Related Decisions** | DEC-017 (MFA recovery code format: 10 codes, 8 alphanumeric, single-use, hashed storage) |
+| **Related Actions** | ACT-010, ACT-011 |
+| **Required Tests for Closure** | Recovery code generation (10 codes returned), code display + copy UX, single-use consumption (code works once then invalidated), full set regeneration (old codes invalidated), hashed storage verification (no plaintext in DB), recovery code + re-enrollment flow |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-009: requireRole() Shared Function
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-009 |
+| **Date Deferred** | 2026-04-10 |
+| **Source Plan Section** | PLAN-RBAC-001 |
+| **Source Phase** | Phase 2 — Access Control (RBAC) |
+| **Title** | Server-side requireRole() guard function |
+| **Reason Deferred** | Phase 2 focused on schema, helpers, and edge function foundation; requireRole() is a consumer-facing guard needed when modules start enforcing role checks |
+| **Blocking Dependencies** | has_role() DB function operational (done); edge function auth pattern established (done) |
+| **Impact on Source Phase** | No impact on Phase 2 gate — requireRole() is a downstream consumer utility, not a gate item |
+| **Future Owner Phase** | Phase 3 — Core Services (needed before user-management and API modules enforce role checks) |
+| **Future Owner Module** | PLAN-RBAC-001, PLAN-API-001 |
+| **Required Plan Realignment** | Phase 3 must implement requireRole() before any edge function uses role-based access control |
+| **Related Decisions** | — |
+| **Related Actions** | ACT-015, ACT-017 |
+| **Required Tests for Closure** | Correct role → access allowed; wrong role → 403; no role → 403; superadmin bypass verified; integration with edge function auth pattern |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-010: requireSelfScope() Shared Function
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-010 |
+| **Date Deferred** | 2026-04-10 |
+| **Source Plan Section** | PLAN-RBAC-001 |
+| **Source Phase** | Phase 2 — Access Control (RBAC) |
+| **Title** | Server-side requireSelfScope() guard function |
+| **Reason Deferred** | Phase 2 focused on schema, helpers, and edge function foundation; requireSelfScope() is needed when user-owned resource endpoints are built |
+| **Blocking Dependencies** | getSessionContext() operational (done); user-owned resource endpoints exist (Phase 3/4) |
+| **Impact on Source Phase** | No impact on Phase 2 gate — requireSelfScope() is a downstream consumer utility |
+| **Future Owner Phase** | Phase 3 — Core Services (needed before user-management self-scope endpoints) |
+| **Future Owner Module** | PLAN-RBAC-001, PLAN-USRMGMT-001 |
+| **Required Plan Realignment** | Phase 3 must implement requireSelfScope() before user-management self-edit/self-view endpoints |
+| **Related Decisions** | — |
+| **Related Actions** | ACT-015, ACT-017 |
+| **Required Tests for Closure** | Own resource → access allowed; other user's resource → 403; admin override if applicable; null/missing userId → 403 |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
 ## Summary Dashboard
 
 | ID | Title | Source Phase | Future Phase | Status |
@@ -249,6 +321,9 @@ At each phase boundary (before advancing to the next phase):
 | DW-005 | Cross-Tenant Isolation Scope | Phase 2 | `unassigned` | `deferred` |
 | DW-006 | Cache Invalidation Verification | Phase 2 | Phase 3 | `assigned` |
 | DW-007 | Moderator Role | Phase 2 | `unassigned` (v2) | `deferred` |
+| DW-008 | MFA Recovery Codes | Phase 1 | Phase 4 | `assigned` |
+| DW-009 | requireRole() Shared Function | Phase 2 | Phase 3 | `assigned` |
+| DW-010 | requireSelfScope() Shared Function | Phase 2 | Phase 3 | `assigned` |
 
 ## Dependencies
 

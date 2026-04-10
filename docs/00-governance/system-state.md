@@ -40,7 +40,7 @@ active_work: Phase 2 RBAC foundation code-reviewed — gate NOT closed. ACT-015 
 current_plan_version: v5
 approved_plan_baseline: v5
 plan_status: approved
-deferred_work_open: [DW-001, DW-002, DW-003, DW-004, DW-005, DW-006, DW-007]
+deferred_work_open: [DW-001, DW-002, DW-003, DW-004, DW-005, DW-006, DW-007, DW-008, DW-009, DW-010]
 last_updated: 2026-04-10
 ```
 
@@ -76,8 +76,8 @@ If inconsistency is detected → execution must **STOP** and be corrected.
 
 | Module | Status | Last Updated |
 |--------|--------|-------------|
-| auth | in progress (A+D implemented + hardened: shared functions, events, email gate; B+C deferred) | 2026-04-09 |
-| rbac | foundation code-reviewed (Phase 2: schema, helpers, RLS, seed, edge functions, client helpers — gate NOT closed, runtime unverified) | 2026-04-10 |
+| auth | in progress (A+D implemented + hardened: shared functions, events, email gate; B+C deferred [DW-001/002], MFA recovery codes deferred [DW-008]) | 2026-04-10 |
+| rbac | foundation code-reviewed (Phase 2: schema, helpers, RLS, seed, edge functions, client helpers — gate NOT closed, runtime unverified; requireRole/requireSelfScope deferred [DW-009/010]) | 2026-04-10 |
 | user-management | not started | — |
 | admin-panel | not started | — |
 | user-panel | not started | — |
