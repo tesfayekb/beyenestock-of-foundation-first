@@ -36,10 +36,11 @@ status: implementation in progress
 phase: development
 code_generation: allowed
 modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed — schema, helpers, RLS, seed, edge functions deployed, allow+deny matrix verified, role-change reflection confirmed)
-active_work: Phase 2 RBAC fully closed (ACT-020). All 4 edge functions deployed. Allow matrix verified (superadmin 29/29, admin 28/29, user 5/29). Role-change reflection confirmed (no cache, fresh DB queries). Ready for Phase 3 advancement. DW-003 and DW-006 implemented.
+active_work: Phase 2 fully closed (ACT-020). Artifact governance system created (ACT-022). Ready for Phase 3 advancement.
 current_plan_version: v7
 approved_plan_baseline: v7
 plan_status: approved
+artifact_governance: active (artifact-index.md, database-migration-ledger.md, phase-closures/)
 deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-009, DW-010]
 last_updated: 2026-04-10
 ```
