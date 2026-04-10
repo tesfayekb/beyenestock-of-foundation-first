@@ -28,7 +28,27 @@ All source code, configuration, and supporting files.
 ```
 src/
 supabase/
+sql/
 docs/
+```
+
+## Documentation Structure (`docs/`)
+
+```
+docs/
+├── 00-governance/        # Constitution, change control, system state, AI rules
+├── 01-architecture/      # Architecture overview, dependency map, design principles, project structure
+├── 02-security/          # Auth security, authorization, input validation
+├── 03-performance/       # Caching, DB performance, strategy
+├── 04-modules/           # Module specs (auth, rbac, admin, user, audit, health, api, jobs)
+├── 05-quality/           # Testing strategy, regression strategy
+├── 06-tracking/          # Action tracker, risk register, regression watchlist
+├── 07-reference/         # Function, permission, route, event, config, env var indexes
+│   ├── artifact-index.md       # Catalog of all governed implementation artifacts
+│   └── database-migration-ledger.md  # Ordered DB migration history with status
+└── 08-planning/          # Master plan, approved decisions, changelog, review log
+    ├── phase-closures/          # One authoritative closure record per phase
+    └── deferred-work-register.md
 ```
 
 ## Frontend Structure (`src/`)

@@ -35,6 +35,9 @@ If ANY checklist item is not satisfied:
 - [ ] **Phase gate checkboxes** in `master-plan.md` updated if work satisfies any phase gate condition (with evidence reference)
 - [ ] Plan artifacts updated if plan-level changes occurred
 - [ ] Execution performed ONLY against approved plan baseline (no proposed sections used)
+- [ ] `artifact-index.md` updated if new migrations, closure docs, or durable artifacts created
+- [ ] `database-migration-ledger.md` updated if any SQL migration applied
+- [ ] Phase closure file created/updated if a phase gate status changed
 - [ ] No Constitution rule violated
 
 ## Quality Checklist (ALL must be satisfied for implementation tasks)
