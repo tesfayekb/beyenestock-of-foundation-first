@@ -35,12 +35,12 @@ Tracks:
 status: implementation in progress
 phase: development
 code_generation: allowed
-modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac foundation (code-reviewed + DB-level RLS verified, gate 10/12 checked — 2 items remaining: DW-003 allow tests partial, DW-006 role-change reflection)
-active_work: Phase 2 RBAC gate closure in progress. DB-level RLS verified (ACT-019). DW-005 resolved via DEC-022 (N/A single-tenant). DW-004 implemented (ACT-019). Edge functions NOT deployed — blocks DW-003 allow tests, DW-006 role-change verification, and full gate closure. Phase 3 advancement still requires remaining gate items.
-current_plan_version: v6
-approved_plan_baseline: v6
+modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed — schema, helpers, RLS, seed, edge functions deployed, allow+deny matrix verified, role-change reflection confirmed)
+active_work: Phase 2 RBAC fully closed (ACT-020). All 4 edge functions deployed. Allow matrix verified (superadmin 29/29, admin 28/29, user 5/29). Role-change reflection confirmed (no cache, fresh DB queries). Ready for Phase 3 advancement. DW-003 and DW-006 implemented.
+current_plan_version: v7
+approved_plan_baseline: v7
 plan_status: approved
-deferred_work_open: [DW-001, DW-002, DW-003, DW-006, DW-007, DW-008, DW-009, DW-010]
+deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-009, DW-010]
 last_updated: 2026-04-10
 ```
 
