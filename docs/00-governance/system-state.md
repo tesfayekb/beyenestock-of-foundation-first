@@ -111,3 +111,4 @@ HIGH — incorrect state causes incorrect execution, plan drift, and system inco
 - [Master Plan](../08-planning/master-plan.md)
 - [Approved Decisions](../08-planning/approved-decisions.md)
 - [Action Tracker](../06-tracking/action-tracker.md)
+- [Deferred Work Register](../08-planning/deferred-work-register.md)
