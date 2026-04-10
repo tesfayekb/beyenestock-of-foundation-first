@@ -258,10 +258,10 @@ Implement role-based access control.
 - [x] Client-side helpers operational: useUserRoles, RequirePermission, checkPermission, checkRole — *ACT-015: All verified fail-secure*
 - [x] Permission index matches implementation — *ACT-015: 29 seeded permissions match permission-index.md*
 - [x] No privilege escalation paths found — *ACT-015: Security scan zero findings; superadmin inheritance server-enforced; immutability triggers protect base roles*
-- [ ] Every permission has allow + deny test — *Deferred to Phase 3 integration testing* → [DW-003](deferred-work-register.md#dw-003-rbac-permission-allowdeny-tests)
-- [ ] RLS tested at database level (not just API) — *Requires manual DB-level testing with test users* → [DW-004](deferred-work-register.md#dw-004-db-level-rls-verification)
-- [ ] Cross-tenant isolation verified (zero rows, not errors) — *Single-tenant for v1; requires plan amendment* → [DW-005](deferred-work-register.md#dw-005-cross-tenant-isolation-gate-scope-resolution)
-- [ ] Role change immediately reflected (cache invalidation verified) — *Requires runtime E2E testing with role change scenario* → [DW-006](deferred-work-register.md#dw-006-role-change-cache-invalidation-verification)
+- [ ] Every permission has allow + deny test — *Deny matrix verified (ACT-019): all 29 permissions denied for non-existent/null user, invalid key denied, all roles denied. Allow matrix blocked pending edge function deployment + superadmin assignment.* → [DW-003](deferred-work-register.md#dw-003-rbac-permission-allowdeny-tests)
+- [x] RLS tested at database level (not just API) — *ACT-019: Anonymous RLS verified (zero rows all 5 tables), write denial verified (INSERT blocked HTTP 401 all 5 tables, DELETE/UPDATE no effect), security helpers fail-secure (null/non-existent user → false)*
+- [x] Cross-tenant isolation verified (zero rows, not errors) — *N/A for v1 single-tenant architecture per DEC-022. Gate item formally resolved via change control.*
+- [ ] Role change immediately reflected (cache invalidation verified) — *Requires runtime E2E testing with role change scenario; blocked pending edge function deployment* → [DW-006](deferred-work-register.md#dw-006-role-change-cache-invalidation-verification)
 
 ---
 

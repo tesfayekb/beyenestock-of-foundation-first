@@ -263,6 +263,17 @@ If any field is missing → the decision is **INVALID**.
 
 ---
 
+### DEC-022: Cross-Tenant Gate Item — N/A for v1
+- **Plan Section:** PLAN-RBAC-001
+- **Decision Type:** policy
+- **Date Approved:** 2026-04-10
+- **Decision:** Phase 2 gate item 11 ("Cross-tenant isolation verified") is marked N/A for v1. The system is single-tenant by architecture — there are no tenant boundaries, no tenant_id columns, and no multi-tenant RLS policies. The gate item is architecturally inapplicable. If multi-tenancy is introduced in a future version, this gate must be re-activated with tenant-scoped RLS verification.
+- **Affected Modules / Systems:** RBAC
+- **Status:** active
+- **Superseded By:** —
+
+---
+
 ## Decision Integrity Rules
 
 - Every approved plan section MUST have a corresponding `DEC-NNN` entry
