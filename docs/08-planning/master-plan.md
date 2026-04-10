@@ -1,6 +1,6 @@
 # Master Plan
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-10
 
 ## Purpose
 
@@ -361,6 +361,16 @@ Implement role-based access control.
 - Phase gate results logged in action-tracker.md
 - Auth, RBAC, and Security gates are **never waivable**
 - Schema changes after Phase 3 require **HIGH-impact change control** with rollback plan
+
+### Carried-Forward Gate Item Rule
+
+When a gate item is deferred from its source phase to a future phase via the [Deferred Work Register](deferred-work-register.md):
+
+- The deferred item becomes a **prerequisite sub-gate** of the receiving phase
+- Carried-forward sub-gates **MUST be completed before dependent implementation begins** in the receiving phase (e.g., DW-003/DW-004/DW-006 must be completed before Phase 3 builds user management on top of RBAC)
+- The source phase may be marked `approved-partial` (not `implemented`) while carried-forward items remain open
+- Receiving phase planning **MUST explicitly include** all carried-forward items in its scope
+- Carried-forward items do not permit unrestricted phase advancement — they constrain the receiving phase's execution order
 
 ## Execution Order
 

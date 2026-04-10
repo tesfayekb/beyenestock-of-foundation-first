@@ -88,7 +88,7 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | DEC-020 (v1 OAuth limited to Google + Apple) |
 | **Related Actions** | ACT-011 (Phase 1 auth verification) |
 | **Required Tests for Closure** | OAuth sign-in E2E flow, OAuth account linking, OAuth error handling (denied consent, expired token), OAuth + MFA combined flow |
-| **Status** | `deferred` |
+| **Status** | `assigned` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
 
@@ -112,7 +112,7 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | DEC-020 (v1 OAuth limited to Google + Apple) |
 | **Related Actions** | ACT-011 (Phase 1 auth verification) |
 | **Required Tests for Closure** | Apple Sign-In E2E flow, Apple account linking, Apple-specific email relay handling, Apple + MFA combined flow |
-| **Status** | `deferred` |
+| **Status** | `assigned` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
 
@@ -242,8 +242,8 @@ At each phase boundary (before advancing to the next phase):
 
 | ID | Title | Source Phase | Future Phase | Status |
 |----|-------|-------------|--------------|--------|
-| DW-001 | Google OAuth | Phase 1 | Phase 6 | `deferred` |
-| DW-002 | Apple Sign-In | Phase 1 | Phase 6 | `deferred` |
+| DW-001 | Google OAuth | Phase 1 | Phase 6 | `assigned` |
+| DW-002 | Apple Sign-In | Phase 1 | Phase 6 | `assigned` |
 | DW-003 | Permission Allow/Deny Tests | Phase 2 | Phase 3 | `assigned` |
 | DW-004 | DB-Level RLS Verification | Phase 2 | Phase 3 | `assigned` |
 | DW-005 | Cross-Tenant Isolation Scope | Phase 2 | `unassigned` | `deferred` |
