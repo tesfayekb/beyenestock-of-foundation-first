@@ -229,7 +229,7 @@ Events that must automatically create action tracker entries:
 | Event Pattern | Risk | Description |
 |--------------|------|-------------|
 | `auth.failed_attempt` spike | RISK-001 (credential compromise) | Brute-force indicator |
-| `rbac.permission_denied` spike | RISK-002 (privilege escalation) | Unauthorized access attempts |
+| `auth.permission_denied` spike | RISK-002 (privilege escalation) | Unauthorized access attempts |
 | `job.failed` / `job.dead_lettered` | RISK-007 (job failure cascade) | System reliability risk |
 | `health.alert_triggered` | RISK-004 (infrastructure failure) | System health degradation |
 | `api.rate_limited` spike | RISK-005 (DoS) | Potential attack |
@@ -398,6 +398,26 @@ Key event chains showing upstream triggers and downstream effects:
 | **Observability** | Logged, traced, rate-monitored, anomaly detection |
 | **Related risks** | RISK-001 (credential compromise) |
 | **Related tests** | Failed attempt emission, threshold alerting test |
+| **Lifecycle** | active |
+
+#### `auth.permission_denied` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | api (handler.ts) |
+| **Consumers** | audit-logging, health-monitoring |
+| **Description** | Authorization denial — any PermissionDeniedError intercepted by handler |
+| **Payload schema** | `{ actor_id: uuid | null, action: "auth.permission_denied", target_type: "permission", metadata: { permission_key: string, reason: enum[missing_permission, self_scope_violation, recent_auth_required], endpoint: string, correlation_id: string, actor_known: boolean } }` |
+| **Delivery guarantee** | at-most-once (fire-and-forget — must not block 403 response) |
+| **Ordering** | none |
+| **Idempotency** | correlation_id |
+| **Retry policy** | No retry — fire-and-forget |
+| **Failure handling** | Console error only; 403 response always returned regardless of audit outcome |
+| **Observability** | Logged, traced (correlation_id), spike detection recommended |
+| **Related risks** | RISK-002 (privilege escalation), RISK-001 (credential compromise) |
+| **Related tests** | Denial audit emission test, payload validation test |
 | **Lifecycle** | active |
 
 #### `auth.mfa_recovered` — v1

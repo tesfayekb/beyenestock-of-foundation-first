@@ -12,14 +12,30 @@ export class AuthError extends Error {
   }
 }
 
-/** Permission/authorization failure — always results in 403 */
+/**
+ * Permission/authorization failure — always results in 403.
+ *
+ * Enforcement rule: Any authorization guard MUST throw this error
+ * for denials. Returning apiError(403, ...) from authorization logic
+ * is a governance violation.
+ */
 export class PermissionDeniedError extends Error {
   permissionKey: string
+  /** Authoritative actor identity — set at throw site with validated user ID */
+  userId: string | null
+  /** Denial reason category for audit analytics */
+  reason: string
 
-  constructor(message: string, permissionKey: string) {
+  constructor(
+    message: string,
+    permissionKey: string,
+    options?: { userId?: string; reason?: string }
+  ) {
     super(message)
     this.name = 'PermissionDeniedError'
     this.permissionKey = permissionKey
+    this.userId = options?.userId ?? null
+    this.reason = options?.reason ?? 'missing_permission'
   }
 }
 

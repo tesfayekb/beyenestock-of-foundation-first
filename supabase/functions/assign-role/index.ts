@@ -9,7 +9,7 @@
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
-import { checkPermissionOrThrow } from '../_shared/authorization.ts'
+import { checkPermissionOrThrow, requireRecentAuth } from '../_shared/authorization.ts'
 import { logAuditEvent } from '../_shared/audit.ts'
 import { supabaseAdmin } from '../_shared/supabase-admin.ts'
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
@@ -30,6 +30,7 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const ctx = await authenticateRequest(req)
   await checkPermissionOrThrow(ctx.user.id, 'roles.assign')
+  requireRecentAuth(ctx.user.lastSignInAt, undefined, ctx.user.id)
 
   const body = await req.json()
   const { target_user_id, role_id } = validateRequest(BodySchema, body)

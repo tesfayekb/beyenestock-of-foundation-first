@@ -9,7 +9,7 @@
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
-import { checkPermissionOrThrow } from '../_shared/authorization.ts'
+import { checkPermissionOrThrow, requireRecentAuth } from '../_shared/authorization.ts'
 import { logAuditEvent } from '../_shared/audit.ts'
 import { supabaseAdmin } from '../_shared/supabase-admin.ts'
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
@@ -30,6 +30,7 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const ctx = await authenticateRequest(req)
   await checkPermissionOrThrow(ctx.user.id, 'roles.revoke')
+  requireRecentAuth(ctx.user.lastSignInAt, undefined, ctx.user.id)
 
   const body = await req.json()
   const { target_user_id, role_id } = validateRequest(BodySchema, body)
@@ -40,6 +41,14 @@ Deno.serve(createHandler(async (req: Request) => {
   if (roleError || !role) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(404, 'Role not found', { correlationId: ctx.correlationId })
+  }
+
+  // Self-superadmin-revocation guard
+  if (role.key === 'superadmin' && target_user_id === ctx.user.id) {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(409, 'Cannot revoke your own superadmin role', {
+      correlationId: ctx.correlationId,
+    })
   }
 
   // Last-superadmin guard (DB trigger also enforces this)
