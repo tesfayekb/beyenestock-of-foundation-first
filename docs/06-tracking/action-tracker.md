@@ -672,6 +672,29 @@ Each action must include:
 
 ---
 
+### ACT-026: Phase 3 Stage 3C — User Management Schema & Lifecycle
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Feature |
+| **Impact** | HIGH |
+| **Modules Affected** | user-management, rbac, audit-logging |
+| **Docs Updated** | route-index.md, database-migration-ledger.md (MIG-011), action-tracker.md |
+| **Verification Type** | Deno tests (13 passing) + deployment verified + migration applied |
+| **Verification Scope** | Immediate |
+| **Evidence** | (1) MIG-011: Added `status` column to profiles (active/deactivated), validation trigger, admin RLS policies (view_all, edit_any), seeded 6 user management permissions, role-permission assignments; (2) 5 edge functions deployed: get-profile, update-profile, list-users, deactivate-user, reactivate-user; (3) All functions use Stage 3A shared primitives (createHandler, authenticateRequest, validateRequest, checkPermissionOrThrow, logAuditEvent); (4) deactivate/reactivate are high-risk fail-closed (audit before action); (5) Deactivation revokes sessions via Admin API; (6) Self-deactivation blocked; (7) 13/13 Deno tests pass. |
+| **Verified By** | AI Agent |
+| **Before State** | Profiles had no status column; no user management endpoints; no admin RLS on profiles |
+| **After State** | Full user management CRUD + lifecycle (deactivate/reactivate) with permission-first auth, self-scope enforcement, fail-closed audit for destructive actions |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Drop status column, remove RLS policies, delete edge functions, remove seeded permissions |
+| **Blast Radius** | Medium — new schema column + 5 new endpoints |
+| **Health Impact** | Improved — user lifecycle management operational |
+| **Status** | Verified |
+
+---
+
 ### Risk Resolution Tracking
 
 - If action resolves a risk → must link risk ID in `related_risks`
@@ -706,7 +729,7 @@ Each action must include:
 
 | Type | Count | High Impact |
 |------|-------|-------------|
-| Feature | 5 | 5 |
+| Feature | 6 | 6 |
 | Documentation | 11 | 11 |
 | Fix | 2 | 2 |
 | Security | 4 | 4 |
@@ -717,7 +740,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 22 |
+| Verified | 23 |
 | Completed (unverified) | 0 |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -727,7 +750,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 0
 - Open (unverified) actions: 0
-- High-impact actions this period: 22
+- High-impact actions this period: 23
 
 _Updated as actions are added._
 

@@ -216,7 +216,24 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 
 ---
 
-### Tables (5)
+### MIG-011: User Management Schema & Lifecycle
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-011 |
+| **Migration File** | Lovable-managed migration (auto-generated) |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-10 |
+| **Sequence Order** | 11 |
+| **Purpose** | Add status column to profiles, admin RLS policies, seed user management permissions, validation trigger, login-block function |
+| **Objects Affected** | Column: `profiles.status`; Trigger: `trg_validate_profile_status`; Function: `validate_profile_status()`, `check_user_active_on_login()`; RLS policies: `Admins can view all profiles`, `Admins can update any profile`; Index: `idx_profiles_status`; Permissions: 6 seeded; Role-permissions: user + admin assignments |
+| **Status** | `active` |
+| **Linked Actions** | ACT-026 |
+| **Notes** | Status values restricted to 'active'/'deactivated' via validation trigger. check_user_active_on_login() is defense-in-depth (Option B); primary enforcement in edge function code (Option A). |
+
+---
+
+### Tables (6)
 
 | Table | Created By | Status |
 |-------|-----------|--------|
@@ -225,8 +242,9 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `user_roles` | MIG-001 | Active |
 | `role_permissions` | MIG-001 | Active |
 | `audit_logs` | MIG-001 | Active |
+| `profiles` | (pre-existing) | Active — status column added MIG-011 |
 
-### Functions (9)
+### Functions (12)
 
 | Function | Current Definition | Status |
 |----------|-------------------|--------|
@@ -241,8 +259,10 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `prevent_immutable_role_update()` | MIG-007 | Active |
 | `prevent_last_superadmin_delete()` | MIG-007 | Active |
 | `update_updated_at_column()` | MIG-007 | Active |
+| `validate_profile_status()` | MIG-011 | Active |
+| `check_user_active_on_login()` | MIG-011 | Active |
 
-### Triggers (6)
+### Triggers (7)
 
 | Trigger | Table | Function | Created By |
 |---------|-------|----------|-----------|
@@ -252,8 +272,9 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `prevent_immutable_role_delete` | `roles` | `prevent_immutable_role_delete` | MIG-001 |
 | `prevent_last_superadmin_delete` | `user_roles` | `prevent_last_superadmin_delete` | MIG-001 |
 | `update_roles_updated_at` | `roles` | `update_updated_at` | MIG-001 |
+| `trg_validate_profile_status` | `profiles` | `validate_profile_status` | MIG-011 |
 
-### RLS Policies (6)
+### RLS Policies (8)
 
 | Policy | Table | Created By |
 |--------|-------|-----------|
@@ -263,6 +284,8 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | Role permissions view (roles.view permission) | `role_permissions` | MIG-003 |
 | Audit logs view (audit.view permission) | `audit_logs` | MIG-003 |
 | Audit logs insert (authenticated, append-only) | `audit_logs` | MIG-010 |
+| Admins can view all profiles | `profiles` | MIG-011 |
+| Admins can update any profile | `profiles` | MIG-011 |
 
 ---
 

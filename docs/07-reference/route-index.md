@@ -653,6 +653,106 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 
 > Additional API endpoints will be added as modules are implemented. Each must follow the full schema above, including method, auth model, permission model, request/response contract, rate limit class, and audit requirements.
 
+### User Management API Endpoints
+
+#### `GET /get-profile`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/get-profile` |
+| **Method** | `GET` |
+| **Classification** | protected |
+| **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
+| **Permission (self)** | `users.view_self` (self-scope) |
+| **Permission (admin)** | `users.view_all` (system-wide) |
+| **Query Params** | `user_id` (optional UUID — omit for own profile) |
+| **Response (200)** | `{ profile: { id, display_name, avatar_url, email_verified, status, created_at, updated_at } }` |
+| **Error (401)** | Missing/invalid token |
+| **Error (403)** | Permission denied |
+| **Error (404)** | Profile not found |
+| **Rate Limit** | standard |
+| **Audit Required** | No |
+| **Lifecycle** | active |
+
+#### `PATCH /update-profile`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/update-profile` |
+| **Method** | `PATCH` |
+| **Classification** | protected |
+| **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
+| **Permission (self)** | `users.edit_self` (self-scope) |
+| **Permission (admin)** | `users.edit_any` (system-wide) |
+| **Request Body** | `{ user_id?: string, display_name?: string, avatar_url?: string \| null }` |
+| **Response (200)** | `{ profile: { id, display_name, avatar_url, email_verified, status, created_at, updated_at } }` |
+| **Error (401)** | Missing/invalid token |
+| **Error (403)** | Permission denied |
+| **Error (404)** | Profile not found |
+| **Rate Limit** | standard |
+| **Audit Required** | Yes — `user.profile_updated` |
+| **Lifecycle** | active |
+
+#### `GET /list-users`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/list-users` |
+| **Method** | `GET` |
+| **Classification** | privileged |
+| **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
+| **Permission** | `users.view_all` |
+| **Query Params** | `limit` (1-100, default 50), `offset` (default 0), `status` (active\|deactivated), `search` (display name filter) |
+| **Response (200)** | `{ users: [...], total: number, limit: number, offset: number }` |
+| **Error (401)** | Missing/invalid token |
+| **Error (403)** | Permission denied |
+| **Rate Limit** | standard |
+| **Audit Required** | No |
+| **Lifecycle** | active |
+
+#### `POST /deactivate-user`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/deactivate-user` |
+| **Method** | `POST` |
+| **Classification** | privileged, destructive |
+| **Auth Model** | Bearer JWT + `requireRecentAuth()` |
+| **Permission** | `users.deactivate` |
+| **Request Body** | `{ user_id: string, reason?: string }` |
+| **Response (200)** | `{ message, user_id, correlationId }` |
+| **Error (400)** | Self-deactivation blocked |
+| **Error (401)** | Missing/invalid token or session too old |
+| **Error (403)** | Permission denied |
+| **Error (404)** | User not found |
+| **Error (409)** | Already deactivated |
+| **Error (500)** | Audit write failed (fail-closed) |
+| **Rate Limit** | strict |
+| **Audit Required** | Yes — `user.account_deactivated` (HIGH-RISK, fail-closed) |
+| **Related events** | `user.account_deactivated`, `auth.session_revoked` |
+| **Lifecycle** | active |
+
+#### `POST /reactivate-user`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/reactivate-user` |
+| **Method** | `POST` |
+| **Classification** | privileged |
+| **Auth Model** | Bearer JWT + `requireRecentAuth()` |
+| **Permission** | `users.reactivate` |
+| **Request Body** | `{ user_id: string, reason?: string }` |
+| **Response (200)** | `{ message, user_id, correlationId }` |
+| **Error (401)** | Missing/invalid token or session too old |
+| **Error (403)** | Permission denied |
+| **Error (404)** | User not found |
+| **Error (409)** | Already active |
+| **Error (500)** | Audit write failed (fail-closed) |
+| **Rate Limit** | strict |
+| **Audit Required** | Yes — `user.account_reactivated` (HIGH-RISK, fail-closed) |
+| **Related events** | `user.account_reactivated` |
+| **Lifecycle** | active |
+
 ---
 
 ## Critical Route Summary
