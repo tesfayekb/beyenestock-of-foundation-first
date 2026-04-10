@@ -905,6 +905,33 @@ Each action must include:
 
 ---
 
+### ACT-035: Stage 3D — Phase 3 Integration Verification & Gate Closure
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Security |
+| **Impact** | HIGH |
+| **Modules Affected** | api, audit-logging, user-management, rbac |
+| **Docs Updated** | master-plan.md, system-state.md, route-index.md (v1.5), event-index.md (evt-v1.2), phase-03-closure.md, action-tracker.md, deferred-work-register.md (DW-014, DW-015) |
+| **Verification Type** | Hybrid (code review + runtime E2E) |
+| **Verification Scope** | Runtime |
+| **Evidence** | **Gate 6 (route-index):** Full reconciliation — 4 RBAC entries added, /login→/sign-in drift fixed, /health→planned, internal route section. v1.1→v1.5. **Gate 4 (validation):** 4 RBAC endpoints refactored to Zod+createHandler. All 11 endpoints schema-validated. **Gate 5 (errors):** All 11 endpoints use apiError/apiSuccess. 405→METHOD_NOT_ALLOWED. correlation_id in all responses. Verified via curl (401, 405, 400 shapes). **Gate 3 (sensitive data):** 9 logAuditEvent sites reviewed — no PII/secrets. sanitizeMetadata denylist active. **Gate 2 (audit coverage):** 9 call sites reconciled. 2 missing event-index entries added. **Gate 1 (RBAC E2E):** Server-side runtime matrix 16/16 passed — superadmin allow 5/5, regular self-scope 2/2, cross-user deny 2/2, elevated deny 7/7. No-auth deny 9/9. Deactivate→reactivate lifecycle E2E verified. |
+| **Verified By** | AI Agent (runtime) + Project Lead (review) |
+| **Before State** | Phase 3 stages 3A/3B/3C closed but phase gate 6/6 items unchecked; 4 RBAC endpoints using ad hoc patterns; route-index missing entries; event-index missing 2 events |
+| **After State** | Phase 3 gate 6/6 items checked with evidence. All 11 endpoints on shared pipeline. Route-index v1.5, event-index evt-v1.2 fully reconciled. Phase 3 CLOSED. |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert RBAC endpoint refactors; restore route-index/event-index previous versions |
+| **Blast Radius** | Large (api + rbac + audit cross-module) |
+| **Health Impact** | Improved |
+| **Related Routes** | All 11 edge function routes |
+| **Related Functions** | createHandler, apiError, apiSuccess, validateRequest, authenticateRequest, checkPermissionOrThrow, logAuditEvent |
+| **Related Events** | user.deactivation_rolled_back (added), audit.exported (added) |
+| **Related Actions** | ACT-023 (3A), ACT-025 (3B), ACT-032 (3C) |
+| **Status** | Verified |
+
+---
+
 ### Risk Resolution Tracking
 
 - If action resolves a risk → must link risk ID in `related_risks`
@@ -942,7 +969,7 @@ Each action must include:
 | Feature | 6 | 6 |
 | Documentation | 12 | 11 |
 | Fix | 4 | 2 |
-| Security | 9 | 9 |
+| Security | 10 | 10 |
 | Performance | 0 | 0 |
 | Regression | 0 | 0 |
 
@@ -950,7 +977,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 31 |
+| Verified | 32 |
 | Superseded | 2 (ACT-027, ACT-028) |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -960,7 +987,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 1 (reactivation auth-unban gap — ACT-029)
 - Open (unverified) actions: 0
-- High-impact actions this period: 31
+- High-impact actions this period: 32
 
 _Updated as actions are added._
 
