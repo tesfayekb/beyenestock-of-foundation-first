@@ -564,6 +564,28 @@ Risks can amplify each other. The following dependency chains are tracked:
 
 ---
 
+### RISK-011: Test-User Cleanup Fragility
+
+| Field | Value |
+|-------|-------|
+| **ID** | RISK-011 |
+| **Title** | Supabase auth user deletion blocked by trigger dependencies |
+| **Category** | Operational |
+| **Severity** | Low |
+| **Likelihood** | Medium |
+| **Priority** | Low |
+| **Description** | Programmatic deletion of auth.users via `auth.admin.deleteUser()` fails when profile-creation triggers or FK constraints exist. This leaves orphaned test users after lifecycle verification runs. |
+| **Impact** | Orphaned auth entries accumulate; test reruns may collide with stale data |
+| **Current Controls** | Manual dashboard deletion documented in ACT-031 |
+| **Planned Mitigations** | DW-013: auto-cleanup test harness; investigate trigger-safe deletion order |
+| **Related Risks** | — |
+| **Related Actions** | ACT-031 |
+| **Owner** | Project Lead |
+| **Status** | Open |
+| **Review Cadence** | Quarterly |
+
+---
+
 ## Rules
 
 - New risks added immediately when identified — full metadata required within 24 hours
