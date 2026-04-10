@@ -47,15 +47,32 @@ User lifecycle uses two stable states:
 - `active` — user can authenticate and use the system
 - `deactivated` — user cannot authenticate or use existing sessions
 
-State transitions are recorded as events (`user.account_deactivated`, `user.account_reactivated`). Reactivation restores the user to `active` state.
+State transitions are recorded as events (`user.account_deactivated`, `user.account_reactivated`).
 
 **Deactivation effects (CRITICAL):**
 
-- Active sessions must be revoked (`auth.session_revoked`)
-- Tokens must be invalidated
-- Login must be blocked while deactivated
-- Audit history must be preserved
+- Auth user is **banned** via `auth.admin.updateUserById(user_id, { ban_duration: '876000h' })` — effectively permanent while deactivated
+- Active sessions are invalidated (ban invalidates all refresh tokens)
+- Login is blocked while deactivated (ban + `check_user_active_on_login` trigger)
+- Audit history is preserved
+- If session ban fails, profile status is **rolled back** to `active` (compensating rollback) with audit event `user.deactivation_rolled_back`
+
+**Reactivation effects (CRITICAL):**
+
+- Auth ban is **cleared first** via `auth.admin.updateUserById(user_id, { ban_duration: 'none' })` — fail-closed (abort if unban fails)
+- Profile status is set back to `active` **after** successful unban
+- If profile update fails after unban, auth is **re-banned** (compensating rollback)
 - Reactivation restores authentication eligibility but does not restore previously revoked sessions
+- User must sign in again after reactivation
+
+**Transaction sequencing (HIGH-RISK, fail-closed):**
+
+| Step | Deactivation | Reactivation |
+|------|-------------|-------------|
+| 1 | Audit write (abort if fails) | Audit write (abort if fails) |
+| 2 | Set profile status to `deactivated` | Clear auth ban (`ban_duration: 'none'`) |
+| 3 | Ban auth user (`ban_duration: '876000h'`) | Set profile status to `active` |
+| Rollback | If step 3 fails → restore status to `active` | If step 3 fails → re-ban auth user |
 
 **Deactivation rules:**
 

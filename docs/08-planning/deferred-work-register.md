@@ -326,7 +326,33 @@ At each phase boundary (before advancing to the next phase):
 | DW-009 | requireRole() Shared Function | Phase 2 | Phase 3 | `implemented` |
 | DW-010 | requireSelfScope() Shared Function | Phase 2 | Phase 3 | `implemented` |
 
-## Dependencies
+| DW-011 | Distributed Rate Limiting | Phase 3 | Phase 6 | `assigned` |
+
+## Registry (continued)
+
+### DW-011: Distributed Rate Limiting
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-011 |
+| **Date Deferred** | 2026-04-10 |
+| **Source Plan Section** | PLAN-API-001 |
+| **Source Phase** | Phase 3 — Core Services (API) |
+| **Title** | Distributed/shared rate limiting for privileged endpoints |
+| **Reason Deferred** | Current in-memory per-isolate rate limiting is adequate defense-in-depth for development but not institutional-grade for production — cold starts reset counters, no cross-isolate coordination |
+| **Blocking Dependencies** | Redis/Upstash or equivalent distributed store; production traffic patterns for tuning |
+| **Impact on Source Phase** | No impact — current limiter is functional and deployed; this is a hardening improvement |
+| **Future Owner Phase** | Phase 6 — Hardening & System Validation |
+| **Future Owner Module** | PLAN-API-001 |
+| **Required Plan Realignment** | Phase 6 must include: centralized rate limit backing store, durable counters, abuse telemetry, admin monitoring dashboard integration |
+| **Related Decisions** | — |
+| **Related Actions** | ACT-027 (rate limiting introduced), ACT-028 (rate limiter hardened) |
+| **Required Tests for Closure** | Cross-isolate rate limit enforcement, cold-start counter persistence, abuse pattern detection, admin dashboard rate limit visibility |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
 
 - [Master Plan](master-plan.md)
 - [Approved Decisions](approved-decisions.md)
