@@ -274,6 +274,39 @@ If any field is missing → the decision is **INVALID**.
 
 ---
 
+### DEC-023: Stage 3A Shared API Infrastructure
+- **Plan Section:** PLAN-API-001, PLAN-AUDIT-001
+- **Decision Type:** architecture
+- **Date Approved:** 2026-04-10
+- **Decision:** All Phase 3+ edge functions must consume the Stage 3A shared primitives: `createHandler`, `authenticateRequest`, `validateRequest`, `normalizeRequest`, `apiError`/`apiSuccess`, `checkPermissionOrThrow`, `logAuditEvent`. No inline validation or manual error building.
+- **Affected Modules / Systems:** API, Audit Logging, User Management
+- **Status:** active
+- **Superseded By:** —
+
+---
+
+### DEC-024: Export-Time Metadata Sanitization
+- **Plan Section:** PLAN-AUDIT-001
+- **Decision Type:** security
+- **Date Approved:** 2026-04-10
+- **Decision:** Audit log export applies allowlist-based metadata sanitization at export time as defense-in-depth. Only explicitly approved metadata keys are included in exported data. This supplements (does not replace) write-time sanitization in `logAuditEvent()`.
+- **Affected Modules / Systems:** Audit Logging
+- **Status:** active
+- **Superseded By:** —
+
+---
+
+### DEC-025: Audit Export Format — CSV v1
+- **Plan Section:** PLAN-AUDIT-001
+- **Decision Type:** feature
+- **Date Approved:** 2026-04-10
+- **Decision:** Audit log export uses CSV format in v1 (not JSON). CSV was chosen for compliance-team accessibility — CSV is universally readable by compliance/legal teams and spreadsheet tools. JSON export may be added as a secondary format in future if API consumers require it.
+- **Affected Modules / Systems:** Audit Logging
+- **Status:** active
+- **Superseded By:** —
+
+---
+
 ## Decision Integrity Rules
 
 - Every approved plan section MUST have a corresponding `DEC-NNN` entry

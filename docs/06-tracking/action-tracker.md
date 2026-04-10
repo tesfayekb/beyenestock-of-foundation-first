@@ -649,6 +649,29 @@ Each action must include:
 
 ---
 
+### ACT-025: Stage 3B Remediation — Shared Helpers, Export Sanitization, Plan Alignment
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Fix |
+| **Impact** | HIGH |
+| **Modules Affected** | audit-logging, api |
+| **Docs Updated** | approved-decisions.md (DEC-023, DEC-024, DEC-025), plan-changelog.md (v5), mod.ts (barrel), action-tracker.md |
+| **Verification Type** | Deno tests (7 passing) + deployment verified |
+| **Verification Scope** | Immediate |
+| **Evidence** | (1) Both endpoints refactored to use `validateRequest()` with Zod schemas (`AuditQueryParamsSchema`, `AuditExportParamsSchema`) from new `_shared/audit-query-schemas.ts`; (2) Export-time metadata sanitization via `sanitizeMetadataForExport()` — allowlist-based defense-in-depth, only approved keys emitted; (3) CSV format formally approved via DEC-025; (4) Shared helper mandate formalized via DEC-023; (5) 7/7 Deno tests pass post-refactor. |
+| **Verified By** | AI Agent |
+| **Before State** | Endpoints used inline manual validation; export emitted raw metadata; CSV format was plan drift |
+| **After State** | Full Stage 3A shared-helper consumption; allowlist-sanitized export; plan-aligned via DEC-023/024/025 |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert to pre-refactor endpoint implementations |
+| **Blast Radius** | Low (internal refactor, same external contracts) |
+| **Health Impact** | Improved — standardized pipeline, defense-in-depth for export |
+| **Status** | Verified |
+
+---
+
 ### Risk Resolution Tracking
 
 - If action resolves a risk → must link risk ID in `related_risks`

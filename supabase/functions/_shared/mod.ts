@@ -44,5 +44,13 @@ export {
   type AuditWriteFailure,
 } from './audit.ts'
 
+// Audit query schemas
+export {
+  AuditQueryParamsSchema,
+  AuditExportParamsSchema,
+  searchParamsToObject,
+  sanitizeMetadataForExport,
+} from './audit-query-schemas.ts'
+
 // Handler wrapper
 export { createHandler, apiSuccess } from './handler.ts'

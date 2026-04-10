@@ -161,6 +161,20 @@ Each entry MUST align with the required plan diff:
 | Approval Status | Approved |
 | Supersession Links | None |
 
+### v5 — 2026-04-10 — Stage 3B Remediation
+
+| Field | Value |
+|-------|-------|
+| Trigger | Stage 3B review feedback — plan drift, shared-helper bypass, missing export sanitization |
+| Changed Sections | PLAN-AUDIT-001, PLAN-API-001 |
+| What Was Added | DEC-023 (shared API primitives mandate), DEC-024 (export-time metadata sanitization), DEC-025 (CSV export format approval) |
+| What Was Changed | query-audit-logs and export-audit-logs refactored to use validateRequest/normalizeRequest. Export metadata allowlist-sanitized. |
+| What Was Removed | None |
+| Approval Status | Approved |
+| Supersession Links | None |
+
+---
+
 ## Supersession Chain Requirement
 
 For any modification to an approved section:
