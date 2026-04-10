@@ -221,9 +221,8 @@ Deno.test("requireSelfScope passes when IDs match", () => {
 Deno.test("requireSelfScope throws when IDs differ", () => {
   let caught = false;
   try {
-    // Inline to avoid importing authorization.ts (which imports supabase-admin)
-    const actorId = "user-1";
-    const targetId = "user-2";
+    const actorId: string = "user-1";
+    const targetId: string = "user-2";
     if (actorId !== targetId) {
       throw new PermissionDeniedError("Self-scope violation", "self_scope");
     }
