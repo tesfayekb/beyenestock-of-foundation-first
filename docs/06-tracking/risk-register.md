@@ -291,6 +291,27 @@ Each risk must include:
 | **Status** | Assessed → Monitored |
 | **Last Reviewed** | 2026-04-09 |
 
+### RISK-010: User Lifecycle Auth/Profile State Desynchronization
+
+| Field | Value |
+|-------|-------|
+| **Type** | Security |
+| **Likelihood** | 2 |
+| **Impact** | 5 |
+| **Risk Score** | 10 |
+| **Priority** | MEDIUM |
+| **Owner** | Project Lead |
+| **Affected Modules** | user-management, auth |
+| **Trigger Conditions** | Reactivation without clearing auth ban; deactivation without setting auth ban; partial failure in multi-step lifecycle mutation |
+| **Detection** | Lifecycle E2E tests, login attempt monitoring for deactivated users, audit trail reconciliation |
+| **Prevention** | Fail-closed sequencing (unban before status flip), compensating rollback on partial failure, auth-layer ban synchronized with profile status |
+| **Response** | Manual auth admin unban/re-ban, audit investigation, incident report |
+| **Residual Risk** | Low (after ACT-029 fix) |
+| **Related Risks** | RISK-001 |
+| **Related Watchlist** | RW-007 |
+| **Status** | Mitigated → Monitored |
+| **Last Reviewed** | 2026-04-10 |
+
 ---
 
 ## Leading vs Lagging Risk Indicators

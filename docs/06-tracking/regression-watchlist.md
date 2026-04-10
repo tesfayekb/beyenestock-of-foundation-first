@@ -175,6 +175,27 @@ Each watchlist item must include:
 | **Last Verified** | — |
 | **Status** | Active |
 
+### RW-007: User Lifecycle Deactivation/Reactivation Regression
+
+| Field | Value |
+|-------|-------|
+| **Area** | User Management / Auth |
+| **Risk Description** | Deactivation or reactivation fails to synchronize auth-layer ban state with profile status, resulting in users locked out after reactivation or still able to login after deactivation |
+| **Regression Class** | Security / Authorization |
+| **Priority** | Critical |
+| **Affected Modules** | user-management, auth |
+| **Trigger Conditions** | Any change to: deactivate-user, reactivate-user, auth admin API calls, profile status update logic, `check_user_active_on_login` trigger, compensating rollback logic |
+| **Detection** | Full lifecycle E2E test (create → deactivate → verify blocked → reactivate → verify login restored), rollback path tests |
+| **Required Checks** | 1) Deactivated user cannot login (HTTP 400). 2) Reactivated user can login (HTTP 200). 3) Auth ban cleared on reactivation. 4) Compensating rollback fires on partial failure. 5) Audit events emitted for both paths. |
+| **Verification Type** | Automated test + runtime |
+| **Related Tests** | deactivate-user/index_test.ts, reactivate-user/index_test.ts, lifecycle E2E suite |
+| **Related Risk** | RISK-010 |
+| **Recurrence Count** | 1 (ACT-029 — reactivation did not clear auth ban) |
+| **Owner** | Project Lead |
+| **Added Date** | 2026-04-10 |
+| **Last Verified** | 2026-04-10 (ACT-029: 8/8 lifecycle tests passed) |
+| **Status** | Active |
+
 ---
 
 ## Pre-Change Verification Workflow
