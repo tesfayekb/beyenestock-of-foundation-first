@@ -30,7 +30,7 @@ const BodySchema = z.object({
 Deno.serve(createHandler(async (req: Request) => {
   if (req.method !== 'POST') {
     const { apiError } = await import('../_shared/api-error.ts')
-    return apiError(405, 'Method not allowed')
+    return apiError(405, 'Method not allowed', { correlationId: crypto.randomUUID() })
   }
 
   const ctx = await authenticateRequest(req)

@@ -1,6 +1,6 @@
 # Route Index
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-10 | **Status:** Living Document | **Index Version:** `route-v1.3`
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-10 | **Status:** Living Document | **Index Version:** `route-v1.4`
 
 ## Purpose
 
@@ -607,7 +607,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Idempotent** | Yes |
 | **Related functions** | `getSystemHealth()` |
 | **Related tests** | Health endpoint tests |
-| **Lifecycle** | active |
+| **Lifecycle** | planned — not yet deployed (see Stage 3D Gate 6 note) |
 
 #### `GET /query-audit-logs` — Audit Log Query
 
@@ -875,15 +875,15 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | `/admin/users/:id/roles` | privileged, destructive | `roles.assign` / `roles.revoke` | Privilege escalation risk |
 | `/admin/users/:id/deactivate` | privileged, destructive | `users.deactivate` | User access removal |
 | `/admin/jobs/deadletter` | privileged, destructive | `jobs.deadletter.manage` | Failure resolution impact |
-| `/login` | public | — | Authentication entry point |
+| `/sign-in` | public | — | Authentication entry point |
 
 ### Public Routes
 
 | Route | Purpose |
 |-------|---------|
 | `/` | Landing page |
-| `/login` | Authentication |
-| `/signup` | Registration |
+| `/sign-in` | Authentication |
+| `/sign-up` | Registration |
 | `/forgot-password` | Password recovery |
 | `GET /health` | System health |
 

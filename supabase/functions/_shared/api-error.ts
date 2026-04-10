@@ -37,6 +37,7 @@ function httpStatusToCode(status: number): string {
     case 401: return 'UNAUTHORIZED'
     case 403: return 'FORBIDDEN'
     case 404: return 'NOT_FOUND'
+    case 405: return 'METHOD_NOT_ALLOWED'
     case 409: return 'CONFLICT'
     case 429: return 'RATE_LIMITED'
     default:  return 'INTERNAL_ERROR'
