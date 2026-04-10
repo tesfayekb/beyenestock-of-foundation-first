@@ -121,3 +121,38 @@ function sanitizeMetadata(
   }
   return sanitized
 }
+
+// ─── Audit failure event emission ───────────────────────────────────
+
+/** Registered listeners for audit failure events */
+type AuditFailureListener = (
+  params: AuditEventParams,
+  failure: AuditWriteFailure
+) => void
+
+const auditFailureListeners: AuditFailureListener[] = []
+
+/**
+ * Register a listener for audit.write_failed events.
+ * Used by monitoring/alerting infrastructure.
+ */
+export function onAuditWriteFailure(listener: AuditFailureListener): void {
+  auditFailureListeners.push(listener)
+}
+
+/**
+ * Emit audit.write_failed event to all registered listeners.
+ * Never throws — listener errors are logged but do not propagate.
+ */
+function emitAuditFailureEvent(
+  params: AuditEventParams,
+  failure: AuditWriteFailure
+): void {
+  for (const listener of auditFailureListeners) {
+    try {
+      listener(params, failure)
+    } catch (listenerErr) {
+      console.error('[AUDIT] Failure listener error:', listenerErr)
+    }
+  }
+}
