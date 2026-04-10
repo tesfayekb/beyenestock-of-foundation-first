@@ -7,7 +7,8 @@ import { normalizeRequest } from "../_shared/normalize-request.ts";
 import { validateRequest, z } from "../_shared/validate-request.ts";
 import { AuthError, PermissionDeniedError, ValidationError } from "../_shared/errors.ts";
 import { createHandler, apiSuccess } from "../_shared/handler.ts";
-import { onAuditWriteFailure } from "../_shared/audit.ts";
+// Note: audit.ts and authorization.ts import supabase-admin.ts at module level,
+// so we cannot import them directly. We test their contracts via inline logic.
 
 // Handler imports authorization.ts which imports supabase-admin.ts at module level.
 // We must test handler via a lightweight reimplementation of the error classification logic.
