@@ -94,4 +94,4 @@ Deno.serve(createHandler(async (req: Request) => {
     user_id,
     correlationId: ctx.correlationId,
   })
-}))
+}), { rateLimit: 'strict' }))
