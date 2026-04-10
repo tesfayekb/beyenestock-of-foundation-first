@@ -42,7 +42,7 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const ctx = await authenticateRequest(req)
   await checkPermissionOrThrow(ctx.user.id, 'users.deactivate')
-  requireRecentAuth(ctx.user.lastSignInAt)
+  requireRecentAuth(ctx.user.lastSignInAt, undefined, ctx.user.id)
 
   const body = await req.json()
   const { user_id, reason } = validateRequest(BodySchema, body)
