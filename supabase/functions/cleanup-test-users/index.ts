@@ -1,7 +1,5 @@
 /**
  * cleanup-test-users — One-shot cleanup of orphaned test users.
- * Deletes all users with @test.local or @test-rbac.local emails.
- * Self-deletes conceptually — remove from codebase after use.
  */
 import { corsHeaders } from '../_shared/cors.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
@@ -24,6 +22,9 @@ Deno.serve(async (req: Request) => {
 
   const results: string[] = []
   for (const u of testUsers) {
+    // Remove dependent rows first
+    await admin.from('user_roles').delete().eq('user_id', u.id)
+    await admin.from('profiles').delete().eq('id', u.id)
     const { error } = await admin.auth.admin.deleteUser(u.id)
     results.push(`${u.email}: ${error ? 'FAIL ' + error.message : 'deleted'}`)
   }
