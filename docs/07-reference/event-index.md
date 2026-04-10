@@ -229,7 +229,7 @@ Events that must automatically create action tracker entries:
 | Event Pattern | Risk | Description |
 |--------------|------|-------------|
 | `auth.failed_attempt` spike | RISK-001 (credential compromise) | Brute-force indicator |
-| `rbac.permission_denied` spike | RISK-002 (privilege escalation) | Unauthorized access attempts |
+| `auth.permission_denied` spike | RISK-002 (privilege escalation) | Unauthorized access attempts |
 | `job.failed` / `job.dead_lettered` | RISK-007 (job failure cascade) | System reliability risk |
 | `health.alert_triggered` | RISK-004 (infrastructure failure) | System health degradation |
 | `api.rate_limited` spike | RISK-005 (DoS) | Potential attack |
