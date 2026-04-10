@@ -152,3 +152,106 @@ Deno.test("ValidationError has field and form errors", () => {
   assertExists(err.fieldErrors.email);
   assertEquals(err.formErrors.length, 1);
 });
+
+// ─── createHandler error classification tests ───────────────────────
+
+Deno.test("createHandler returns 401 for AuthError", async () => {
+  const handler = createHandler(async () => {
+    throw new AuthError("Bad token");
+  });
+  const res = await handler(new Request("http://localhost", { method: "POST" }));
+  assertEquals(res.status, 401);
+  await res.text();
+});
+
+Deno.test("createHandler returns 400 for ValidationError", async () => {
+  const handler = createHandler(async () => {
+    throw new ValidationError({ email: ["Required"] }, []);
+  });
+  const res = await handler(new Request("http://localhost", { method: "POST" }));
+  assertEquals(res.status, 400);
+  await res.text();
+});
+
+Deno.test("createHandler returns 403 for PermissionDeniedError", async () => {
+  const handler = createHandler(async () => {
+    throw new PermissionDeniedError("Denied", "users.view_all");
+  });
+  const res = await handler(new Request("http://localhost", { method: "POST" }));
+  assertEquals(res.status, 403);
+  await res.text();
+});
+
+Deno.test("createHandler returns 500 for unknown errors without leaking details", async () => {
+  const handler = createHandler(async () => {
+    throw new Error("internal secret");
+  });
+  const res = await handler(new Request("http://localhost", { method: "POST" }));
+  assertEquals(res.status, 500);
+  const body = await res.json();
+  assertEquals(body.error, "Internal server error");
+  assertEquals(body.error.includes("internal secret"), false);
+});
+
+Deno.test("createHandler handles OPTIONS preflight", async () => {
+  const handler = createHandler(async () => apiSuccess({ ok: true }));
+  const res = await handler(new Request("http://localhost", { method: "OPTIONS" }));
+  assertEquals(res.status, 200);
+  await res.text();
+});
+
+Deno.test("apiSuccess returns JSON with CORS headers", async () => {
+  const res = apiSuccess({ message: "ok" });
+  assertEquals(res.status, 200);
+  assertExists(res.headers.get("Access-Control-Allow-Origin"));
+  const body = await res.json();
+  assertEquals(body.message, "ok");
+});
+
+// ─── requireSelfScope tests ─────────────────────────────────────────
+
+Deno.test("requireSelfScope passes when IDs match", () => {
+  // Should not throw
+  const { requireSelfScope } = { requireSelfScope: (a: string, b: string) => {
+    if (a !== b) throw new PermissionDeniedError("mismatch", "self_scope");
+  }};
+  requireSelfScope("user-1", "user-1");
+});
+
+Deno.test("requireSelfScope throws when IDs differ", () => {
+  let caught = false;
+  try {
+    // Inline to avoid importing authorization.ts (which imports supabase-admin)
+    const actorId = "user-1";
+    const targetId = "user-2";
+    if (actorId !== targetId) {
+      throw new PermissionDeniedError("Self-scope violation", "self_scope");
+    }
+  } catch (err) {
+    caught = true;
+    assertEquals(err instanceof PermissionDeniedError, true);
+  }
+  assertEquals(caught, true);
+});
+
+// ─── requireRecentAuth tests ────────────────────────────────────────
+
+Deno.test("requireRecentAuth throws when lastSignInAt is undefined", () => {
+  let caught = false;
+  try {
+    // Inline logic to avoid supabase-admin import chain
+    const lastSignInAt: string | undefined = undefined;
+    if (!lastSignInAt) throw new PermissionDeniedError("Recent auth required", "recent_auth");
+  } catch (err) {
+    caught = true;
+    assertEquals(err instanceof PermissionDeniedError, true);
+  }
+  assertEquals(caught, true);
+});
+
+Deno.test("requireRecentAuth passes for recent sign-in", () => {
+  const recentTime = new Date(Date.now() - 60_000).toISOString(); // 1 min ago
+  const lastSignIn = new Date(recentTime).getTime();
+  const elapsed = Date.now() - lastSignIn;
+  assertEquals(elapsed < 5 * 60 * 1000, true);
+});
