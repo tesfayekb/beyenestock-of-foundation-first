@@ -474,6 +474,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related tests** | Permission list view tests |
 | **Lifecycle** | planned |
 
+#### `/admin/audit` — Audit Logs
 
 | Field | Value |
 |-------|-------|

@@ -128,6 +128,8 @@ Admin panel consumes the following permissions (defined in [Permission Index](..
 | `roles.revoke` | Revoke roles from users | Yes |
 | `roles.create` | Create new roles | No |
 | `roles.delete` | Delete roles | Yes |
+| `permissions.assign` | Assign permission to role | Yes |
+| `permissions.revoke` | Revoke permission from role | Yes |
 | `audit.view` | View audit logs | No |
 | `audit.export` | Export audit data | No |
 | `monitoring.view` | View system health | No |
