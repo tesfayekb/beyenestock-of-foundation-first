@@ -1,5 +1,6 @@
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { checkPermission } from '@/lib/rbac';
+import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 
 interface RequirePermissionProps {
   permission: string;
@@ -22,7 +23,7 @@ export function RequirePermission({
   const { context, loading } = useUserRoles();
 
   if (loading) {
-    return null;
+    return <LoadingSkeleton variant="page" />;
   }
 
   if (!checkPermission(context, permission)) {
