@@ -897,7 +897,7 @@ Each action must include:
 | Feature | 6 | 6 |
 | Documentation | 12 | 11 |
 | Fix | 2 | 2 |
-| Security | 8 | 8 |
+| Security | 9 | 9 |
 | Performance | 0 | 0 |
 | Regression | 0 | 0 |
 
@@ -905,7 +905,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 28 (includes ACT-029 lifecycle proof, ACT-031 governance correction) |
+| Verified | 29 (includes ACT-029 lifecycle proof, ACT-031 governance correction, ACT-032 behavioral validation) |
 | Superseded | 2 (ACT-027, ACT-028 — superseded by ACT-029 verified lifecycle proof; retained as historical records) |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -914,8 +914,8 @@ Each action must include:
 
 - Regressions introduced: 0
 - Regressions resolved: 1 (reactivation auth-unban gap — ACT-029)
-- Open (unverified) actions: 0 (ACT-027/028 superseded by ACT-029; no open items)
-- High-impact actions this period: 28
+- Open (unverified) actions: 0
+- High-impact actions this period: 29
 
 _Updated as actions are added._
 
