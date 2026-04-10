@@ -740,7 +740,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 |-------|-------|
 | **Path** | `/reactivate-user` |
 | **Method** | `POST` |
-| **Classification** | privileged |
+| **Classification** | privileged, destructive |
 | **Auth Model** | Bearer JWT + `requireRecentAuth()` |
 | **Permission** | `users.reactivate` |
 | **Request Body** | `{ user_id: string, reason?: string }` |
@@ -749,10 +749,12 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Error (403)** | Permission denied |
 | **Error (404)** | User not found |
 | **Error (409)** | Already active |
-| **Error (500)** | Audit write failed (fail-closed) |
+| **Error (500)** | Audit write failed (fail-closed) / Auth unban failed / Profile update failed (with compensating re-ban) |
 | **Rate Limit** | strict |
 | **Audit Required** | Yes — `user.account_reactivated` (HIGH-RISK, fail-closed) |
 | **Related events** | `user.account_reactivated` |
+| **Idempotent** | No (auth state mutation) |
+| **Effects** | (1) Clears auth ban via `updateUserById(ban_duration: 'none')`, (2) Sets profile.status to `active`, (3) Compensating re-ban if profile update fails |
 | **Lifecycle** | active |
 
 ---

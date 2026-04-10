@@ -782,22 +782,23 @@ When changing any indexed function:
 | **Classification** | data-access |
 | **Owner module** | user-management |
 | **Signature** | `(userId: uuid) → void` |
-| **Returns** | void; sets user lifecycle state back to `active` |
+| **Returns** | void; clears auth ban, then sets user lifecycle state back to `active` |
 | **Purity** | impure |
-| **Side effects** | DB write (lifecycle state), emits `user.account_reactivated` |
-| **Transactional** | Yes |
-| **Fail behavior** | fail-fast — throw on DB error or invalid state transition |
+| **Side effects** | Auth admin API call (clear ban via `updateUserById(userId, { ban_duration: 'none' })`), DB write (lifecycle state), emits `user.account_reactivated`. On profile update failure: compensating re-ban via auth admin API. |
+| **Transactional** | Yes (fail-closed with compensating rollback) |
+| **Fail behavior** | fail-closed — abort if auth unban fails; re-ban if profile update fails after unban |
 | **Used by** | admin-panel |
 | **Blast radius** | large |
 | **Criticality** | HIGH |
 | **Approval required** | Yes |
 | **Callable from** | request-path |
 | **Related permissions** | `users.reactivate` |
-| **Related routes** | `/admin/users/:id/reactivate` |
+| **Related routes** | `/admin/users/:id/reactivate`, `POST /reactivate-user` |
 | **Related events** | `user.account_reactivated` |
-| **Related risks** | Premature access restoration |
-| **Related tests** | Reactivation allow/deny suite, post-reactivation access test |
-| **Observability** | Invocation count, error rate |
+| **Related risks** | Premature access restoration, auth-unban without profile update (mitigated by compensating re-ban) |
+| **Related watchlist** | RW-007 |
+| **Related tests** | Reactivation allow/deny suite, post-reactivation access test, rollback path tests |
+| **Observability** | Invocation count, error rate, unban failure rate |
 | **Lifecycle** | active |
 
 ### Audit Functions
