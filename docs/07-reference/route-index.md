@@ -105,6 +105,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | State | Description | Action Required |
 |-------|-------------|-----------------|
 | **Active** | In use, governed by this index | Standard governance |
+| **Planned** | Approved but not yet deployed | No enforcement until active; tracked for future implementation |
 | **Deprecated** | Scheduled for removal | Redirect plan + sunset date |
 | **Pending removal** | Will be removed in next release | All references updated |
 
@@ -607,7 +608,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Idempotent** | Yes |
 | **Related functions** | `getSystemHealth()` |
 | **Related tests** | Health endpoint tests |
-| **Lifecycle** | planned — not yet deployed (see Stage 3D Gate 6 note) |
+| **Lifecycle** | planned |
 
 #### `GET /query-audit-logs` — Audit Log Query
 
@@ -877,7 +878,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | `/admin/jobs/deadletter` | privileged, destructive | `jobs.deadletter.manage` | Failure resolution impact |
 | `/sign-in` | public | — | Authentication entry point |
 
-### Public Routes
+### Public Routes (Unauthenticated)
 
 | Route | Purpose |
 |-------|---------|
@@ -885,7 +886,12 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | `/sign-in` | Authentication |
 | `/sign-up` | Registration |
 | `/forgot-password` | Password recovery |
-| `GET /health` | System health |
+
+### Internal Routes (Unauthenticated, Non-User-Facing)
+
+| Route | Purpose | Lifecycle |
+|-------|---------|-----------|
+| `GET /health` | System health check for monitoring / load balancers | planned |
 
 ### Destructive Routes (Require Re-Auth)
 
