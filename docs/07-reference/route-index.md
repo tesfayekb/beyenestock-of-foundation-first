@@ -661,10 +661,11 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 |-------|-------|
 | **Path** | `/get-profile` |
 | **Method** | `GET` |
-| **Classification** | authenticated (self-scope) / privileged (admin) |
+| **Classification** | authenticated, privileged |
 | **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
-| **Permission (self)** | `users.view_self` (self-scope) |
-| **Permission (admin)** | `users.view_all` (system-wide) |
+| **Permission (self)** | `users.view_self` + `requireSelfScope()` |
+| **Permission (admin)** | `users.view_all` |
+| **Note** | Frontend admin routes gate on `admin.access` at panel entry; this API enforces granular permissions |
 | **Query Params** | `user_id` (optional UUID — omit for own profile) |
 | **Response (200)** | `{ profile: { id, display_name, avatar_url, email_verified, status, created_at, updated_at } }` |
 | **Error (401)** | Missing/invalid token |
@@ -680,10 +681,11 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 |-------|-------|
 | **Path** | `/update-profile` |
 | **Method** | `PATCH` |
-| **Classification** | authenticated (self-scope) / privileged (admin) |
+| **Classification** | authenticated, privileged |
 | **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
-| **Permission (self)** | `users.edit_self` (self-scope) |
-| **Permission (admin)** | `users.edit_any` (system-wide) |
+| **Permission (self)** | `users.edit_self` + `requireSelfScope()` |
+| **Permission (admin)** | `users.edit_any` |
+| **Note** | Frontend admin routes gate on `admin.access` at panel entry; this API enforces granular permissions |
 | **Request Body** | `{ user_id?: string, display_name?: string, avatar_url?: string \| null }` |
 | **Response (200)** | `{ profile: { id, display_name, avatar_url, email_verified, status, created_at, updated_at } }` |
 | **Error (401)** | Missing/invalid token |

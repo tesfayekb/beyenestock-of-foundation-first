@@ -10,11 +10,22 @@
  *   standard — 60 req/min  (authenticated reads/writes)
  *   strict   — 10 req/min  (destructive/privileged actions)
  *
- * Key derivation: IP address (x-forwarded-for) or 'unknown'.
- * In-memory only — resets on cold start (acceptable for edge functions).
+ * Key derivation: Composite of rate-limit class + IP + authenticated user ID.
+ *   - Unauthenticated: keyed by IP only (x-forwarded-for)
+ *   - Authenticated: keyed by IP + user sub (from JWT)
+ *   This prevents a single user from consuming the entire IP quota in shared-IP
+ *   environments (NAT, VPN, corporate proxy).
+ *
+ * Limitations (documented):
+ *   - In-memory only — resets on cold start (acceptable for edge functions)
+ *   - Not shared across isolates — each instance maintains its own window
+ *   - For distributed rate limiting, upgrade to Redis/Upstash backend
+ *
+ * Telemetry:
+ *   - Rate limit hits are logged to console with structured metadata
+ *   - Log format is compatible with Supabase analytics queries
  */
 
-import { apiError } from './api-error.ts'
 import { corsHeaders } from './cors.ts'
 
 export type RateLimitClass = 'relaxed' | 'standard' | 'strict'
@@ -29,6 +40,33 @@ const RATE_LIMITS: Record<RateLimitClass, { maxRequests: number; windowMs: numbe
 const windows = new Map<string, number[]>()
 
 /**
+ * Derive the rate-limit key from request context.
+ * Uses IP + optional authenticated user sub for user-aware limiting.
+ */
+function deriveKey(req: Request, rateLimitClass: RateLimitClass): string {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+
+  // Extract user sub from Authorization header if present (lightweight — no full JWT validation)
+  let userSub: string | null = null
+  const authHeader = req.headers.get('authorization')
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const payload = authHeader.split('.')[1]
+      if (payload) {
+        const decoded = JSON.parse(atob(payload))
+        userSub = decoded.sub ?? null
+      }
+    } catch {
+      // JWT decode failed — fall back to IP-only key
+    }
+  }
+
+  return userSub
+    ? `${rateLimitClass}:${ip}:${userSub}`
+    : `${rateLimitClass}:${ip}`
+}
+
+/**
  * Check rate limit for a request. Returns null if allowed,
  * or a 429 Response if rate limit exceeded.
  */
@@ -37,8 +75,7 @@ export function checkRateLimit(
   rateLimitClass: RateLimitClass
 ): Response | null {
   const config = RATE_LIMITS[rateLimitClass]
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
-  const key = `${rateLimitClass}:${ip}`
+  const key = deriveKey(req, rateLimitClass)
   const now = Date.now()
   const windowStart = now - config.windowMs
 
@@ -50,6 +87,19 @@ export function checkRateLimit(
 
   if (timestamps.length >= config.maxRequests) {
     const retryAfter = Math.ceil((timestamps[0] + config.windowMs - now) / 1000)
+
+    // Telemetry: structured log for rate limit hit
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    console.warn('[RATE_LIMIT] Rate limit exceeded', {
+      class: rateLimitClass,
+      key,
+      ip,
+      requests_in_window: timestamps.length,
+      max_requests: config.maxRequests,
+      retry_after_seconds: retryAfter,
+      timestamp: new Date(now).toISOString(),
+    })
+
     return new Response(
       JSON.stringify({
         error: 'Too many requests',
