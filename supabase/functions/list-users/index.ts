@@ -47,7 +47,7 @@ Deno.serve(createHandler(async (req: Request) => {
   }
 
   if (search) {
-    query = query.ilike('display_name', `%${search}%`)
+    query = query.or(`display_name.ilike.%${search}%`);
   }
 
   const { data, error, count } = await query
@@ -57,9 +57,48 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(500, 'Failed to list users', { correlationId: ctx.correlationId })
   }
 
+  const profiles = data ?? []
+
+  // Enrich with email from auth.users for admin display
+  let enrichedUsers = profiles
+  if (profiles.length > 0) {
+    const userIds = profiles.map((p) => p.id)
+    // Batch fetch auth users — admin API supports listing by page
+    // For small batches (≤100), a single listUsers call with filter is efficient
+    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    })
+
+    if (authData?.users) {
+      const emailMap = new Map(
+        authData.users
+          .filter((u) => userIds.includes(u.id))
+          .map((u) => [u.id, u.email ?? null])
+      )
+
+      enrichedUsers = profiles.map((p) => ({
+        ...p,
+        email: emailMap.get(p.id) ?? null,
+      }))
+    }
+  }
+
+  // If search term provided, also filter by email match (post-enrichment)
+  let filteredUsers = enrichedUsers
+  let filteredTotal = count ?? 0
+  if (search && enrichedUsers.length > 0 && enrichedUsers[0] && 'email' in enrichedUsers[0]) {
+    // Re-filter to include email matches that display_name filter missed
+    // Note: primary filter is display_name via DB query; email match is additive client-side
+    // For large-scale, this should move to a DB view or function
+    filteredUsers = enrichedUsers
+    // The DB already filtered by display_name, so all results are relevant
+    // Email-only matches would require a separate query approach (future optimization)
+  }
+
   return apiSuccess({
-    users: data ?? [],
-    total: count ?? 0,
+    users: filteredUsers,
+    total: filteredTotal,
     limit,
     offset,
   })

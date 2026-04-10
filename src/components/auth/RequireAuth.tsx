@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading, mfaStatus } = useAuth();
@@ -7,8 +8,8 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center bg-background p-8">
+        <LoadingSkeleton variant="page" />
       </div>
     );
   }
