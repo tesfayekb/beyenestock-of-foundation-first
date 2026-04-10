@@ -881,6 +881,28 @@ Each action must include:
 | **Related Risks** | RISK-011 (confirmed: Supabase auth deletion fragility) |
 | **Status** | Verified |
 
+### ACT-034: Final Orphaned Test-User Deletion via Migration
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Fix |
+| **Impact** | Low |
+| **Modules Affected** | user-management (operational cleanup) |
+| **Docs Updated** | action-tracker.md |
+| **Verification Type** | Runtime |
+| **Verification Scope** | Immediate |
+| **Evidence** | Root cause identified via `postgres_logs`: `user_roles.assigned_by` FK constraint referencing test user `3f0ab9e2` blocked `auth.admin.deleteUser()` and dashboard deletion (RISK-011 root cause found). Fix: SQL migration nullified `assigned_by` reference, then deleted auth.users row. Post-migration query: `SELECT count(*) FROM auth.users WHERE email LIKE '%@test%'` → **0 orphans remaining**. All 3 original orphaned users from ACT-031 are now fully deleted. |
+| **Verified By** | AI Agent (DB query verification) |
+| **Before State** | 1 orphaned test user (`test-52918be2@test-rbac.local`) blocked by FK constraint on `user_roles.assigned_by` |
+| **After State** | 0 orphaned test users. All test artifacts fully cleaned. |
+| **Rollback Available** | No (cleanup is irreversible; test user had no production value) |
+| **Blast Radius** | None |
+| **Health Impact** | Improved — operational drift eliminated |
+| **Related Actions** | ACT-031, ACT-033 |
+| **Related Risks** | RISK-011 (root cause identified: `user_roles.assigned_by` FK, not just Supabase-internal triggers) |
+| **Status** | Verified |
+
 ---
 
 ### Risk Resolution Tracking
