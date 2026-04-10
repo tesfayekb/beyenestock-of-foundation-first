@@ -7,20 +7,28 @@
  *
  * Constraints:
  *   - Max export: 10,000 rows
- *   - Format: CSV
+ *   - Format: CSV (DEC-025)
  *   - Sort: created_at ASC (chronological for compliance)
  *   - The export action itself is audited as high-risk
  *   - Allowed filters: action, actor_id, target_type, date_from, date_to
+ *   - Metadata allowlist-sanitized at export time (defense-in-depth)
  */
-import { createHandler, apiSuccess } from '../_shared/handler.ts'
+import { createHandler } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
 import { checkPermissionOrThrow } from '../_shared/authorization.ts'
+import { validateRequest } from '../_shared/validate-request.ts'
 import { logAuditEvent } from '../_shared/audit.ts'
 import { apiError } from '../_shared/api-error.ts'
 import { supabaseAdmin } from '../_shared/supabase-admin.ts'
 import { corsHeaders } from '../_shared/cors.ts'
+import {
+  AuditExportParamsSchema,
+  searchParamsToObject,
+  sanitizeMetadataForExport,
+} from '../_shared/audit-query-schemas.ts'
 
 const MAX_EXPORT_ROWS = 10_000
+const EXPORT_PARAM_KEYS = ['action', 'actor_id', 'target_type', 'date_from', 'date_to']
 
 Deno.serve(createHandler(async (req: Request): Promise<Response> => {
   if (req.method !== 'GET') {
@@ -30,27 +38,10 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
   const ctx = await authenticateRequest(req)
   await checkPermissionOrThrow(ctx.user.id, 'audit.export')
 
+  // Schema-based validation via Stage 3A shared primitive
   const url = new URL(req.url)
-  const params = url.searchParams
-
-  // Parse filters
-  const action = params.get('action')?.trim() || null
-  const actorId = params.get('actor_id')?.trim() || null
-  const targetType = params.get('target_type')?.trim() || null
-  const dateFrom = params.get('date_from')?.trim() || null
-  const dateTo = params.get('date_to')?.trim() || null
-
-  // Validate UUID
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  if (actorId && !uuidRegex.test(actorId)) {
-    return apiError(400, 'Invalid actor_id format', { code: 'VALIDATION_ERROR', field: 'actor_id', correlationId: ctx.correlationId })
-  }
-  if (dateFrom && isNaN(Date.parse(dateFrom))) {
-    return apiError(400, 'Invalid date_from format', { code: 'VALIDATION_ERROR', field: 'date_from', correlationId: ctx.correlationId })
-  }
-  if (dateTo && isNaN(Date.parse(dateTo))) {
-    return apiError(400, 'Invalid date_to format', { code: 'VALIDATION_ERROR', field: 'date_to', correlationId: ctx.correlationId })
-  }
+  const rawParams = searchParamsToObject(url.searchParams, EXPORT_PARAM_KEYS)
+  const params = validateRequest(AuditExportParamsSchema, rawParams)
 
   // ─── HIGH-RISK AUDIT: Log the export action BEFORE executing ───
   const auditResult = await logAuditEvent({
@@ -58,7 +49,13 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     action: 'audit.exported',
     targetType: 'audit_logs',
     metadata: {
-      filters: { action, actorId, targetType, dateFrom, dateTo },
+      filters: {
+        action: params.action ?? null,
+        actor_id: params.actor_id ?? null,
+        target_type: params.target_type ?? null,
+        date_from: params.date_from ?? null,
+        date_to: params.date_to ?? null,
+      },
       max_rows: MAX_EXPORT_ROWS,
     },
     ipAddress: ctx.ipAddress,
@@ -86,11 +83,11 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     .order('created_at', { ascending: true })
     .limit(MAX_EXPORT_ROWS)
 
-  if (action) query = query.eq('action', action)
-  if (actorId) query = query.eq('actor_id', actorId)
-  if (targetType) query = query.eq('target_type', targetType)
-  if (dateFrom) query = query.gte('created_at', dateFrom)
-  if (dateTo) query = query.lte('created_at', dateTo)
+  if (params.action) query = query.eq('action', params.action)
+  if (params.actor_id) query = query.eq('actor_id', params.actor_id)
+  if (params.target_type) query = query.eq('target_type', params.target_type)
+  if (params.date_from) query = query.gte('created_at', params.date_from)
+  if (params.date_to) query = query.lte('created_at', params.date_to)
 
   const { data, error } = await query
 
@@ -101,7 +98,7 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
 
   const rows = data ?? []
 
-  // Build CSV
+  // Build CSV with allowlist-sanitized metadata (defense-in-depth)
   const csvHeader = 'id,actor_id,action,target_type,target_id,ip_address,user_agent,created_at,metadata'
   const csvRows = rows.map(r => [
     r.id,
@@ -112,7 +109,7 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     r.ip_address ?? '',
     escapeCsv(r.user_agent ?? ''),
     r.created_at,
-    escapeCsv(JSON.stringify(r.metadata ?? {})),
+    escapeCsv(JSON.stringify(sanitizeMetadataForExport(r.metadata as Record<string, unknown>))),
   ].join(','))
 
   const csv = [csvHeader, ...csvRows].join('\n')
