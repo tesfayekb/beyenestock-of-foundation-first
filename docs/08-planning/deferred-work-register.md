@@ -325,8 +325,11 @@ At each phase boundary (before advancing to the next phase):
 | DW-008 | MFA Recovery Codes | Phase 1 | Phase 4 | `assigned` |
 | DW-009 | requireRole() Shared Function | Phase 2 | Phase 3 | `implemented` |
 | DW-010 | requireSelfScope() Shared Function | Phase 2 | Phase 3 | `implemented` |
-
 | DW-011 | Distributed Rate Limiting | Phase 3 | Phase 6 | `assigned` |
+| DW-012 | Authenticated lifecycle test infrastructure | Phase 3 | Phase 6 | `assigned` |
+| DW-013 | Orphaned test-user cleanup automation | Phase 3 | Phase 6 | `assigned` |
+| DW-014 | Denial audit logging | Phase 3 | Phase 6 | `assigned` |
+| DW-015 | Superadmin high-risk action explicit permission | Phase 3 | Phase 6 | `assigned` |
 
 ## Registry (continued)
 
