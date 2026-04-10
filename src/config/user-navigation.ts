@@ -14,11 +14,13 @@ export const userNavigation: NavSection[] = [
         title: 'Profile',
         url: '/settings',
         icon: UserCircle,
+        permission: 'profile.self_manage',
       },
       {
         title: 'Security',
         url: '/settings/security',
         icon: ShieldCheck,
+        permission: 'mfa.self_manage',
       },
     ],
   },

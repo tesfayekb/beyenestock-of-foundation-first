@@ -26,6 +26,10 @@ import { UserLayout } from "./layouts/UserLayout";
 
 // Admin pages (lazy loaded)
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminUsersPage = lazy(() => import("./pages/admin/AdminUsersPage"));
+const AdminRolesPage = lazy(() => import("./pages/admin/AdminRolesPage"));
+const AdminPermissionsPage = lazy(() => import("./pages/admin/AdminPermissionsPage"));
+const AdminAuditPage = lazy(() => import("./pages/admin/AdminAuditPage"));
 
 // User pages (lazy loaded)
 const UserDashboard = lazy(() => import("./pages/user/UserDashboard"));
@@ -75,6 +79,10 @@ const App = () => (
               {/* Admin panel — shared DashboardLayout + admin nav + RequirePermission(admin.access) */}
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<Suspense fallback={<LazyFallback />}><AdminDashboard /></Suspense>} />
+                <Route path="users" element={<Suspense fallback={<LazyFallback />}><AdminUsersPage /></Suspense>} />
+                <Route path="roles" element={<Suspense fallback={<LazyFallback />}><AdminRolesPage /></Suspense>} />
+                <Route path="permissions" element={<Suspense fallback={<LazyFallback />}><AdminPermissionsPage /></Suspense>} />
+                <Route path="audit" element={<Suspense fallback={<LazyFallback />}><AdminAuditPage /></Suspense>} />
               </Route>
 
               {/* User panel — shared DashboardLayout + user nav + RequireAuth */}
