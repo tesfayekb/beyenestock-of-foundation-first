@@ -47,7 +47,7 @@ Deno.serve(createHandler(async (req: Request) => {
   }
 
   if (search) {
-    query = query.ilike('display_name', `%${search}%`)
+    query = query.or(`display_name.ilike.%${search}%`);
   }
 
   const { data, error, count } = await query
