@@ -98,6 +98,12 @@ State transitions are recorded as events (`user.account_deactivated`, `user.acco
 | `user.account_deactivated` | Account deactivated | audit-logging, admin-panel |
 | `user.account_reactivated` | Account restored | audit-logging, admin-panel |
 
+## Known Limitations
+
+| Limitation | Impact | Workaround | Reference |
+|-----------|--------|-----------|-----------|
+| Some `auth.users` deletions fail via API and dashboard due to Supabase-internal FK constraints (e.g., `user_roles.assigned_by`, triggers on `auth.users`). `auth.admin.deleteUser()` returns "Database error deleting user." | Test-user cleanup and administrative user removal may require manual intervention. | Nullify all FK references in public schema (`user_roles.assigned_by`, `audit_logs.actor_id/target_id`) before deletion. If dashboard still fails, use a SQL migration: `DELETE FROM auth.users WHERE id = '<uuid>'`. | RISK-011, ACT-034 |
+
 ## Jobs
 
 None owned by this module.
