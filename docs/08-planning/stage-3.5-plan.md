@@ -46,13 +46,16 @@ target_id: null
 metadata: {
   permission_key: string,
   endpoint: string,
-  correlation_id: string
+  correlation_id: string,
+  reason: string   // e.g. "missing_permission", "self_scope_violation", "recent_auth_required"
 }
 ```
 
 **Failure behavior:** Fire-and-forget. Audit write failure must NOT block the `403` response. Failure is logged to `console.error` only.
 
 **Centralization rule:** All denial logging MUST occur only in `handler.ts`. No endpoint-level denial logging permitted.
+
+**Enforcement rule:** Any new authorization helper or guard introduced in the future MUST throw `PermissionDeniedError`. Returning `apiError(403, ...)` from authorization logic is considered a governance violation.
 
 **Volume note:** Denial audit events may spike under attack. Acceptable for current scale. If volume becomes a concern, throttling/aggregation is a future optimization (not in scope for 3.5).
 
