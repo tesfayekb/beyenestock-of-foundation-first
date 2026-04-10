@@ -40,6 +40,7 @@ active_work: Phase 2 RBAC foundation code-reviewed — gate NOT closed. ACT-015 
 current_plan_version: v4
 approved_plan_baseline: v4
 plan_status: approved
+deferred_work_open: [DW-001, DW-002, DW-003, DW-004, DW-005, DW-006, DW-007]
 last_updated: 2026-04-10
 ```
 

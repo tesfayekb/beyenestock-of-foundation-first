@@ -60,8 +60,8 @@ Implement authentication system.
 
 **Subsections:**
 - PLAN-AUTH-001-A: Email/Password — `implemented`
-- PLAN-AUTH-001-B: Google OAuth — `deferred` (awaiting credentials)
-- PLAN-AUTH-001-C: Apple Sign-In — `deferred` (awaiting credentials)
+- PLAN-AUTH-001-B: Google OAuth — `deferred` (awaiting credentials) → [DW-001](deferred-work-register.md#dw-001-google-oauth)
+- PLAN-AUTH-001-C: Apple Sign-In — `deferred` (awaiting credentials) → [DW-002](deferred-work-register.md#dw-002-apple-sign-in)
 - PLAN-AUTH-001-D: MFA (Authenticator) — `implemented`
 
 **Acceptance Criteria:**
