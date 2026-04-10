@@ -287,6 +287,31 @@ Implement role-based access control.
 
 ---
 
+### Phase 3.5 — Security Hardening (DW-014, DW-015)
+
+**Modules:** PLAN-AUDIT-001, PLAN-RBAC-001, PLAN-API-001
+**Depends On:** Phase 3 complete
+**Plan Document:** [Stage 3.5 Plan](stage-3.5-plan.md)
+
+**Milestones:**
+- Centralized denial audit logging (auth.permission_denied event)
+- PermissionDeniedError enriched with userId and reason
+- requireRecentAuth() on all 6 high-risk RBAC endpoints
+- Self-superadmin-revocation prevention
+
+**Phase Gate — must ALL pass before advancing:**
+- [x] Every PermissionDeniedError produces an auth.permission_denied audit entry — *Runtime-verified: permission denial + cross-user access both produce correct audit rows with actor_id, permission_key, reason, endpoint, correlation_id*
+- [x] Actor ID uses nullable field (no fake UUIDs) — *Verified: zero rows with sentinel UUID 00000000-..., AuditEventParams.actorId typed as string | null*
+- [x] correlation_id present in metadata — *Verified in sample audit rows*
+- [x] No manual 403 returns in handler-wrapped functions — *Code review: all denials throw PermissionDeniedError*
+- [x] All 6 high-risk endpoints enforce requireRecentAuth() — *deactivate-user, reactivate-user, assign-role, revoke-role, assign-permission-to-role, revoke-permission-from-role*
+- [x] Self-superadmin-revocation blocked — *revoke-role returns 403 if actor revokes own superadmin role*
+- [x] No new SQL functions introduced — *Verified: has_permission(), is_superadmin() unchanged*
+- [x] No change to success flow response shapes — *Verified: only error/denial paths modified*
+- [x] auth.permission_denied added to event-index.md — *event-index.md updated*
+
+---
+
 ### Phase 4 — Admin & User Interfaces
 
 **Modules:** PLAN-ADMIN-001, PLAN-USRPNL-001
