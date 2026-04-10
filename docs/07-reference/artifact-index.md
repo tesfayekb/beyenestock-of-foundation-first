@@ -244,6 +244,43 @@ For each phase, only **one** authoritative closure document may exist in the rep
 | ART-008 | migration | handle_new_user partial fix | Phase 2 | `superseded` |
 | ART-009 | migration | handle_new_user corrective | Phase 2 | `active` |
 | ART-010 | phase-closure | Phase 2 RBAC closure | Phase 2 | `active` |
+| ART-011 | edge-function | Shared API helpers (_shared/) | Phase 3 | `active` |
+| ART-012 | migration | Audit logs INSERT policy | Phase 3 | `active` |
+
+---
+
+### ART-011: Shared API Helpers
+
+| Field | Value |
+|-------|-------|
+| **Artifact ID** | ART-011 |
+| **Type** | edge-function |
+| **Title** | Shared edge function infrastructure (Stage 3A) |
+| **Source Path** | `supabase/functions/_shared/` |
+| **Created Date** | 2026-04-10 |
+| **Owning Phase** | Phase 3 — Core Services |
+| **Owning Plan Section** | PLAN-API-001, PLAN-AUDIT-001 |
+| **Status** | `active` |
+| **Related Actions** | ACT-023 |
+| **Notes** | 10 files: mod.ts (barrel), errors.ts, api-error.ts, authenticate-request.ts, validate-request.ts, normalize-request.ts, authorization.ts, audit.ts, handler.ts, cors.ts, supabase-admin.ts. 26 unit tests passing. Implements: authenticateRequest, validateRequest, normalizeRequest, apiError, checkPermissionOrThrow, requireSelfScope, requireRole, requireRecentAuth, logAuditEvent, createHandler, apiSuccess. |
+
+---
+
+### ART-012: Audit Logs INSERT Policy Migration
+
+| Field | Value |
+|-------|-------|
+| **Artifact ID** | ART-012 |
+| **Type** | migration |
+| **Title** | Audit logs INSERT policy (append-only defense-in-depth) |
+| **Source Path** | `supabase/migrations/20260410060801_3dcde460-0ec4-415c-a1ff-0630fd7e9e8f.sql` |
+| **Created Date** | 2026-04-10 |
+| **Owning Phase** | Phase 3 — Core Services |
+| **Owning Plan Section** | PLAN-AUDIT-001 |
+| **Execution Order** | 10 |
+| **Status** | `active` |
+| **Related Actions** | ACT-023 |
+| **Notes** | Adds INSERT policy on audit_logs for authenticated users. WITH CHECK (true) is intentional — audit writes come from server-side edge functions. No UPDATE/DELETE policies — append-only preserved. |
 
 ---
 

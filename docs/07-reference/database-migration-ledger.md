@@ -237,7 +237,7 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `prevent_last_superadmin_delete` | `user_roles` | `prevent_last_superadmin_delete` | MIG-001 |
 | `update_roles_updated_at` | `roles` | `update_updated_at` | MIG-001 |
 
-### RLS Policies (5)
+### RLS Policies (6)
 
 | Policy | Table | Created By |
 |--------|-------|-----------|
@@ -246,6 +246,7 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | User roles self-access | `user_roles` | MIG-003 |
 | Role permissions view (roles.view permission) | `role_permissions` | MIG-003 |
 | Audit logs view (audit.view permission) | `audit_logs` | MIG-003 |
+| Audit logs insert (authenticated, append-only) | `audit_logs` | MIG-010 |
 
 ---
 
