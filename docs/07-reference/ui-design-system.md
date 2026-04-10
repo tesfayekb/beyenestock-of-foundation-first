@@ -68,11 +68,11 @@ The project has an established token system in `index.css`. Phase 4 **extends** 
 
 | Role | Font | Tailwind Class | Usage |
 |------|------|---------------|-------|
-| Display | *Chosen at implementation* | `.font-display` | Page titles (h1), stat values, hero text |
+| Display | Plus Jakarta Sans | `.font-display` | Page titles (h1), stat values, hero text |
 | Body | Inter | `.font-sans` (default) | All body text, labels, descriptions |
 | Mono | JetBrains Mono | `.font-mono` | UUIDs, permission keys, JSON, code |
 
-**Rule:** Display font must be selected and documented here before implementation. Candidates: Bricolage Grotesque, Plus Jakarta Sans, or similar. Must be available via Google Fonts or self-hosted.
+**Decision:** Plus Jakarta Sans selected as display font. Available via Google Fonts. Geometric, professional, highly legible at all sizes. Pairs well with Inter body text without visual conflict. Bold weights (700) provide strong heading presence without decorative excess.
 
 ### Type Scale
 

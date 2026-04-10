@@ -330,6 +330,11 @@ At each phase boundary (before advancing to the next phase):
 | DW-013 | Orphaned test-user cleanup automation | Phase 3 | Phase 6 | `assigned` |
 | DW-014 | Denial audit logging | Phase 3 | Phase 3.5 | `implemented` |
 | DW-015 | Superadmin guardrails | Phase 3 | Phase 3.5 | `implemented` |
+| DW-016 | Admin Monitoring/Health UI | Phase 4 | Phase 5 | `assigned` |
+| DW-017 | Admin Jobs/Config UI | Phase 4 | Phase 5 | `assigned` |
+| DW-018 | User Password Change Flow | Phase 4 | Phase 4 follow-up / Phase 5 | `assigned` |
+| DW-019 | User Session Revocation | Phase 4 | Phase 4 follow-up / Phase 5 | `assigned` |
+| DW-020 | User Notification Preferences | Phase 4 | Phase 5+ | `assigned` |
 
 ## Registry (continued)
 
@@ -457,6 +462,126 @@ At each phase boundary (before advancing to the next phase):
 - [Approved Decisions](approved-decisions.md)
 - [Action Tracker](../06-tracking/action-tracker.md)
 - [Change Control Policy](../00-governance/change-control-policy.md)
+
+### DW-016: Admin Monitoring/Health UI
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-016 |
+| **Date Deferred** | 2026-04-10 |
+| **Source Plan Section** | PLAN-ADMIN-001 (monitoring & health scope) |
+| **Source Phase** | Phase 4 — Admin & User Interfaces |
+| **Title** | Admin health dashboard, alert configuration, and monitoring UI |
+| **Reason Deferred** | No health-check endpoint, monitoring backend, or alert system exists yet |
+| **Blocking Dependencies** | Health monitoring module backend implementation |
+| **Impact on Source Phase** | Phase 4 delivers user/role/audit admin surfaces; monitoring UI deferred |
+| **Future Owner Phase** | Phase 5 — Health & Monitoring |
+| **Future Owner Module** | PLAN-ADMIN-001, PLAN-HEALTH-001 |
+| **Required Plan Realignment** | Phase 5 must include monitoring UI as part of health module delivery |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Health dashboard renders, alert config CRUD, monitoring permission enforcement |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-017: Admin Jobs/Config UI
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-017 |
+| **Date Deferred** | 2026-04-10 |
+| **Source Plan Section** | PLAN-ADMIN-001 (jobs & config scope) |
+| **Source Phase** | Phase 4 — Admin & User Interfaces |
+| **Title** | Admin jobs dashboard, job trigger, dead-letter management, kill switch, and system config UI |
+| **Reason Deferred** | No job/scheduler backend or config management backend exists yet |
+| **Blocking Dependencies** | Jobs & scheduler module backend, config management backend |
+| **Impact on Source Phase** | Phase 4 delivers user/role/audit admin surfaces; jobs/config UI deferred |
+| **Future Owner Phase** | Phase 5 — Jobs & Scheduler |
+| **Future Owner Module** | PLAN-ADMIN-001, PLAN-JOBS-001 |
+| **Required Plan Realignment** | Phase 5 must include jobs/config UI as part of module delivery |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Jobs dashboard renders, trigger/deadletter/kill-switch flows, config CRUD, permission enforcement |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-018: User Password Change Flow
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-018 |
+| **Date Deferred** | 2026-04-10 |
+| **Source Plan Section** | PLAN-USRPNL-001 (password change scope) |
+| **Source Phase** | Phase 4 — Admin & User Interfaces |
+| **Title** | User self-service password change within user panel |
+| **Reason Deferred** | Requires Supabase `updateUser()` password integration + re-auth flow not yet built |
+| **Blocking Dependencies** | Re-auth UI pattern, Supabase password update integration |
+| **Impact on Source Phase** | Phase 4 delivers profile editing, MFA, and session info; password change deferred |
+| **Future Owner Phase** | Phase 4 follow-up or Phase 5 |
+| **Future Owner Module** | PLAN-USRPNL-001 |
+| **Required Plan Realignment** | Must be included in SecurityPage when re-auth pattern is available |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Password change E2E, re-auth required, old password validation, audit logging |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-019: User Session Revocation
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-019 |
+| **Date Deferred** | 2026-04-10 |
+| **Source Plan Section** | PLAN-USRPNL-001 (session revocation scope) |
+| **Source Phase** | Phase 4 — Admin & User Interfaces |
+| **Title** | User self-service session listing and revocation |
+| **Reason Deferred** | Supabase session revocation API integration not yet built |
+| **Blocking Dependencies** | Supabase session management API integration, session listing endpoint |
+| **Impact on Source Phase** | Phase 4 delivers read-only session info; revocation controls deferred |
+| **Future Owner Phase** | Phase 4 follow-up or Phase 5 |
+| **Future Owner Module** | PLAN-USRPNL-001 |
+| **Required Plan Realignment** | Must be added to SecurityPage when session API is integrated |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Session list renders, revoke session E2E, audit logging, self-scope enforcement |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-020: User Notification Preferences
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-020 |
+| **Date Deferred** | 2026-04-10 |
+| **Source Plan Section** | PLAN-USRPNL-001 (notification/preferences scope) |
+| **Source Phase** | Phase 4 — Admin & User Interfaces |
+| **Title** | User notification and preference management |
+| **Reason Deferred** | No notification system backend exists |
+| **Blocking Dependencies** | Notification system backend, preference storage schema |
+| **Impact on Source Phase** | Phase 4 delivers core user panel; notification preferences deferred |
+| **Future Owner Phase** | Phase 5+ |
+| **Future Owner Module** | PLAN-USRPNL-001 |
+| **Required Plan Realignment** | Requires new notification module or extension to user-management |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Preference CRUD, notification delivery based on preferences |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
 
 ## Used By / Affects
 

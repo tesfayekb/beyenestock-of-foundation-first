@@ -401,6 +401,38 @@ One governed visual language across all pages:
 
 ---
 
+### Stage 4F — Deferred Admin Surfaces (EXPLICITLY DEFERRED)
+
+**Status:** Deferred to Phase 5/6 — backend infrastructure not yet built
+
+The following admin-panel.md scope items have NO backend implementation yet and are **explicitly excluded** from Phase 4:
+
+| Surface | admin-panel.md Scope | Why Deferred | Deferred To |
+|---------|---------------------|--------------|-------------|
+| Health Dashboard | `monitoring.view` | No health-check endpoint or monitoring backend exists | Phase 5 (Health & Monitoring) |
+| Alert Configuration | `monitoring.configure` | No alert system backend exists | Phase 5 |
+| System Config UI | `admin.config` | No config management backend exists | Phase 5 |
+| Jobs Dashboard | `jobs.view` | No job/scheduler backend exists | Phase 5 (Jobs & Scheduler) |
+| Job Trigger | `jobs.trigger` | No job trigger backend exists | Phase 5 |
+| Dead-Letter Management | `jobs.deadletter.manage` | No dead-letter backend exists | Phase 5 |
+| Emergency Kill Switch | `jobs.emergency` | No kill switch backend exists | Phase 5 |
+
+**Rule:** These routes remain `planned` in route-index.md. They will be implemented when their backend modules (health-monitoring, jobs-and-scheduler) are built. Corresponding deferred work entries: DW-016, DW-017.
+
+### Stage 4G — Deferred User Panel Features (EXPLICITLY DEFERRED)
+
+**Status:** Deferred — requires backend work or Supabase features not yet integrated
+
+| Feature | user-panel.md Scope | Why Deferred | Deferred To |
+|---------|---------------------|--------------|-------------|
+| Password Change | Password change flow | Requires Supabase `updateUser()` integration + re-auth flow | Phase 4 follow-up or Phase 5 |
+| Session Revocation | Session visibility + revoke | Supabase session revocation API not yet integrated | Phase 4 follow-up or Phase 5 |
+| Notification Preferences | Notification/preferences management | No notification system backend exists | Phase 5+ |
+
+**Rule:** Stage 4E delivers profile editing, MFA status/enrollment, and session info (read-only). The deferred features above require dedicated backend work first. Corresponding deferred work entries: DW-018, DW-019, DW-020.
+
+---
+
 ## Cross-Stage Requirements
 
 ### Shell Uniformity Rule
@@ -425,7 +457,7 @@ User pages may simplify **content** (fewer fields, fewer actions), but NOT **she
 
 ### Error Handling Pattern
 - API errors → toast with user-friendly message
-- Permission denied → "Access Denied" page (not blank/hidden)
+- Permission denied → `AccessDenied` page within shell (not blank/hidden)
 - Network failure → ErrorState with retry button
 - Loading → LoadingSkeleton (not spinner)
 
@@ -434,6 +466,8 @@ User pages may simplify **content** (fewer fields, fewer actions), but NOT **she
 
 ### Deferred Work Integration
 - **DW-008 (MFA Recovery Codes):** Stage 4E SecurityPage will include placeholder for recovery codes.
+- **DW-016/DW-017:** Admin monitoring/jobs/config UI deferred to Phase 5.
+- **DW-018/DW-019/DW-020:** User password change, session revocation, notification preferences deferred.
 
 ---
 

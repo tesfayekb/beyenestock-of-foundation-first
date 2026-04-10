@@ -45,6 +45,7 @@ Governed registry of all shared Phase 4 components. Pages must assemble from thi
 | `LoadingSkeleton` | `src/components/dashboard/LoadingSkeleton.tsx` | Skeleton placeholder matching content shape | All async loads |
 | `EmptyState` | `src/components/dashboard/EmptyState.tsx` | Icon + heading + description + optional action | All empty lists/tables |
 | `ErrorState` | `src/components/dashboard/ErrorState.tsx` | Error icon + message + retry button | All failed operations |
+| `AccessDenied` | `src/components/dashboard/AccessDenied.tsx` | Permission-denied page: lock icon + message + back/home link, rendered within shell | Permission-denied routes |
 
 ## Dialog Components
 
