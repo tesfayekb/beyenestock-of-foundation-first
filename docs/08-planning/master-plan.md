@@ -278,12 +278,12 @@ Implement role-based access control.
 - API versioning and response conventions established
 
 **Phase Gate — must ALL pass before advancing:**
-- [ ] User management flows pass E2E tests with RBAC enforcement
-- [ ] Audit entries verified for all auditable actions (reconciliation)
-- [ ] No sensitive data in audit logs (passwords, tokens, MFA secrets)
-- [ ] API input validation covers all endpoints
-- [ ] API error responses standardized
-- [ ] Route index matches all implemented routes
+- [x] User management flows pass E2E tests with RBAC enforcement — *ACT-035: Gate 1 runtime matrix 16/16 passed — superadmin allow (5/5), regular self-scope (2/2), cross-user deny (2/2), elevated deny (7/7). No-auth deny 9/9 endpoints. Deactivate→reactivate lifecycle tested E2E.*
+- [x] Audit entries verified for all auditable actions (reconciliation) — *ACT-035: Gate 2 reconciliation — 9 logAuditEvent call sites across 8 functions cross-referenced against event-index. 2 missing events added (user.deactivation_rolled_back, audit.exported). Event-index updated to evt-v1.2.*
+- [x] No sensitive data in audit logs (passwords, tokens, MFA secrets) — *ACT-035: Gate 3 — all 9 call sites reviewed. sanitizeMetadata denylist (9 keys) active. update-profile logs field names only. No PII/secrets in metadata.*
+- [x] API input validation covers all endpoints — *ACT-035: Gate 4 — all 11 endpoints use Zod schema validation. 4 RBAC endpoints refactored from ad hoc to shared pipeline. Standardized 400 shape verified.*
+- [x] API error responses standardized — *ACT-035: Gate 5 — all 11 endpoints use apiError/apiSuccess/createHandler. 405 mapped to METHOD_NOT_ALLOWED. correlation_id in all error responses. No raw thrown errors.*
+- [x] Route index matches all implemented routes — *ACT-035: Gate 6 — route-index v1.5: 4 missing RBAC entries added, /login→/sign-in drift fixed, GET /health lifecycle set to planned, internal route section created.*
 
 ---
 
