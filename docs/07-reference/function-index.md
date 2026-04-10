@@ -1,6 +1,6 @@
 # Function Index
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09 | **Status:** Living Document | **Index Version:** `fn-v1.1`
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-10 | **Status:** Living Document | **Index Version:** `fn-v1.2`
 
 ## Purpose
 
@@ -575,14 +575,14 @@ When changing any indexed function:
 | **Related tests** | Role display tests, conditional UI tests, error fallback tests |
 | **Lifecycle** | active |
 
-#### `requireRole(role)`
+#### `requireRole(roleKey)`
 
 | Field | Value |
 |-------|-------|
 | **Type** | function |
 | **Classification** | authorization-critical |
 | **Owner module** | rbac |
-| **Signature** | `(role: app_role) → void` (throws `403` if unauthorized) |
+| **Signature** | `(roleKey: string) → void` (throws `403` if unauthorized) |
 | **Returns** | void; throws `403 Forbidden` if user lacks role |
 | **Purity** | impure |
 | **Side effects** | DB read, may emit `rbac.permission_denied` |
@@ -593,50 +593,77 @@ When changing any indexed function:
 | **Criticality** | CRITICAL |
 | **Approval required** | Yes — Lead |
 | **Callable from** | request-path |
-| **Upstream deps** | `has_role()`, `requireAuth()` |
+| **Upstream deps** | `has_role()`, `authenticateRequest()` |
 | **Related permissions** | Role-gated permissions |
 | **Related events** | `rbac.permission_denied` |
 | **Related risks** | RISK-002 |
 | **Related tests** | Role gate tests, 403 response tests |
 | **Observability** | Denial rate, error rate |
 | **Lifecycle** | active |
+| **Usage note** | **Rare infrastructure utility only.** Reserved for coarse administrative gating (e.g., admin panel route access). **MUST NOT** be used as the default authorization primitive for business endpoints — use `checkPermissionOrThrow()` instead. |
 
-#### `checkPermission(permission)`
+#### `checkPermission(context, permission)` *(client-side UX-only)*
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | ui-shared |
+| **Owner module** | rbac |
+| **Signature** | `(context: AuthorizationContext | null, permission: string) → boolean` |
+| **Returns** | `true` if permission exists in cached authorization context. **UX-only — does NOT enforce access.** Server-side `checkPermissionOrThrow()` is authoritative. |
+| **Purity** | pure (reads cached context object) |
+| **Side effects** | None — reads from pre-fetched authorization context |
+| **Transactional** | No |
+| **Fail behavior** | fail-secure — return `false` on null context |
+| **Used by** | All feature modules (UI element visibility) |
+| **Blast radius** | medium |
+| **Criticality** | MEDIUM |
+| **Approval required** | No |
+| **Callable from** | ui-only |
+| **Upstream deps** | `useUserRoles()`, `get_my_authorization_context()` |
+| **Related permissions** | All permission index entries |
+| **Related tests** | Client permission check tests, UI visibility tests |
+| **Observability** | — |
+| **Lifecycle** | active |
+| **Implementation** | `src/lib/rbac.ts` |
+
+#### `checkPermissionOrThrow(userId, permissionKey)`
 
 | Field | Value |
 |-------|-------|
 | **Type** | function |
 | **Classification** | authorization-critical |
 | **Owner module** | rbac |
-| **Signature** | `(permission: string) → boolean` |
-| **Returns** | `true` if current user has the specified permission |
+| **Signature** | `(userId: string, permissionKey: string) → void` (throws `403` if denied) |
+| **Returns** | void; throws `403 Forbidden` if user lacks the specified permission |
 | **Purity** | impure |
-| **Side effects** | DB read (role → permission mapping), emits `rbac.permission_denied` on denial |
+| **Side effects** | DB read (via `has_permission()`), emits `rbac.permission_denied` on denial |
 | **Transactional** | No |
-| **Fail behavior** | fail-secure — return `false` on error |
-| **Used by** | All feature modules |
+| **Fail behavior** | fail-secure — throw 403 |
+| **Used by** | All edge functions (default server-side authorization primitive) |
 | **Blast radius** | system-wide |
 | **Criticality** | CRITICAL |
 | **Approval required** | Yes — Lead |
-| **Callable from** | request-path, ui |
-| **Upstream deps** | `getCurrentUser()`, `has_role()` |
+| **Callable from** | request-path |
+| **Upstream deps** | `has_permission()`, `authenticateRequest()` |
 | **Related permissions** | All permission index entries |
 | **Related events** | `rbac.permission_denied` |
 | **Related risks** | RISK-002 (privilege escalation) |
 | **Related watchlist** | RW-001 |
-| **Related tests** | Permission check tests, RBAC integration tests |
+| **Related tests** | Permission enforcement tests, 403 response tests, RBAC integration tests |
 | **Observability** | Denial rate, anomaly detection |
 | **Lifecycle** | active |
+| **Usage note** | **Default server-side authorization primitive.** All Phase 3+ business endpoints use this for permission enforcement. Distinct from client-side `checkPermission()` which is UX-only. |
 
-#### `requireSelfScope(userId)`
+#### `requireSelfScope(targetUserId)`
 
 | Field | Value |
 |-------|-------|
 | **Type** | function |
 | **Classification** | authorization-critical |
 | **Owner module** | rbac |
-| **Signature** | `(userId: uuid) → void` (throws `403` if mismatch) |
-| **Returns** | void; throws `403 Forbidden` if authenticated user's ID does not match target userId |
+| **Signature** | `(targetUserId: string) → void` (throws `403` if mismatch) |
+| **Returns** | void; throws `403 Forbidden` if authenticated user's ID does not match `targetUserId`. Actor is derived internally from authenticated request context — callers do not pass both IDs. |
 | **Purity** | impure |
 | **Side effects** | DB read (current user context), emits `rbac.permission_denied` on mismatch |
 | **Transactional** | No |
@@ -646,7 +673,7 @@ When changing any indexed function:
 | **Criticality** | HIGH |
 | **Approval required** | Yes — Lead |
 | **Callable from** | request-path |
-| **Upstream deps** | `requireAuth()`, `getCurrentUser()` |
+| **Upstream deps** | `authenticateRequest()` |
 | **Related permissions** | `users.view_self`, `users.edit_self`, `profile.self_manage` |
 | **Related events** | `rbac.permission_denied` |
 | **Related risks** | RISK-002 (privilege escalation — cross-user access) |
@@ -782,20 +809,20 @@ When changing any indexed function:
 | **Type** | function |
 | **Classification** | audit-critical |
 | **Owner module** | audit-logging |
-| **Signature** | `(params: AuditEventParams) → void` |
-| **Returns** | void — append-only write |
+| **Signature** | `(params: AuditEventParams) → Promise<AuditWriteResult>` |
+| **Returns** | On success: `{ success: true, auditId: string, correlationId: string }`. On failure: `{ success: false, code: string, reason: string, correlationId: string }`. Never throws — callers inspect `success` to decide fail-closed vs log-and-continue behavior. |
 | **Purity** | impure |
-| **Side effects** | DB write (append-only audit table), emits `audit.logged` |
+| **Side effects** | DB write (append-only audit table), emits `audit.logged` on success, emits `audit.write_failed` on failure |
 | **Transactional** | Yes (independent transaction — must not fail with parent) |
-| **Fail behavior** | async-fallback — queue for retry if write fails; never silently drop |
+| **Fail behavior** | Returns structured failure result. Callers enforce policy: high-risk actions abort on `{ success: false }`, standard-risk actions continue and surface alert. |
 | **Used by** | All modules |
 | **Blast radius** | system-wide |
 | **Criticality** | CRITICAL |
 | **Approval required** | Yes — Lead |
 | **Callable from** | request-path, job-path |
-| **Related events** | `audit.logged` |
+| **Related events** | `audit.logged`, `audit.write_failed` |
 | **Related risks** | Audit trail integrity |
-| **Related tests** | Audit write tests, append-only integrity tests, failure resilience tests |
+| **Related tests** | Audit write tests, append-only integrity tests, failure resilience tests, structured return tests |
 | **Observability** | Write success rate, emission verification, latency |
 | **Lifecycle** | active |
 
@@ -1028,7 +1055,9 @@ When changing any indexed function:
 | `has_role()` | authorization-critical | system-wide | All RLS policies depend on this |
 | `has_permission()` | authorization-critical | system-wide | All permission checks depend on this |
 | `get_my_authorization_context()` | authorization-critical | large | Client authorization context depends on this |
-| `checkPermission()` | authorization-critical | system-wide | All permission checks depend on this |
+| `checkPermission()` | authorization-critical | system-wide | Client-side permission checks (UX-only) |
+| `checkPermissionOrThrow()` | authorization-critical | system-wide | **Default server-side authorization primitive** for all edge functions |
+| `requireRole()` | authorization-critical | large | Rare infrastructure gating only — not default auth primitive |
 | `requireSelfScope()` | authorization-critical | large | Self-scope enforcement for user-owned resources |
 | `logAuditEvent()` | audit-critical | system-wide | Entire audit trail depends on this |
 | `validateRequest()` | api-critical | system-wide | All input validation depends on this |
