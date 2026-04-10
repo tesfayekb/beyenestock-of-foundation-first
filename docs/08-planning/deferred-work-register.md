@@ -354,6 +354,52 @@ At each phase boundary (before advancing to the next phase):
 
 ---
 
+### DW-012: Authenticated lifecycle test infrastructure (409, rollback-path coverage)
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-012 |
+| **Source Plan Section** | PLAN-USRMGMT-001 |
+| **Source Phase** | Phase 3 — Core Services (User Management) |
+| **Title** | Authenticated lifecycle test infrastructure for 409 + rollback-path coverage |
+| **Reason Deferred** | Tests for already-deactivated (409), already-active (409), invalid UUID (400), missing body (400) require authenticated admin tokens. Rollback-path tests (unban failure → no status change, profile update failure → re-ban) require mockable wrappers around `supabaseAdmin.auth.admin` calls for failure injection. Neither infrastructure exists yet. |
+| **Blocking Dependencies** | Test harness for admin token provisioning; mockable auth admin client wrapper; non-production failure injection mechanism |
+| **Impact on Source Phase** | Moderate — current unauthenticated boundary tests provide basic coverage; auth-required paths are the higher-value regression surface |
+| **Future Owner Phase** | Phase 6 — Hardening & System Validation |
+| **Future Owner Module** | PLAN-USRMGMT-001 |
+| **Required Plan Realignment** | Phase 6 must include: test admin user provisioning, auth admin mock wrapper, failure injection for deactivate/reactivate rollback paths, auto-cleanup of test artifacts |
+| **Related Decisions** | — |
+| **Related Actions** | ACT-030 (regression tests created), ACT-031 (evidence corrected) |
+| **Required Tests for Closure** | deactivate already-deactivated → 409; reactivate already-active → 409; invalid UUID → 400; missing body → 400; unban failure → no profile change; profile update failure after unban → re-ban; ban failure on deactivation → rollback to active; audit write failure → no mutation |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-013: Orphaned test-user cleanup automation
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-013 |
+| **Source Plan Section** | PLAN-USRMGMT-001 |
+| **Source Phase** | Phase 3 — Core Services (User Management) |
+| **Title** | Automated test-user cleanup after lifecycle verification |
+| **Reason Deferred** | Supabase `auth.admin.deleteUser()` fails when profile triggers have FK or validation dependencies. Manual dashboard deletion is required. Future test harnesses must auto-clean on both success and failure paths. |
+| **Blocking Dependencies** | Understanding of Supabase auth deletion trigger chain; test harness design |
+| **Impact on Source Phase** | Low — only 3 orphaned users; operational not security risk |
+| **Future Owner Phase** | Phase 6 — Hardening & System Validation |
+| **Future Owner Module** | PLAN-USRMGMT-001 |
+| **Required Plan Realignment** | Test harness must include cleanup-on-exit for all test users |
+| **Related Decisions** | — |
+| **Related Actions** | ACT-031 (orphan documented) |
+| **Required Tests for Closure** | Verify test-user creation and deletion both succeed programmatically |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
 - [Master Plan](master-plan.md)
 - [Approved Decisions](approved-decisions.md)
 - [Action Tracker](../06-tracking/action-tracker.md)

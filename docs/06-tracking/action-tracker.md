@@ -1,6 +1,6 @@
 # Action Tracker
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-10
 
 ## Purpose
 
@@ -801,7 +801,7 @@ Each action must include:
 | **Docs Updated** | action-tracker.md |
 | **Verification Type** | Deno tests |
 | **Verification Scope** | Immediate |
-| **Evidence** | Regression test file created: `supabase/functions/deactivate-user/index_test.ts` and `supabase/functions/reactivate-user/index_test.ts` covering: unauth denial, method denial, CORS, already-active 409, already-deactivated 409. Rollback path tests (unban failure, profile update failure) documented as requiring mock infrastructure — tracked in regression watchlist RW-007. |
+| **Evidence** | Regression test files created: `supabase/functions/deactivate-user/index_test.ts` and `supabase/functions/reactivate-user/index_test.ts` covering: unauthenticated denial (401), wrong HTTP method denial (401/405), CORS preflight (200 + headers). **Not yet covered:** already-active 409, already-deactivated 409, invalid UUID 400, missing body 400 (all require authenticated admin context — tracked in DW-012). Rollback path tests (unban failure, profile update failure) require mock infrastructure — tracked in RW-007 and DW-012. |
 | **Verified By** | AI Agent |
 | **Before State** | No regression tests for rollback paths |
 | **After State** | Boundary tests + documented rollback test requirements |
@@ -809,6 +809,28 @@ Each action must include:
 | **Rollback Method** | Delete test files |
 | **Blast Radius** | Small |
 | **Health Impact** | Improved — regression surface covered |
+| **Related Watchlist** | RW-007 |
+| **Status** | Verified |
+
+### ACT-031: Governance Closure Pass — ACT-030 Correction, Metadata, Orphan Cleanup
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Documentation |
+| **Impact** | Medium |
+| **Modules Affected** | user-management, governance |
+| **Docs Updated** | action-tracker.md, user-management.md, regression-watchlist.md, risk-register.md, deferred-work-register.md |
+| **Verification Type** | Code review + database query |
+| **Verification Scope** | Immediate |
+| **Evidence** | (1) ACT-030 evidence corrected — removed overstated 409 test claims; actual coverage: unauth 401, method 401/405, CORS 200. (2) Summary dashboard cleaned — ACT-027/028 reclassified as "Superseded" (not ambiguous "Completed pending"). (3) Last Reviewed dates updated to 2026-04-10 on all modified docs. (4) Orphaned test users identified via `SELECT` on auth.users: `lifecycle-admin-1775811989603@test.local` (id: 34840559), `test-3c-1775811220637@test.local` (id: d1e567db), `test-52918be2@test-rbac.local` (id: 3f0ab9e2) — **require manual deletion from Supabase Auth dashboard** (auth.users cannot be deleted via SQL migration). (5) DW-012 created for authenticated lifecycle test infrastructure. (6) RISK-011 added for test-user cleanup fragility. |
+| **Verified By** | AI Agent |
+| **Before State** | ACT-030 overstated test coverage; summary dashboard internally inconsistent; metadata dates stale; 3 orphaned test users in auth.users |
+| **After State** | ACT-030 evidence matches actual tests; summary consistent; dates current; orphans documented for manual cleanup; deferred items registered |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert doc changes |
+| **Blast Radius** | Small (documentation only) |
+| **Health Impact** | Improved — governance evidence now matches reality |
 | **Related Watchlist** | RW-007 |
 | **Status** | Verified |
 
@@ -849,7 +871,7 @@ Each action must include:
 | Type | Count | High Impact |
 |------|-------|-------------|
 | Feature | 6 | 6 |
-| Documentation | 11 | 11 |
+| Documentation | 12 | 11 |
 | Fix | 2 | 2 |
 | Security | 8 | 8 |
 | Performance | 0 | 0 |
@@ -859,8 +881,8 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 27 |
-| Completed (pending runtime verification) | 2 (ACT-027, ACT-028 — superseded by ACT-029 verified lifecycle proof) |
+| Verified | 28 (includes ACT-029 lifecycle proof, ACT-031 governance correction) |
+| Superseded | 2 (ACT-027, ACT-028 — superseded by ACT-029 verified lifecycle proof; retained as historical records) |
 | In Progress | 0 |
 | Rolled Back | 0 |
 
@@ -868,8 +890,8 @@ Each action must include:
 
 - Regressions introduced: 0
 - Regressions resolved: 1 (reactivation auth-unban gap — ACT-029)
-- Open (unverified) actions: 0 (ACT-027/028 infrastructure verified; ACT-029 provides full runtime proof)
-- High-impact actions this period: 27
+- Open (unverified) actions: 0 (ACT-027/028 superseded by ACT-029; no open items)
+- High-impact actions this period: 28
 
 _Updated as actions are added._
 
