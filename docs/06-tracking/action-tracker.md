@@ -504,6 +504,32 @@ Each action must include:
 
 ---
 
+### ACT-019: Phase 2 Gate Closure — RLS Verification + DW-005 Resolution + Permission Deny Matrix
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Security |
+| **Impact** | HIGH |
+| **Modules Affected** | rbac |
+| **Docs Updated** | master-plan.md, system-state.md, approved-decisions.md, plan-changelog.md, deferred-work-register.md, action-tracker.md |
+| **Verification Type** | Runtime (automated API tests against deployed Supabase) |
+| **Verification Scope** | Runtime |
+| **Evidence** | **Test 1 — Schema existence (5/5):** All 5 RBAC tables confirmed present (HTTP 200). **Test 2 — Anonymous RLS read denial (5/5):** Zero rows returned from roles, permissions, user_roles, role_permissions, audit_logs with anon key. **Test 3 — Anonymous write denial (15/15):** INSERT blocked (HTTP 401) on all 5 tables; DELETE returns 204 with no effect (no write policy); UPDATE returns 204/400 with no effect. **Test 4 — Security helpers fail-secure (4/4):** is_superadmin(fake)=false, has_role(fake,*)=false, has_permission(fake,*)=false, get_my_authorization_context(anon)=null. **Test 5 — Permission deny matrix (29/29):** All 29 permissions return false for non-existent user. Invalid permission key returns false. **Test 6 — Null-safety:** is_superadmin(null)=false, has_role(null,*)=false, has_permission(null,*)=false. **Test 7 — Edge function deployment check (0/4):** All 4 edge functions return HTTP 404 — NOT deployed. **DW-005 resolution:** Cross-tenant gate item formally amended to N/A via DEC-022 (v1 is single-tenant). **DW-004 closure:** DB-level RLS verified via runtime API tests — anonymous read denial, write denial, helper fail-secure all confirmed. |
+| **Verified By** | AI Agent (automated runtime tests) |
+| **Before State** | Phase 2 gate: 8/12 checked. DW-004 open. DW-005 unresolved. Permission deny matrix untested. |
+| **After State** | Phase 2 gate: 10/12 checked. DW-004 implemented. DW-005 cancelled (DEC-022). Permission deny matrix verified. 2 items remain: DW-003 (allow tests, blocked by edge function deployment), DW-006 (role-change reflection, blocked by edge function deployment). |
+| **Rollback Available** | N/A (verification only, no code changes) |
+| **Blast Radius** | Medium (gate closure progress) |
+| **Health Impact** | Improved — 2 gate items closed, 1 resolved via change control |
+| **Related Functions** | is_superadmin, has_role, has_permission, get_my_authorization_context |
+| **Related Permissions** | All 29 permissions in permission-index.md |
+| **Related Risks** | RISK-002 (privilege escalation — deny matrix confirms fail-secure) |
+| **Depends On** | ACT-015, ACT-017 |
+| **Status** | Verified |
+
+---
+
 ### Risk Resolution Tracking
 
 - If action resolves a risk → must link risk ID in `related_risks`
@@ -541,7 +567,7 @@ Each action must include:
 | Feature | 4 | 4 |
 | Documentation | 11 | 11 |
 | Fix | 1 | 1 |
-| Security | 2 | 2 |
+| Security | 3 | 3 |
 | Performance | 0 | 0 |
 | Regression | 0 | 0 |
 
@@ -549,7 +575,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 17 |
+| Verified | 18 |
 | Completed (unverified) | 0 |
 | In Progress | 1 |
 | Rolled Back | 0 |
@@ -559,7 +585,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 0
 - Open (unverified) actions: 1 (ACT-017)
-- High-impact actions this period: 18
+- High-impact actions this period: 19
 
 _Updated as actions are added._
 

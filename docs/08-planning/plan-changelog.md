@@ -144,6 +144,23 @@ Each entry MUST align with the required plan diff:
 | Approval Status | Approved |
 | Supersession Links | None |
 
+### v5 → v6 (2026-04-10)
+
+**Type:** Gate closure — runtime verification + change control resolution
+
+| Field | Value |
+|-------|-------|
+| Plan Version | v5 → v6 |
+| Section IDs Changed | PLAN-RBAC-001 (Phase 2 gate items 10, 11 updated) |
+| Decision IDs Affected | DEC-022 (new) |
+| What Changed | Phase 2 gate item 10 (RLS DB-level testing) checked with ACT-019 evidence. Phase 2 gate item 11 (cross-tenant isolation) marked N/A via DEC-022 (v1 single-tenant). DW-004 status → implemented. DW-005 status → cancelled. Permission deny matrix verified (29/29). System-state updated to reflect 10/12 gate items checked. |
+| Why | Runtime verification tests executed against deployed Supabase confirmed RLS enforcement, write denial, and security helper fail-secure behavior. Cross-tenant gate item formally resolved as architecturally inapplicable for v1. |
+| What Stayed | All plan section definitions, acceptance criteria, Phase Gate Rules, Carried-Forward Gate Item Rule unchanged |
+| What Was Added | DEC-022, ACT-019, runtime verification evidence |
+| What Was Removed | None |
+| Approval Status | Approved |
+| Supersession Links | None |
+
 ## Supersession Chain Requirement
 
 For any modification to an approved section:
