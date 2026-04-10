@@ -575,14 +575,14 @@ When changing any indexed function:
 | **Related tests** | Role display tests, conditional UI tests, error fallback tests |
 | **Lifecycle** | active |
 
-#### `requireRole(roleKey)`
+#### `requireRole(userId, roleKey)`
 
 | Field | Value |
 |-------|-------|
 | **Type** | function |
 | **Classification** | authorization-critical |
 | **Owner module** | rbac |
-| **Signature** | `(roleKey: string) → void` (throws `403` if unauthorized) |
+| **Signature** | `(userId: string, roleKey: string) → Promise<void>` (throws `403` if unauthorized) |
 | **Returns** | void; throws `403 Forbidden` if user lacks role |
 | **Purity** | impure |
 | **Side effects** | DB read, may emit `rbac.permission_denied` |
