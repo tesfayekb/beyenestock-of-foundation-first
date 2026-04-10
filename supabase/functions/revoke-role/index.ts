@@ -1,141 +1,116 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from 'https://esm.sh/@supabase/supabase-js@2/cors'
+/**
+ * revoke-role — Revoke a role from a user.
+ *
+ * Requires: roles.revoke permission.
+ * Audit: HIGH-RISK (fail-closed with rollback).
+ *
+ * POST /revoke-role
+ * Body: { target_user_id: string (UUID), role_id: string (UUID) }
+ */
+import { createHandler, apiSuccess } from '../_shared/handler.ts'
+import { authenticateRequest } from '../_shared/authenticate-request.ts'
+import { checkPermissionOrThrow } from '../_shared/authorization.ts'
+import { logAuditEvent } from '../_shared/audit.ts'
+import { supabaseAdmin } from '../_shared/supabase-admin.ts'
+import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
+import { validateRequest } from '../_shared/validate-request.ts'
 
-const supabaseAdmin = createClient(
-  Deno.env.get('SUPABASE_URL')!,
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-)
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
-
-  try {
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    )
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Invalid token' }), {
-        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    const { data: hasPermission } = await supabaseAdmin.rpc('has_permission', {
-      _user_id: user.id, _permission_key: 'roles.revoke'
-    })
-    if (!hasPermission) {
-      return new Response(JSON.stringify({ error: 'Permission denied' }), {
-        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    const body = await req.json()
-    const { target_user_id, role_id } = body
-    if (!target_user_id || !role_id ||
-        typeof target_user_id !== 'string' || typeof role_id !== 'string') {
-      return new Response(JSON.stringify({ error: 'Invalid input: target_user_id and role_id required' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!uuidRegex.test(target_user_id) || !uuidRegex.test(role_id)) {
-      return new Response(JSON.stringify({ error: 'Invalid UUID format' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Get role info
-    const { data: role, error: roleError } = await supabaseAdmin
-      .from('roles').select('id, key').eq('id', role_id).single()
-    if (roleError || !role) {
-      return new Response(JSON.stringify({ error: 'Role not found' }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Last-superadmin guard (DB trigger also enforces this)
-    if (role.key === 'superadmin') {
-      const { count } = await supabaseAdmin
-        .from('user_roles')
-        .select('id', { count: 'exact', head: true })
-        .eq('role_id', role_id)
-      if ((count ?? 0) <= 1) {
-        return new Response(JSON.stringify({ error: 'Cannot revoke the last superadmin assignment' }), {
-          status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
-      }
-    }
-
-    // Check assignment exists
-    const { data: assignment } = await supabaseAdmin
-      .from('user_roles')
-      .select('id')
-      .eq('user_id', target_user_id)
-      .eq('role_id', role_id)
-      .single()
-
-    if (!assignment) {
-      return new Response(JSON.stringify({ error: 'Role assignment not found' }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    const correlation_id = crypto.randomUUID()
-
-    // Delete assignment
-    const { error: deleteError } = await supabaseAdmin
-      .from('user_roles')
-      .delete()
-      .eq('user_id', target_user_id)
-      .eq('role_id', role_id)
-
-    if (deleteError) throw deleteError
-
-    // Audit log
-    const { error: auditError } = await supabaseAdmin
-      .from('audit_logs')
-      .insert({
-        actor_id: user.id,
-        action: 'rbac.role_revoked',
-        target_type: 'user_roles',
-        target_id: target_user_id,
-        metadata: {
-          role_id, role_key: role.key,
-          target_user_id, correlation_id
-        },
-        ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
-        user_agent: req.headers.get('user-agent')
-      })
-
-    if (auditError) {
-      // Rollback: re-assign the role
-      await supabaseAdmin
-        .from('user_roles')
-        .insert({ user_id: target_user_id, role_id, assigned_by: user.id })
-      return new Response(JSON.stringify({ error: 'Audit logging failed — operation rolled back' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    return new Response(JSON.stringify({
-      success: true, correlation_id,
-      message: `Role ${role.key} revoked from user`
-    }), {
-      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-
-  } catch (error) {
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    })
-  }
+const BodySchema = z.object({
+  target_user_id: z.string().trim().regex(uuidRegex, 'Invalid UUID'),
+  role_id: z.string().trim().regex(uuidRegex, 'Invalid UUID'),
 })
+
+Deno.serve(createHandler(async (req: Request) => {
+  if (req.method !== 'POST') {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(405, 'Method not allowed')
+  }
+
+  const ctx = await authenticateRequest(req)
+  await checkPermissionOrThrow(ctx.user.id, 'roles.revoke')
+
+  const body = await req.json()
+  const { target_user_id, role_id } = validateRequest(BodySchema, body)
+
+  // Get role info
+  const { data: role, error: roleError } = await supabaseAdmin
+    .from('roles').select('id, key').eq('id', role_id).single()
+  if (roleError || !role) {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(404, 'Role not found', { correlationId: ctx.correlationId })
+  }
+
+  // Last-superadmin guard (DB trigger also enforces this)
+  if (role.key === 'superadmin') {
+    const { count } = await supabaseAdmin
+      .from('user_roles')
+      .select('id', { count: 'exact', head: true })
+      .eq('role_id', role_id)
+    if ((count ?? 0) <= 1) {
+      const { apiError } = await import('../_shared/api-error.ts')
+      return apiError(409, 'Cannot revoke the last superadmin assignment', {
+        correlationId: ctx.correlationId,
+      })
+    }
+  }
+
+  // Check assignment exists
+  const { data: assignment } = await supabaseAdmin
+    .from('user_roles')
+    .select('id')
+    .eq('user_id', target_user_id)
+    .eq('role_id', role_id)
+    .single()
+
+  if (!assignment) {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(404, 'Role assignment not found', { correlationId: ctx.correlationId })
+  }
+
+  // Delete assignment
+  const { error: deleteError } = await supabaseAdmin
+    .from('user_roles')
+    .delete()
+    .eq('user_id', target_user_id)
+    .eq('role_id', role_id)
+
+  if (deleteError) throw deleteError
+
+  // Audit — HIGH-RISK (fail-closed with rollback)
+  const auditResult = await logAuditEvent({
+    actorId: ctx.user.id,
+    action: 'rbac.role_revoked',
+    targetType: 'user_roles',
+    targetId: target_user_id,
+    metadata: {
+      role_id,
+      role_key: role.key,
+      target_user_id,
+    },
+    ipAddress: ctx.ipAddress,
+    userAgent: ctx.userAgent,
+    correlationId: ctx.correlationId,
+  })
+
+  if (!auditResult.success) {
+    // Rollback: re-assign the role
+    await supabaseAdmin
+      .from('user_roles')
+      .insert({ user_id: target_user_id, role_id, assigned_by: ctx.user.id })
+
+    const { apiError } = await import('../_shared/api-error.ts')
+    console.error('[REVOKE-ROLE] Audit write failed — rolling back', auditResult)
+    return apiError(500, 'Audit logging failed — operation rolled back', {
+      code: 'AUDIT_WRITE_FAILED',
+      correlationId: ctx.correlationId,
+    })
+  }
+
+  return apiSuccess({
+    success: true,
+    correlation_id: ctx.correlationId,
+    message: `Role ${role.key} revoked from user`,
+  })
+}))
