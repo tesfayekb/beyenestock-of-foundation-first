@@ -35,13 +35,13 @@ Tracks:
 status: implementation in progress
 phase: development
 code_generation: allowed
-modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed — schema, helpers, RLS, seed, edge functions deployed, allow+deny matrix verified, role-change reflection confirmed)
-active_work: Phase 2 fully closed (ACT-020). Artifact governance system created (ACT-022). Ready for Phase 3 advancement.
+modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed), user-management implemented (Phase 3C A+ closed — lifecycle, deactivate/reactivate, auth ban/unban, behavioral proof 7/7)
+active_work: Phase 3C closed (ACT-032). API shared infrastructure (3A) and audit logging (3B) previously built. Advancing to Phase 3D.
 current_plan_version: v7
 approved_plan_baseline: v7
 plan_status: approved
 artifact_governance: active (artifact-index.md, database-migration-ledger.md, phase-closures/)
-deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-009, DW-010]
+deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-009, DW-010, DW-011, DW-012, DW-013]
 last_updated: 2026-04-10
 ```
 
