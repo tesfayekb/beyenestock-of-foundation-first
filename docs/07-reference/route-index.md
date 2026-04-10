@@ -293,7 +293,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Panel** | user-panel |
 | **Related functions** | `getCurrentUser()`, `requireAuth()` |
 | **Related tests** | Dashboard render test, unauthenticated deny test |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/settings` — User Settings
 
@@ -309,7 +309,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related functions** | `requireAuth()`, `requireSelfScope()`, `getUserProfile()`, `updateUserProfile()` |
 | **Related events** | `user_panel.settings_changed` |
 | **Related tests** | Settings render test, update flow test, self-scope denial test |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/settings/security` — MFA Settings
 
@@ -325,7 +325,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Reauth required** | Yes (sensitive security action) |
 | **Related functions** | `requireAuth()`, `requireRecentAuth()`, `requireSelfScope()` |
 | **Related events** | `auth.mfa_enrolled`, `user_panel.mfa_updated`, `auth.session_revoked` |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 ### Admin Panel Routes (Privileged)
 
@@ -343,7 +343,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related functions** | `requireAuth()`, `checkPermission()` |
 | **Related tests** | Admin access allow/deny suite |
 | **Related risks** | RISK-002 (privilege escalation) |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/users` — User Management
 
@@ -358,7 +358,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Panel** | admin-panel |
 | **Related functions** | `listUsers()`, `checkPermission()` |
 | **Related tests** | User management allow/deny suite |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/users/:id/roles` — Role Assignment
 
@@ -377,7 +377,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related risks** | RISK-002 (privilege escalation) |
 | **Related watchlist** | RW-001 |
 | **Related tests** | Role assign/revoke allow/deny suite |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/users/:id` — User Detail / Edit
 
@@ -393,7 +393,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related functions** | `getUserProfile()`, `updateUserProfile()`, `checkPermission()` |
 | **Related events** | `user.profile_updated` |
 | **Related tests** | User detail view/edit allow/deny suite |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/users/:id/deactivate` — User Deactivation
 
@@ -411,7 +411,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related events** | `user.account_deactivated`, `auth.session_revoked` |
 | **Related risks** | User access disruption |
 | **Related tests** | Deactivation allow/deny suite, post-deactivation lockout test |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/users/:id/reactivate` — User Reactivation
 
@@ -429,7 +429,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related events** | `user.account_reactivated` |
 | **Related risks** | Premature access restoration |
 | **Related tests** | Reactivation allow/deny suite, post-reactivation access test |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/roles` — Role Management
 
@@ -443,7 +443,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Scope** | system-wide |
 | **Panel** | admin-panel |
 | **Related tests** | Role listing allow/deny tests |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/audit` — Audit Logs
 
@@ -458,7 +458,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Panel** | admin-panel |
 | **Related functions** | `queryAuditLogs()` |
 | **Related tests** | Audit view allow/deny tests |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/audit/export` — Audit Export
 
@@ -473,7 +473,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Panel** | admin-panel |
 | **Audit required** | Yes (compliance-sensitive data export) |
 | **Related tests** | Audit export allow/deny suite |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/monitoring` — Health Dashboard
 
@@ -488,7 +488,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Panel** | admin-panel |
 | **Related functions** | `getSystemHealth()` |
 | **Related tests** | Monitoring view allow/deny tests |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/monitoring/config` — Alert Configuration
 
@@ -503,7 +503,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Panel** | admin-panel |
 | **Audit required** | Yes |
 | **Related tests** | Monitoring config allow/deny tests |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/config` — System Config
 
@@ -520,7 +520,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Audit required** | Yes |
 | **Related events** | `admin.config_changed` |
 | **Related tests** | Config change allow/deny suite |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/jobs` — Jobs Dashboard
 
@@ -534,7 +534,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Scope** | system-wide |
 | **Panel** | admin-panel |
 | **Related tests** | Jobs view allow/deny tests |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/jobs/:id/trigger` — Manual Job Trigger
 
@@ -550,7 +550,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Audit required** | Yes |
 | **Related events** | `job.started` |
 | **Related tests** | Job trigger allow/deny suite |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/jobs/deadletter` — Dead-Letter Management
 
@@ -568,7 +568,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related events** | `job.replayed`, `job.dead_lettered` |
 | **Related risks** | RISK-007 (job failure cascade) |
 | **Related tests** | Dead-letter management allow/deny suite |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 #### `/admin/jobs/emergency` — Kill Switch
 
@@ -586,7 +586,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related events** | `job.kill_switch_activated` |
 | **Related risks** | RISK-007 |
 | **Related tests** | Kill switch allow/deny suite, emergency flow E2E |
-| **Lifecycle** | active |
+| **Lifecycle** | planned |
 
 ---
 
