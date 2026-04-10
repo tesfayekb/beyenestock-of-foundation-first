@@ -541,18 +541,18 @@ Each action must include:
 | **Docs Updated** | master-plan.md, system-state.md, deferred-work-register.md, action-tracker.md |
 | **Verification Type** | Runtime (DB queries + edge function curl) |
 | **Verification Scope** | Runtime |
-| **Evidence** | **Edge function deployment (4/4):** All 4 RBAC edge functions (assign-role, revoke-role, assign-permission-to-role, revoke-permission-from-role) return HTTP 401 "Missing authorization header" — deployed and auth-gated. **Allow matrix (DW-003):** Superadmin: 29/29 permissions → true (logical inheritance via is_superadmin). Admin role: 28/29 permissions mapped (all except jobs.emergency). User role: 5/29 permissions (mfa.self_manage, profile.self_manage, session.self_manage, users.edit_self, users.view_self). Non-existent user: 29/29 → false. Null user: all helpers → false. **Deny matrix cross-verified:** user role correctly denied admin.access, admin.config, roles.assign, roles.revoke, audit.view, users.view_all. **Role-change reflection (DW-006):** Architecture uses no permission cache — every authorization check is a fresh DB query via get_my_authorization_context() RPC. Role changes inherently reflected immediately. Last-superadmin guard trigger fires immediately on deletion attempt ("Cannot remove the last superadmin assignment"). No stale authorization state possible by design. |
-| **Verified By** | AI Agent (runtime DB verification) |
-| **Before State** | Phase 2 gate: 10/12 checked. DW-003 open (allow matrix). DW-006 open (role-change reflection). Edge functions unverified. |
-| **After State** | Phase 2 gate: 12/12 checked. DW-003 implemented. DW-006 implemented. All edge functions deployed. ACT-017 closed. |
-| **Rollback Available** | N/A (verification only) |
-| **Blast Radius** | Medium (gate closure) |
-| **Health Impact** | Improved — Phase 2 fully gated |
-| **Related Functions** | is_superadmin, has_role, has_permission, get_my_authorization_context |
+| **Evidence** | **AUTHENTICATED RUNTIME TESTS (2026-04-10T04:33–04:37 UTC):** All tests used real JWTs from Supabase Auth sign-in (not service role, not mocked). **1. assign-role:** Superadmin (tesfayekb@gmail.com) → 200 success, correlation_id=3964df25, role admin assigned to test user. Regular user (user role only) → 403 "Permission denied". No-auth → 401. Duplicate → 409. Audit log row verified in DB with matching correlation_id. Role assignment verified in user_roles table. **2. revoke-role:** Superadmin → 200 success, correlation_id=d5a3fa98, admin role revoked from test user. Last-superadmin protection → 409 "Cannot revoke the last superadmin assignment". Audit log verified. Role removal verified in DB. **3. assign-permission-to-role:** Superadmin → 200 success, correlation_id=b2272b6a, audit.view assigned to user role. Regular user → 403. Mapping verified in role_permissions. Audit log verified. **4. revoke-permission-from-role:** Superadmin → 200 success, correlation_id=2b1a4f86, audit.view revoked from user role. Regular user → 403. Mapping removal verified. Audit log verified. **5. Permission reflection (DW-006):** After admin role revoked from test user, has_permission('roles.assign') → false immediately. After audit.view revoked from user role, has_permission('audit.view') → false immediately. No cache — fresh DB queries confirmed. **6. Allow matrix (DW-003):** Superadmin 29/29, Admin 28/29 (denied jobs.emergency), User 5/29. All verified via has_permission() DB queries. **7. Bug found and fixed:** handle_new_user trigger had broken INSERT INTO user_roles (user_id, role) using non-existent column. Fixed to profile-only insert (handle_new_user_role handles role assignment correctly). |
+| **Verified By** | AI Agent (real authenticated runtime tests with JWT-based edge function calls) |
+| **Before State** | Phase 2 gate: 10/12 checked. DW-003 open. DW-006 open. Edge functions deployed but unverified with auth. handle_new_user trigger broken. |
+| **After State** | Phase 2 gate: 12/12 checked. DW-003 implemented (authenticated allow+deny). DW-006 implemented (runtime reflection verified). All 4 edge functions verified with real auth. handle_new_user fixed. |
+| **Rollback Available** | N/A (verification + bug fix) |
+| **Blast Radius** | Medium (gate closure + trigger fix) |
+| **Health Impact** | Improved — Phase 2 fully gated with A+ evidence |
+| **Related Functions** | is_superadmin, has_role, has_permission, get_my_authorization_context, handle_new_user (fixed) |
 | **Related Permissions** | All 29 permissions |
-| **Related Risks** | RISK-002 (privilege escalation — allow+deny matrix confirms correct enforcement) |
+| **Related Risks** | RISK-002 (privilege escalation — authenticated allow+deny matrix confirms correct enforcement) |
 | **Depends On** | ACT-015, ACT-017, ACT-019 |
-| **Status** | Verified |
+| **Status** | Verified (A+ — real authenticated runtime evidence) |
 
 ---
 
