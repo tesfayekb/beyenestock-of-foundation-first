@@ -604,6 +604,30 @@ Each action must include:
 
 ---
 
+### ACT-023: Phase 3 Stage 3A — Shared API Infrastructure + Audit Write Contract
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-10 |
+| **Type** | Feature |
+| **Impact** | HIGH |
+| **Modules Affected** | api, rbac, audit-logging |
+| **Docs Updated** | function-index.md (fn-v1.2: requireRole, requireSelfScope, logAuditEvent, checkPermission, checkPermissionOrThrow contracts updated/added), artifact-index.md (ART-011, ART-012), database-migration-ledger.md (MIG-010), deferred-work-register.md (DW-009, DW-010 implemented), action-tracker.md |
+| **Verification Type** | Unit tests (26 Deno tests passing) + migration applied |
+| **Verification Scope** | Immediate |
+| **Evidence** | (1) 10 shared helper files created in supabase/functions/_shared/; (2) 26 unit tests passing: apiError (4), normalizeRequest (5), validateRequest (4), error classes (3), createHandler (5), requireSelfScope (2), requireRecentAuth (2), apiSuccess (1); (3) function-index.md updated to fn-v1.2 — requireRole(roleKey: string) + rare-utility note, requireSelfScope(targetUserId) single-param, logAuditEvent returns AuditWriteResult, checkPermissionOrThrow added as new entry, checkPermission reclassified as ui-shared; (4) MIG-010 audit_logs INSERT policy applied; (5) DW-009 and DW-010 resolved. |
+| **Verified By** | AI Agent |
+| **Before State** | No shared edge function infrastructure; each edge function duplicated auth/validation/error logic; function-index had stale requireRole(app_role) contract |
+| **After State** | Canonical shared helpers established; all Phase 3+ edge functions can import from _shared/mod.ts; function contracts reconciled |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Delete supabase/functions/_shared/; revert function-index.md to fn-v1.1 |
+| **Blast Radius** | System-wide (all future edge functions) |
+| **Health Impact** | Improved — eliminates code duplication, enforces canonical request pipeline |
+| **Status** | Verified |
+| **Resolves Deferred** | DW-009, DW-010 |
+
+---
+
 ### Risk Resolution Tracking
 
 - If action resolves a risk → must link risk ID in `related_risks`

@@ -281,9 +281,9 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | ACT-015, ACT-017 |
 | **Required Tests for Closure** | Correct role → access allowed; wrong role → 403; no role → 403; superadmin bypass verified; integration with edge function auth pattern |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | ACT-023 |
+| **Implemented in Plan Version** | Phase 3 Stage 3A |
 
 ---
 
@@ -305,9 +305,9 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | ACT-015, ACT-017 |
 | **Required Tests for Closure** | Own resource → access allowed; other user's resource → 403; admin override if applicable; null/missing userId → 403 |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | ACT-023 |
+| **Implemented in Plan Version** | Phase 3 Stage 3A |
 
 ---
 
@@ -323,8 +323,8 @@ At each phase boundary (before advancing to the next phase):
 | DW-006 | Cache Invalidation Verification | Phase 2 | Phase 3 | `implemented` |
 | DW-007 | Moderator Role | Phase 2 | `unassigned` (v2) | `deferred` |
 | DW-008 | MFA Recovery Codes | Phase 1 | Phase 4 | `assigned` |
-| DW-009 | requireRole() Shared Function | Phase 2 | Phase 3 | `assigned` |
-| DW-010 | requireSelfScope() Shared Function | Phase 2 | Phase 3 | `assigned` |
+| DW-009 | requireRole() Shared Function | Phase 2 | Phase 3 | `implemented` |
+| DW-010 | requireSelfScope() Shared Function | Phase 2 | Phase 3 | `implemented` |
 
 ## Dependencies
 
