@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,16 +12,37 @@ export default function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isRecovery, setIsRecovery] = useState(false);
-  const { updatePassword } = useAuth();
+  const [checking, setChecking] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check for recovery token in URL hash
+    // Check hash first (before Supabase consumes it)
     const hash = window.location.hash;
     if (hash.includes('type=recovery')) {
       setIsRecovery(true);
+      setChecking(false);
+      return;
     }
+
+    // Listen for PASSWORD_RECOVERY event (Supabase may have already consumed the hash)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecovery(true);
+        setChecking(false);
+      }
+    });
+
+    // Also check if we already have a session (recovery link may have been processed)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        // User has a session on the reset page — likely from recovery link
+        setIsRecovery(true);
+      }
+      setChecking(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,20 +58,42 @@ export default function ResetPassword() {
     }
 
     setLoading(true);
-    const { error } = await updatePassword(password);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
 
-    if (error) {
+      if (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Update failed',
+          description: error.message,
+        });
+      } else {
+        toast({ title: 'Password updated', description: 'You can now sign in with your new password.' });
+        // Sign out so they can sign in fresh with new password
+        await supabase.auth.signOut();
+        navigate('/sign-in', { replace: true });
+      }
+    } catch {
       toast({
         variant: 'destructive',
         title: 'Update failed',
-        description: error.message,
+        description: 'An unexpected error occurred. Please try again.',
       });
-    } else {
-      toast({ title: 'Password updated', description: 'You can now sign in with your new password.' });
-      navigate('/sign-in', { replace: true });
     }
     setLoading(false);
   };
+
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md text-center">
+          <CardHeader>
+            <CardTitle className="text-2xl">Verifying reset link…</CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
 
   if (!isRecovery) {
     return (
