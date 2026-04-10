@@ -1,6 +1,6 @@
 # Event Index
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09 | **Status:** Living Document | **Event Schema Version:** `evt-v1.1`
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-10 | **Status:** Living Document | **Event Schema Version:** `evt-v1.2`
 
 ## Purpose
 
