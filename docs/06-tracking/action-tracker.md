@@ -1012,6 +1012,27 @@ Each action must include:
 | **Deferred Items** | DW-024 (unbounded aggregation — now applies to edge function server-side counts too) |
 | **Status** | Verified |
 
+### ACT-038a: Stage 4C — Corrective Governance & Runtime Evidence
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-11 |
+| **Type** | Documentation |
+| **Impact** | HIGH |
+| **Modules Affected** | admin-panel, api |
+| **Docs Updated** | route-index.md (v1.7: /admin/roles, /admin/roles/:id, /admin/permissions lifecycle planned→active; GET /list-roles, GET /get-role-detail, GET /list-permissions API entries already added in v1.7), stage-4-plan.md (success criterion #8 reworded to reflect selection dialog pattern variant), action-tracker.md (this corrective entry) |
+| **Verification Type** | Runtime (edge function deployment + curl tests) |
+| **Verification Scope** | Runtime |
+| **Evidence** | **Runtime verification:** (1) All 3 edge functions deployed successfully — ✅. (2) GET /list-roles returns 401 with structured error `{"error":"Missing or malformed authorization header","code":"UNAUTHORIZED","correlation_id":"..."}` for unauthenticated requests — confirms auth enforcement active — ✅. (3) GET /list-permissions returns identical 401 structure — ✅. (4) Response shape validated: apiSuccess({ data }) → json.data extraction chain confirmed in apiClient.handleResponse — ✅. **SSOT corrections:** (5) Frontend routes /admin/roles, /admin/roles/:id, /admin/permissions lifecycle updated from `planned` to `active` in route-index.md — ✅. (6) Stage 4C success criterion #8 clarified: ConfirmActionDialog for destructive actions, selection dialogs (Dialog + Select) for assign flows — both are governed patterns — ✅. |
+| **Verified By** | AI Agent + Project Lead review |
+| **Before State** | ACT-038 lacked runtime evidence; 3 frontend routes still marked `planned`; dialog criterion overstated |
+| **After State** | Runtime evidence recorded; route lifecycle reconciled; criterion accurately reflects implementation |
+| **Rollback Available** | N/A (documentation correction) |
+| **Blast Radius** | Low (documentation only) |
+| **Health Impact** | Neutral |
+| **Related Actions** | ACT-038 (corrected by this entry) |
+| **Status** | Verified |
+
 ---
 
 - If action resolves a risk → must link risk ID in `related_risks`
@@ -1047,7 +1068,7 @@ Each action must include:
 | Type | Count | High Impact |
 |------|-------|-------------|
 | Feature | 8 | 8 |
-| Documentation | 13 | 12 |
+| Documentation | 14 | 13 |
 | Fix | 4 | 2 |
 | Security | 10 | 10 |
 | Performance | 0 | 0 |
@@ -1057,7 +1078,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 35 |
+| Verified | 36 |
 | Superseded | 2 (ACT-027, ACT-028) |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -1067,7 +1088,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 1 (reactivation auth-unban gap — ACT-029)
 - Open (unverified) actions: 0
-- High-impact actions this period: 34
+- High-impact actions this period: 35
 
 _Updated as actions are added._
 

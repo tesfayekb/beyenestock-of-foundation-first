@@ -280,7 +280,7 @@ No UI code may begin until ALL three governance docs are approved:
 - [x] Immutable roles cannot have key/base/immutable fields changed — ACT-038 (UI + DB triggers)
 - [x] Self-superadmin-revocation blocked (409 from backend, friendly error in UI) — ACT-038
 - [x] requireRecentAuth triggers re-authentication when needed — ACT-038
-- [x] All dialogs use governed ConfirmActionDialog pattern — ACT-038
+- [x] All dialogs use governed dialog patterns (ConfirmActionDialog for destructive actions; selection dialogs for assign flows use Dialog + Select with consistent footer/loading pattern) — ACT-038
 
 ---
 
