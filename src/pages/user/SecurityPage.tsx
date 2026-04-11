@@ -149,7 +149,7 @@ export default function SecurityPage() {
         title="Remove MFA Factor"
         description="This will remove the authenticator app from your account. You'll need to set up a new one to re-enable MFA."
         confirmLabel="Remove"
-        variant="destructive"
+        destructive
         loading={unenrolling}
         onConfirm={handleUnenroll}
       />
