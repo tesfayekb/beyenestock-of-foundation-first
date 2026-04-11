@@ -96,6 +96,7 @@ export function AdminEditProfileCard({
       <div className="space-y-2">
         <Label htmlFor="admin-edit-avatar">Avatar URL</Label>
         <Input
+          type="url"
           id="admin-edit-avatar"
           value={avatar}
           onChange={(e) => setAvatar(e.target.value)}

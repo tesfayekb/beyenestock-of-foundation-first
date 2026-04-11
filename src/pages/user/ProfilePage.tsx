@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/dashboard/PageHeader';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
 import { useProfile } from '@/hooks/useProfile';
+import { isValidAvatarUrl } from '@/lib/validation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,17 +11,6 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Save, Mail, Shield } from 'lucide-react';
 import { toast } from 'sonner';
-
-// SCENARIO-2: Only allow https:// avatar URLs
-function isValidAvatarUrl(url: string): boolean {
-  if (!url) return true; // empty is valid (clears avatar)
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
 
 export default function ProfilePage() {
   const { profile, isLoading, isError, refetch, updateProfile, isUpdating } = useProfile();
