@@ -477,6 +477,39 @@ The following admin-panel.md scope items have NO backend implementation yet and 
 - [x] DW-018 updated to implemented
 - [x] component-inventory.md updated with PasswordChangeCard
 
+---
+
+### Stage 4K — Admin Panel Completion: Edit User Profile (DW-027)
+
+**Status:** IMPLEMENTED (ACT-043)
+**Prerequisite:** Stage 4J closed
+
+**Scope:** Add inline edit form to UserDetailPage Profile Information card for admins with `users.edit_any` permission.
+
+**Implementation:**
+- Created `src/components/admin/AdminEditProfileCard.tsx` — inline toggle edit form
+- Created `src/lib/validation.ts` — shared `isValidAvatarUrl()` utility (SSOT for URL validation)
+- Fields: display_name (text, maxLength 255) + avatar_url (HTTPS-only validation)
+- Gated by `checkPermission(context, 'users.edit_any')` and blocked for self-edit (`isSelf`)
+- Calls `apiClient.patch('update-profile', { user_id, display_name, avatar_url })`
+- On success: invalidates `['admin', 'user', id]` query, toast feedback
+- Save/Cancel buttons, form syncs on prop changes
+
+**Verification Checklist:**
+- [x] Edit button appears only for admins with users.edit_any permission
+- [x] Edit button hidden for self (isSelf check)
+- [x] Inline form with display_name and avatar_url fields
+- [x] Avatar URL HTTPS validation with inline error
+- [x] Calls update-profile edge function with user_id param
+- [x] Query invalidation on success
+- [x] Toast feedback on success/error
+- [x] No new edge functions needed
+- [x] TypeScript build: zero errors
+- [x] DW-027 updated to implemented
+- [x] component-inventory.md updated with AdminEditProfileCard
+
+---
+
 ### Stage 4I — Navigation & Breadcrumb Enhancements (PLANNED — requires plan document)
 
 **Status:** PLANNED — not approved for implementation
@@ -508,6 +541,11 @@ Admin and user panels share the same:
 - `DataTable` for all tabular data
 - `EmptyState` / `ErrorState` / `LoadingSkeleton` / `AccessDenied` for state handling
 - Form field styles, card styles, badge styles
+
+**Panel-specific component directories:**
+- `src/components/admin/` — admin-only components (AssignRoleDialog, ManagePermissionsDialog, AdminEditProfileCard, etc.)
+- `src/components/user/` — user-panel-only components (PasswordChangeCard, etc.)
+- `src/components/dashboard/` — shared shell components used by both panels
 
 User pages may simplify **content** (fewer fields, fewer actions), but NOT **shell language**.
 

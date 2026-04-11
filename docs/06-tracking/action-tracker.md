@@ -1160,7 +1160,23 @@ Each action must include:
 - Risk register entry must be updated to reflect resolution
 - Resolution evidence in action tracker = risk resolution evidence
 
-### Regression Tracking
+### ACT-043: Stage 4K — Admin Edit User Profile (DW-027)
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-043 |
+| **Date** | 2026-04-11 |
+| **Action** | Stage 4K: Implemented admin edit user profile form in UserDetailPage. Created AdminEditProfileCard component with inline edit toggle. Created shared validation.ts utility for isValidAvatarUrl(). Form gated by users.edit_any permission and isSelf check. Calls update-profile edge function with user_id param. DW-027 status updated to implemented. Shell Uniformity Rule updated to document components/user/ and components/admin/ directories. |
+| **Type** | Feature |
+| **Impact Classification** | Medium |
+| **Modules Affected** | admin-panel |
+| **Files Changed** | UserDetailPage.tsx (integrated), AdminEditProfileCard.tsx (new), validation.ts (new), stage-4-plan.md, deferred-work-register.md, system-state.md, component-inventory.md, action-tracker.md |
+| **Docs Updated** | stage-4-plan.md (Stage 4K section + Shell Uniformity Rule), deferred-work-register.md (DW-027 → implemented), system-state.md, component-inventory.md, action-tracker.md |
+| **Evidence** | TypeScript build: zero errors. update-profile edge function already supports user_id param. |
+| **Verified By** | AI Agent |
+| **Status** | Verified |
+
+---
 
 - If action introduces regression → must link watchlist item in `related_watchlist`
 - Regression fix actions must reference the original regression
