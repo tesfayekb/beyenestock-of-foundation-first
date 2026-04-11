@@ -45,6 +45,7 @@ async function getMfaStatus(): Promise<MfaStatus> {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [state, setState] = useState<AuthState>({
     user: null,
     session: null,
@@ -134,11 +135,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     const userId = state.user?.id;
+    queryClient.clear(); // Prevent cross-user data flash on shared devices
     await supabase.auth.signOut();
     if (userId) {
       emitSignedOut(userId);
     }
-  }, [state.user?.id]);
+  }, [state.user?.id, queryClient]);
 
   const resetPassword = useCallback(async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
