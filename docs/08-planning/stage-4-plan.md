@@ -421,7 +421,7 @@ The following admin-panel.md scope items have NO backend implementation yet and 
 
 ### Stage 4H — Shell Polish & Accessibility Baseline
 
-**Status:** IN PROGRESS
+**Status:** IMPLEMENTED (ACT-041)
 **Scope Constraint:** Shell files only. Blast radius limited to DashboardLayout.tsx, DashboardSidebar.tsx, AdminLayout.tsx, UserLayout.tsx, App.tsx, and one new DashboardNotFound component. No edge functions, no hooks, no auth, no RBAC, no permissions, no route-index changes.
 
 **Deliverables:**
