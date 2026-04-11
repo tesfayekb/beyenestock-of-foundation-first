@@ -332,7 +332,7 @@ At each phase boundary (before advancing to the next phase):
 | DW-015 | Superadmin guardrails | Phase 3 | Phase 3.5 | `implemented` |
 | DW-016 | Admin Monitoring/Health UI | Phase 4 | Phase 5 | `assigned` |
 | DW-017 | Admin Jobs/Config UI | Phase 4 | Phase 5 | `assigned` |
-| DW-018 | User Password Change Flow | Phase 4 | Phase 4 follow-up / Phase 5 | `assigned` |
+| DW-018 | User Password Change Flow | Phase 4 | Phase 4 (Stage 4J) | `implemented` |
 | DW-019 | User Session Revocation | Phase 4 | Phase 4 follow-up / Phase 5 | `assigned` |
 | DW-020 | User Notification Preferences | Phase 4 | Phase 5+ | `assigned` |
 | DW-021 | DB-level admin user search (replace auth.admin.listUsers) | Phase 4 | Phase 6 | `assigned` |
