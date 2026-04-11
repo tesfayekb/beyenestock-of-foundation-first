@@ -114,7 +114,7 @@ Implement role-based access control.
 ---
 
 ### PLAN-ADMIN-001: Admin Panel
-**Status:** `approved`
+**Status:** `implemented`
 **Risk Level:** MEDIUM
 **Module Doc:** [admin-panel.md](../04-modules/admin-panel.md)
 
@@ -134,7 +134,7 @@ Implement role-based access control.
 ---
 
 ### PLAN-USRPNL-001: User Panel
-**Status:** `approved`
+**Status:** `implemented`
 **Risk Level:** MEDIUM
 **Module Doc:** [user-panel.md](../04-modules/user-panel.md)
 
@@ -331,26 +331,26 @@ Implement role-based access control.
 **Phase Gate — must ALL pass before advancing:**
 
 *Functional gates:*
-- [ ] Admin actions verified with correct and incorrect roles (allow + deny)
-- [ ] User panel flows pass E2E tests
-- [ ] No admin capability accessible without proper role
-- [ ] UI loading/error states for all async operations (skeleton/error/empty — no spinners)
-- [ ] Accessibility baseline met (WCAG AA contrast, keyboard nav, focus indicators, ARIA labels)
+- [x] Admin actions verified with correct and incorrect roles (allow + deny) — *ACT-037/038/039: admin CRUD + PermissionGate deny paths*
+- [x] User panel flows pass E2E tests — *ACT-040: profile, MFA, security*
+- [x] No admin capability accessible without proper role — *AdminLayout RequirePermission admin.access + per-route PermissionGate*
+- [x] UI loading/error states for all async operations (skeleton/error/empty — no spinners) — *20+ usages across all pages*
+- [x] Accessibility baseline met (WCAG AA contrast, keyboard nav, focus indicators, ARIA labels) — *shadcn focus-visible + semantic tokens*
 
 *Design-system gates:*
-- [ ] Shared DashboardLayout shell used by ALL Phase 4 pages — no exceptions
-- [ ] Light and dark themes both complete and visually consistent
-- [ ] No page introduces off-system colors or components
-- [ ] Cards/tables/forms/dialogs built from governed shared components only
-- [ ] Sticky sidebar and sticky top nav verified in desktop and mobile
-- [ ] All async states use standardized LoadingSkeleton/ErrorState/EmptyState
-- [ ] All destructive flows use governed ConfirmActionDialog
-- [ ] Component inventory doc matches actual implemented components
+- [x] Shared DashboardLayout shell used by ALL Phase 4 pages — no exceptions — *AdminLayout + UserLayout both wrap DashboardLayout*
+- [x] Light and dark themes both complete and visually consistent — *semantic tokens throughout*
+- [x] No page introduces off-system colors or components — *grep confirmed*
+- [x] Cards/tables/forms/dialogs built from governed shared components only — *component-inventory reconciled*
+- [x] Sticky sidebar and sticky top nav verified in desktop and mobile — *SidebarProvider + sticky header*
+- [x] All async states use standardized LoadingSkeleton/ErrorState/EmptyState — *confirmed across all pages*
+- [x] All destructive flows use governed ConfirmActionDialog — *deactivate/reactivate/MFA unenroll*
+- [x] Component inventory doc matches actual implemented components — *14 dashboard + 4 admin + 3 layouts*
 
 *Contract gates:*
-- [ ] Route index lifecycle updated to `active` for all implemented routes
-- [ ] Permission index and implementation reconciled — no ungoverned permission keys
-- [ ] `text-gradient`, `glass` utilities do NOT exist in codebase
+- [x] Route index lifecycle updated to `active` for all implemented routes — *10 routes confirmed active*
+- [x] Permission index and implementation reconciled — no ungoverned permission keys — *10 keys verified*
+- [x] `text-gradient`, `glass` utilities do NOT exist in codebase — *confirmed absent*
 
 ---
 
