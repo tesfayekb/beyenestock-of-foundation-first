@@ -1,9 +1,9 @@
 # Phase 4 — Admin & User Interfaces Plan (v3)
 
-> **Status:** IMPLEMENTED (Stage 4A ✅, Stage 4B ✅, Stage 4C ✅, Stage 4D ✅, Stage 4E ✅)  
+> **Status:** IMPLEMENTED (Stage 4A ✅, Stage 4B ✅, Stage 4C ✅, Stage 4D ✅, Stage 4E ✅, Stage 4H ✅, Stage 4J ✅, Stage 4K ✅, Stage 4I ✅)  
 > **Owner:** AI  
 > **Created:** 2026-04-10  
-> **Revised:** 2026-04-11 (v6 — Stage 4E implemented + quality hardening; ACT-040a corrective applied)  
+> **Revised:** 2026-04-11 (v7 — Stage 4I navigation enhancements implemented; ACT-044)  
 > **Scope:** PLAN-ADMIN-001 (Admin Panel) + PLAN-USRPNL-001 (User Panel)  
 > **Baseline:** Executes against approved plan baseline v9  
 > **Supersedes:** Stage 4 Plan v1, v2
@@ -587,6 +587,27 @@ User pages may simplify **content** (fewer fields, fewer actions), but NOT **she
 | `/dashboard` | UserDashboard | authenticated | 4E | ✅ exists |
 | `/settings` | ProfilePage | `profile.self_manage` | 4E | ✅ exists |
 | `/settings/security` | SecurityPage | `mfa.self_manage` + `session.self_manage` | 4E | ✅ exists |
+
+---
+
+## Stage 4I — Navigation Enhancements (ACT-044) — IMPLEMENTED
+
+**Plan document:** `docs/08-planning/stage-4i-plan.md`
+
+### Items Implemented
+
+| Item | Description | Status |
+|------|-------------|--------|
+| Item 23 | Mobile isMobile awareness — `collapsed = state === 'collapsed' && !isMobile` | ✅ |
+| Item 5 | Nested/collapsible nav groups — Collapsible with ChevronRight, auto-open on active child | ✅ |
+| Item 11 | Dynamic breadcrumb entity names — UUID segments resolved from React Query cache | ✅ |
+| Item 13 | Active parent highlighting — parent shows active style when any child isActive | ✅ |
+| Item 24 | Nav item badge support — `badge?: string \| number` on NavItem, rendered in expanded mode | ✅ |
+
+### Files Changed
+- `src/components/dashboard/DashboardSidebar.tsx` — nested groups, badges, mobile fix, active parent
+- `src/components/dashboard/DashboardBreadcrumbs.tsx` — dynamic entity name resolution
+- `src/config/navigation.types.ts` — `badge` field added
 
 ---
 
