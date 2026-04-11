@@ -985,6 +985,35 @@ Each action must include:
 
 ---
 
+### ACT-038: Stage 4C — Admin Role & Permission Management Gate Closure
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-11 |
+| **Type** | Feature |
+| **Impact** | HIGH |
+| **Modules Affected** | admin-panel, api, rbac |
+| **Docs Updated** | stage-4-plan.md (v4→v5, 4C checkboxes ticked, API integration table updated to edge functions), system-state.md (active_work updated), action-tracker.md (this entry) |
+| **Verification Type** | Hybrid (code review + TypeScript build + AI reviewer feedback) |
+| **Verification Scope** | Runtime |
+| **Evidence** | **Stage 4C deliverables verified:** (1) AdminRolesPage with DataTable, role counts, click-through to detail — ✅. (2) RoleDetailPage with permissions list, users list, assign/revoke permission with immutability guards (!role.is_immutable) — ✅. (3) AdminPermissionsPage with DataTable, role assignments column — ✅. (4) User role assignment/revocation from UserDetailPage via assign-role/revoke-role edge functions — ✅. (5) **Critical fix: ALL role/permission data access moved from direct Supabase client queries to edge functions** (list-roles, get-role-detail, list-permissions) — eliminates RLS bypass risk, ensures consistent authorization boundary — ✅. (6) useRoles() in UserDetailPage now uses `enabled` flag (canAssignRoles \|\| canRevokeRoles) to prevent unauthorized 403s — ✅. (7) Cache invalidation: ['admin','users'] added to role assign/revoke handlers for stale role badge refresh — ✅. (8) TypeScript build: zero errors — ✅. |
+| **Verified By** | AI Agent + 2 independent AI reviewers + Project Lead |
+| **Before State** | Stage 4C functionally implemented but using direct Supabase client for role/permission reads (architecture violation); useRoles() fired unconditionally; stale user list cache after role changes |
+| **After State** | Stage 4C complete: all data access through edge functions, conditional query execution, proper cache invalidation. Architecture alignment achieved. |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert edge functions (list-roles, get-role-detail, list-permissions), revert useRoles.ts to Supabase client version, revert useRoleActions.ts cache changes |
+| **Blast Radius** | Large (3 new edge functions + frontend hook rewiring) |
+| **Health Impact** | Improved (consistent authorization boundary) |
+| **Related Routes** | `/admin/roles`, `/admin/roles/:id`, `/admin/permissions` |
+| **Related Permissions** | `roles.view`, `roles.assign`, `roles.revoke`, `permissions.assign`, `permissions.revoke` |
+| **Related Functions** | list-roles (new), get-role-detail (new), list-permissions (new), useRoles (rewritten), useRoleActions (updated) |
+| **Related Actions** | ACT-037 (Stage 4B closure) |
+| **Related Risks** | None new |
+| **Deferred Items** | DW-024 (unbounded aggregation — now applies to edge function server-side counts too) |
+| **Status** | Verified |
+
+---
+
 - If action resolves a risk → must link risk ID in `related_risks`
 - Risk register entry must be updated to reflect resolution
 - Resolution evidence in action tracker = risk resolution evidence
@@ -1017,7 +1046,7 @@ Each action must include:
 
 | Type | Count | High Impact |
 |------|-------|-------------|
-| Feature | 7 | 7 |
+| Feature | 8 | 8 |
 | Documentation | 13 | 12 |
 | Fix | 4 | 2 |
 | Security | 10 | 10 |
@@ -1028,7 +1057,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 34 |
+| Verified | 35 |
 | Superseded | 2 (ACT-027, ACT-028) |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -1038,7 +1067,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 1 (reactivation auth-unban gap — ACT-029)
 - Open (unverified) actions: 0
-- High-impact actions this period: 33
+- High-impact actions this period: 34
 
 _Updated as actions are added._
 

@@ -1,9 +1,9 @@
 # Phase 4 — Admin & User Interfaces Plan (v3)
 
-> **Status:** APPROVED-PARTIAL (Stage 4A ✅, Stage 4B ✅, Stage 4C in progress, Stage 4D pending)  
+> **Status:** APPROVED-PARTIAL (Stage 4A ✅, Stage 4B ✅, Stage 4C ✅, Stage 4D pending)  
 > **Owner:** AI  
 > **Created:** 2026-04-10  
-> **Revised:** 2026-04-11 (v4 — Stage 4B gate closed, status updated to approved-partial)  
+> **Revised:** 2026-04-11 (v5 — Stage 4C gate closed, all data access moved to edge functions)  
 > **Scope:** PLAN-ADMIN-001 (Admin Panel) + PLAN-USRPNL-001 (User Panel)  
 > **Baseline:** Executes against approved plan baseline v9  
 > **Supersedes:** Stage 4 Plan v1, v2
@@ -242,15 +242,15 @@ No UI code may begin until ALL three governance docs are approved:
 
 **API Integration:**
 
-| UI Action | Edge Function / RPC | Permission Required |
-|-----------|-------------------|-------------------|
-| List roles | Supabase client (RLS: `roles.view`) | `roles.view` |
-| View role detail | Supabase client | `roles.view` |
+| UI Action | Edge Function | Permission Required |
+|-----------|--------------|-------------------|
+| List roles | `list-roles` | `roles.view` |
+| View role detail | `get-role-detail` | `roles.view` |
 | Assign role to user | `assign-role` | `roles.assign` |
 | Revoke role from user | `revoke-role` | `roles.revoke` |
 | Assign permission to role | `assign-permission-to-role` | `permissions.assign` |
 | Revoke permission from role | `revoke-permission-from-role` | `permissions.revoke` |
-| List permissions | Supabase client (RLS: `roles.view`) | `roles.view` |
+| List permissions | `list-permissions` | `roles.view` |
 
 **Route Conformance (per route-index.md):**
 
@@ -273,14 +273,14 @@ No UI code may begin until ALL three governance docs are approved:
 | `src/components/admin/ManagePermissionsDialog.tsx` | New |
 
 **Success Criteria:**
-- [ ] Role list displays with correct counts using DataTable
-- [ ] Role detail shows permissions and users
-- [ ] Assign/revoke role works with audit logging
-- [ ] Assign/revoke permission on role works
-- [ ] Immutable roles cannot have key/base/immutable fields changed
-- [ ] Self-superadmin-revocation blocked (409 from backend, friendly error in UI)
-- [ ] requireRecentAuth triggers re-authentication when needed
-- [ ] All dialogs use governed ConfirmActionDialog pattern
+- [x] Role list displays with correct counts using DataTable — ACT-038
+- [x] Role detail shows permissions and users — ACT-038
+- [x] Assign/revoke role works with audit logging — ACT-038
+- [x] Assign/revoke permission on role works — ACT-038
+- [x] Immutable roles cannot have key/base/immutable fields changed — ACT-038 (UI + DB triggers)
+- [x] Self-superadmin-revocation blocked (409 from backend, friendly error in UI) — ACT-038
+- [x] requireRecentAuth triggers re-authentication when needed — ACT-038
+- [x] All dialogs use governed ConfirmActionDialog pattern — ACT-038
 
 ---
 

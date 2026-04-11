@@ -41,7 +41,7 @@ export default function UserDetailPage() {
     { target_id: id, limit: 10 },
     { enabled: !!id && canViewAudit },
   );
-  const { data: allRoles } = useRoles();
+  const { data: allRoles } = useRoles({ enabled: canAssignRoles || canRevokeRoles });
 
   const deactivateMutation = useDeactivateUser();
   const reactivateMutation = useReactivateUser();

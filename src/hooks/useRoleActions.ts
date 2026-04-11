@@ -31,6 +31,7 @@ export function useAssignRole() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'user-roles', variables.target_user_id] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'role'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to assign role');
@@ -47,6 +48,7 @@ export function useRevokeRole() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'user-roles', variables.target_user_id] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'role'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to revoke role');
