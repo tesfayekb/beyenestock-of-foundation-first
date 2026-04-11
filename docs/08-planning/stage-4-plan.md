@@ -1,9 +1,9 @@
 # Phase 4 — Admin & User Interfaces Plan (v3)
 
-> **Status:** PROPOSED — awaiting approval  
+> **Status:** APPROVED-PARTIAL (Stage 4A ✅, Stage 4B ✅, Stage 4C in progress, Stage 4D pending)  
 > **Owner:** AI  
 > **Created:** 2026-04-10  
-> **Revised:** 2026-04-10 (v3 — governance hardening, architecture dedup, enforcement rules)  
+> **Revised:** 2026-04-11 (v4 — Stage 4B gate closed, status updated to approved-partial)  
 > **Scope:** PLAN-ADMIN-001 (Admin Panel) + PLAN-USRPNL-001 (User Panel)  
 > **Baseline:** Executes against approved plan baseline v9  
 > **Supersedes:** Stage 4 Plan v1, v2
@@ -211,13 +211,13 @@ No UI code may begin until ALL three governance docs are approved:
 | `src/hooks/useUserActions.ts` | New — deactivate/reactivate mutations |
 
 **Success Criteria:**
-- [ ] User list loads with pagination using DataTable
-- [ ] Search and filter work correctly
-- [ ] User detail shows complete profile + roles
-- [ ] Deactivate/reactivate flows work with ConfirmActionDialog
-- [ ] Unauthorized users see AccessDenied page
-- [ ] Loading → LoadingSkeleton, error → ErrorState, empty → EmptyState
-- [ ] All components from governed inventory — no page-local variants
+- [x] User list loads with pagination using DataTable (ACT-037)
+- [x] Search and filter work correctly (ACT-037 — email search functional with DW-021 scalability caveat)
+- [x] User detail shows complete profile + roles (ACT-037 — roles column, role badges, permission-gated)
+- [x] Deactivate/reactivate flows work with ConfirmActionDialog (ACT-037)
+- [x] Unauthorized users see AccessDenied page (ACT-037 — RequirePermission + PermissionGate on all admin routes)
+- [x] Loading → LoadingSkeleton, error → ErrorState, empty → EmptyState (ACT-037)
+- [x] All components from governed inventory — no page-local variants (ACT-037)
 
 ---
 

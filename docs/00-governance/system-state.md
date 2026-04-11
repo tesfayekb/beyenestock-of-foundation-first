@@ -36,13 +36,13 @@ status: implementation in progress
 phase: development
 code_generation: allowed
 modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 denial logging hardened), api implemented (Stage 3A closed + Phase 3.5 superadmin guardrails hardened)
-active_work: Phase 3.5 CLOSED — DW-014 (denial audit logging) + DW-015 (superadmin guardrails) implemented and runtime-verified. Advancing to Phase 4.
+active_work: Phase 4 in progress — Stage 4A (shell/layout) ✅, Stage 4B (admin user management) ✅ (ACT-037), Stage 4C (admin role/permission management) in progress, Stage 4D (admin audit viewer) pending. DW-021–024 registered as hardening items.
 current_plan_version: v9
 approved_plan_baseline: v9
 plan_status: approved
 artifact_governance: active (artifact-index.md, database-migration-ledger.md, phase-closures/)
-deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-011, DW-012, DW-013]
-last_updated: 2026-04-10
+deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-011, DW-012, DW-013, DW-021, DW-022, DW-023, DW-024]
+last_updated: 2026-04-11
 ```
 
 ## Execution Control Rules
@@ -80,7 +80,7 @@ If inconsistency is detected → execution must **STOP** and be corrected.
 | auth | in progress (A+D implemented + hardened: shared functions, events, email gate; B+C deferred [DW-001/002], MFA recovery codes deferred [DW-008]) | 2026-04-10 |
 | rbac | implemented (Phase 2 gate 12/12 closed + Phase 3.5 hardened: requireRecentAuth on 4 RBAC endpoints, self-superadmin-revocation prevention [DW-015]) | 2026-04-10 |
 | user-management | implemented (Phase 3C closed [ACT-032]: lifecycle, deactivate/reactivate, auth ban/unban; Phase 3D Gate 1 runtime-verified [ACT-035]) | 2026-04-10 |
-| admin-panel | not started | — |
+| admin-panel | in progress (Stage 4A shell ✅, Stage 4B user management ✅ [ACT-037], Stage 4C role/permission management in progress) | 2026-04-11 |
 | user-panel | not started | — |
 | audit-logging | implemented (Phase 3B closed + Phase 3.5 hardened: centralized denial audit logging via auth.permission_denied event, nullable actor_id, correlation_id in metadata [DW-014]) | 2026-04-10 |
 | health-monitoring | not started | — |

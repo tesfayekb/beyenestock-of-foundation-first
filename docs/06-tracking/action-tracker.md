@@ -956,6 +956,35 @@ Each action must include:
 
 ---
 
+### ACT-037: Stage 4B — Admin User Management Gate Closure
+
+| Field | Value |
+|-------|-------|
+| **Date** | 2026-04-11 |
+| **Type** | Feature |
+| **Impact** | HIGH |
+| **Modules Affected** | admin-panel, api, audit-logging, rbac |
+| **Docs Updated** | stage-4-plan.md (v3→v4, status PROPOSED→APPROVED-PARTIAL, 4B checkboxes ticked), system-state.md (active_work updated, admin-panel status updated, DW-021–024 added to open list), action-tracker.md (this entry), deferred-work-register.md (DW-021–024 added) |
+| **Verification Type** | Hybrid (code review + TypeScript build + AI reviewer feedback) |
+| **Verification Scope** | Runtime |
+| **Evidence** | **Stage 4B deliverables verified:** (1) AdminDashboard with stat cards (total/active/deactivated/roles breakdown) — ✅. (2) AdminUsersPage with DataTable, search, status filter, pagination, roles column (permission-gated via checkPermission) — ✅. (3) UserDetailPage with profile info, roles card (RequirePermission-gated), audit trail card (RequirePermission-gated), deactivate/reactivate with ConfirmActionDialog — ✅. (4) Permission-conditional hook execution: useAuditLogs and useUserRolesAdmin use `enabled` flag to prevent unauthorized 403s — ✅. (5) Route-level enforcement: all admin routes wrapped in PermissionGate — ✅. (6) Centralized apiClient used for all edge function calls — ✅. (7) TypeScript build: zero errors — ✅. (8) Two independent AI reviewers confirmed A-/borderline A+ with only scalability caveats (tracked as DW-021–024). |
+| **Verified By** | AI Agent + 2 independent AI reviewers + Project Lead |
+| **Before State** | Admin panel not started; no user management UI; edge functions existed but no frontend consumed them |
+| **After State** | Stage 4B complete: AdminDashboard, AdminUsersPage, UserDetailPage fully functional with permission gating, conditional data fetching, centralized API client. 4 hardening items deferred (DW-021–024). |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert admin page components, hooks (useUsers, useUserActions, useAuditLogs changes), apiClient, route additions |
+| **Blast Radius** | Large (admin-panel + api-client cross-cutting) |
+| **Health Impact** | Improved |
+| **Related Routes** | `/admin`, `/admin/users`, `/admin/users/:id` |
+| **Related Permissions** | `users.view_all`, `users.deactivate`, `users.reactivate`, `roles.view`, `audit.view` |
+| **Related Functions** | apiClient (new), useUsers, useUserActions, useAuditLogs, checkPermission |
+| **Related Actions** | ACT-036 (Phase 4 SSOT reconciliation) |
+| **Related Risks** | None new |
+| **Deferred Items** | DW-021 (email search scalability), DW-022 (server-shaped admin user DTO), DW-023 (audit actor display), DW-024 (roles breakdown aggregation) |
+| **Status** | Verified |
+
+---
+
 - If action resolves a risk → must link risk ID in `related_risks`
 - Risk register entry must be updated to reflect resolution
 - Resolution evidence in action tracker = risk resolution evidence
@@ -988,7 +1017,7 @@ Each action must include:
 
 | Type | Count | High Impact |
 |------|-------|-------------|
-| Feature | 6 | 6 |
+| Feature | 7 | 7 |
 | Documentation | 13 | 12 |
 | Fix | 4 | 2 |
 | Security | 10 | 10 |
@@ -999,7 +1028,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 33 |
+| Verified | 34 |
 | Superseded | 2 (ACT-027, ACT-028) |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -1009,7 +1038,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 1 (reactivation auth-unban gap — ACT-029)
 - Open (unverified) actions: 0
-- High-impact actions this period: 32
+- High-impact actions this period: 33
 
 _Updated as actions are added._
 
