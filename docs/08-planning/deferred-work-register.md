@@ -332,7 +332,7 @@ At each phase boundary (before advancing to the next phase):
 | DW-015 | Superadmin guardrails | Phase 3 | Phase 3.5 | `implemented` |
 | DW-016 | Admin Monitoring/Health UI | Phase 4 | Phase 5 | `assigned` |
 | DW-017 | Admin Jobs/Config UI | Phase 4 | Phase 5 | `assigned` |
-| DW-018 | User Password Change Flow | Phase 4 | Phase 4 follow-up / Phase 5 | `assigned` |
+| DW-018 | User Password Change Flow | Phase 4 | Phase 4 (Stage 4J) | `implemented` |
 | DW-019 | User Session Revocation | Phase 4 | Phase 4 follow-up / Phase 5 | `assigned` |
 | DW-020 | User Notification Preferences | Phase 4 | Phase 5+ | `assigned` |
 | DW-021 | DB-level admin user search (replace auth.admin.listUsers) | Phase 4 | Phase 6 | `assigned` |
@@ -533,11 +533,11 @@ At each phase boundary (before advancing to the next phase):
 | **Future Owner Module** | PLAN-USRPNL-001 |
 | **Required Plan Realignment** | Must be included in SecurityPage when re-auth pattern is available |
 | **Related Decisions** | — |
-| **Related Actions** | — |
+| **Related Actions** | ACT-042 |
 | **Required Tests for Closure** | Password change E2E, re-auth required, old password validation, audit logging |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | ACT-042 |
+| **Implemented in Plan Version** | v9 |
 
 ---
 

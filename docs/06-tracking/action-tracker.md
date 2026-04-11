@@ -1138,6 +1138,24 @@ Each action must include:
 
 ---
 
+### ACT-042: Stage 4J — User Password Change (DW-018)
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-042 |
+| **Date** | 2026-04-11 |
+| **Action** | Stage 4J: Implemented in-panel password change form in SecurityPage. Created PasswordChangeCard component extracted from SecurityPage. Form validates 12-char minimum, confirm match, recent-auth check via isRecentlyAuthenticated(). Calls updatePassword() from AuthContext. Replaces redirect-to-forgot-password pattern. DW-018 status updated to implemented. |
+| **Type** | Feature |
+| **Impact Classification** | Medium |
+| **Modules Affected** | user-panel |
+| **Files Changed** | SecurityPage.tsx (refactored), PasswordChangeCard.tsx (new), stage-4-plan.md, deferred-work-register.md, system-state.md, component-inventory.md, action-tracker.md |
+| **Docs Updated** | stage-4-plan.md (Stage 4J section), deferred-work-register.md (DW-018 → implemented), system-state.md, component-inventory.md, action-tracker.md |
+| **Evidence** | TypeScript build: zero errors. updatePassword() already in AuthContext line 163. isRecentlyAuthenticated() already in auth-guards.ts line 70. |
+| **Verified By** | AI Agent |
+| **Status** | Verified |
+
+---
+
 - If action resolves a risk → must link risk ID in `related_risks`
 - Risk register entry must be updated to reflect resolution
 - Resolution evidence in action tracker = risk resolution evidence

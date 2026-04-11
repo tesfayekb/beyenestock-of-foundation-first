@@ -36,12 +36,13 @@ status: implementation in progress
 phase: development
 code_generation: allowed
 modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 denial logging hardened), api implemented (Stage 3A closed + Phase 3.5 superadmin guardrails hardened)
-active_work: Phase 4 gate CLOSED (ACT-041). Stage 4H shell polish COMPLETE. Stage 4I navigation enhancements PLANNED (requires plan document).
+active_work: Phase 4 gate CLOSED (ACT-041). Stage 4H COMPLETE. Stage 4J user password change COMPLETE (ACT-042, DW-018 implemented). Stage 4K admin edit profile PLANNED. Stage 4I navigation enhancements PLANNED.
 current_plan_version: v9
 approved_plan_baseline: v9
 plan_status: approved
 artifact_governance: active (artifact-index.md, database-migration-ledger.md, phase-closures/)
 deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-011, DW-012, DW-013, DW-021, DW-022, DW-023, DW-024, DW-025, DW-026, DW-027]
+deferred_work_closed_this_phase: [DW-018]
 last_updated: 2026-04-11
 ```
 

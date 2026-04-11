@@ -449,6 +449,34 @@ The following admin-panel.md scope items have NO backend implementation yet and 
 
 ---
 
+### Stage 4J — User Panel Completion: Password Change (DW-018)
+
+**Status:** IMPLEMENTED (ACT-042)
+**Prerequisite:** Stage 4H closed
+
+**Scope:** Replace the "Reset Password" redirect button in SecurityPage with an in-panel password change form.
+
+**Implementation:**
+- Created `src/components/user/PasswordChangeCard.tsx` — extracted password change card component
+- Form fields: New Password + Confirm Password (12-char minimum matching SignUp constraint)
+- Pre-check: `isRecentlyAuthenticated(user)` from `auth-guards.ts` — if stale, shows re-auth warning
+- Calls `updatePassword(newPassword)` from AuthContext on submit
+- Success: toast + form cleared. Error: toast with error message
+- Audit: `updatePassword()` already emits `emitPasswordReset(userId, 'completed')` — no additional wiring
+- SecurityPage refactored: Password card extracted to `PasswordChangeCard` component (reduces SecurityPage size)
+
+**Verification Checklist:**
+- [x] Password form renders in SecurityPage
+- [x] 12-char minimum validation with inline feedback
+- [x] Confirm password match validation
+- [x] Recent auth check gates the form
+- [x] updatePassword() called on submit
+- [x] Toast feedback on success/error
+- [x] No new routes or edge functions needed
+- [x] TypeScript build: zero errors
+- [x] DW-018 updated to implemented
+- [x] component-inventory.md updated with PasswordChangeCard
+
 ### Stage 4I — Navigation & Breadcrumb Enhancements (PLANNED — requires plan document)
 
 **Status:** PLANNED — not approved for implementation
@@ -502,7 +530,8 @@ User pages may simplify **content** (fewer fields, fewer actions), but NOT **she
 ### Deferred Work Integration
 - **DW-008 (MFA Recovery Codes):** Stage 4E SecurityPage will include placeholder for recovery codes.
 - **DW-016/DW-017:** Admin monitoring/jobs/config UI deferred to Phase 5.
-- **DW-018/DW-019/DW-020:** User password change, session revocation, notification preferences deferred.
+- **DW-018:** User password change — implemented in Stage 4J (ACT-042).
+- **DW-019/DW-020:** Session revocation and notification preferences remain deferred.
 
 ---
 
