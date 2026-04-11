@@ -60,7 +60,7 @@ export const apiClient = {
     return handleResponse<T>(res);
   },
 
-  async post<T>(path: string, body?: Record<string, unknown>): Promise<T> {
+  async post<T>(path: string, body?: object): Promise<T> {
     const headers = await getAuthHeaders();
     const res = await fetch(buildUrl(path), {
       method: 'POST',
