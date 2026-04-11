@@ -60,39 +60,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        const base = {
-          user: session?.user ?? null,
-          session,
-          loading: false,
-        };
+    let isMounted = true;
 
-        if (session) {
-          const status = await getMfaStatus();
-          setState({ ...base, mfaStatus: status });
-        } else {
-          setState({ ...base, mfaStatus: 'none' });
-        }
-      }
-    );
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    const syncAuthState = async (session: Session | null) => {
       const base = {
         user: session?.user ?? null,
         session,
         loading: false,
       };
 
-      if (session) {
-        const status = await getMfaStatus();
-        setState({ ...base, mfaStatus: status });
-      } else {
-        setState({ ...base, mfaStatus: 'none' });
+      if (!session) {
+        if (isMounted) {
+          setState({ ...base, mfaStatus: 'none' });
+        }
+        return;
       }
+
+      const status = await getMfaStatus();
+
+      if (isMounted) {
+        setState({ ...base, mfaStatus: status });
+      }
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      window.setTimeout(() => {
+        void syncAuthState(session);
+      }, 0);
     });
 
-    return () => subscription.unsubscribe();
+    void supabase.auth.getSession()
+      .then(({ data: { session } }) => syncAuthState(session))
+      .catch(() => {
+        if (isMounted) {
+          setState({ user: null, session: null, loading: false, mfaStatus: 'none' });
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, displayName?: string) => {

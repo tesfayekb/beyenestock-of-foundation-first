@@ -1097,6 +1097,27 @@ Each action must include:
 | **Related Actions** | ACT-040 (original, contains false claim — corrected by this entry) |
 | **Status** | Verified |
 
+### ACT-040b: Corrective — Post-Login Blank Screen Auth Deadlock Fix
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-040b |
+| **Date** | 2026-04-11 |
+| **Action** | Resolved post-login blank-screen regression where authenticated users remained on the full-page loading skeleton and never reached the `Index.tsx` smart router. Root cause was an `async` `supabase.auth.onAuthStateChange` subscriber in `AuthContext` awaiting `getAuthenticatorAssuranceLevel()`, which can deadlock Supabase Auth's internal lock and keep `RequireAuth` in `loading` indefinitely. Fixed by making the subscriber synchronous, deferring MFA/session synchronization with `window.setTimeout(..., 0)`, preserving the MFA gate, and adding a fail-safe `getSession()` catch to clear loading. |
+| **Type** | Regression |
+| **Impact Classification** | High |
+| **Modules Affected** | auth, user-panel, admin-panel |
+| **Docs Updated** | auth.md, action-tracker.md |
+| **Evidence** | Session replay at 2026-04-11 03:04 UTC showed the rendered container class `flex min-h-screen items-center justify-center bg-background p-8`, matching `RequireAuth` loading state rather than `Index.tsx`. Web code search confirmed Supabase documents deadlock risk when `onAuthStateChange` callbacks await other Auth APIs. TypeScript build: zero errors ✅. |
+| **Verified By** | AI Agent |
+| **Before State** | Authenticated users could remain indefinitely on the auth loading skeleton after login because auth state hydration blocked before route redirection executed. |
+| **After State** | Auth hydration no longer awaits Supabase Auth APIs inside the subscription callback; protected routes can leave loading state and continue to role-based routing. |
+| **Rollback Available** | Yes |
+| **Blast Radius** | High |
+| **Health Impact** | Positive — restores authenticated route entry and removes auth initialization deadlock risk |
+| **Related Actions** | ACT-040, ACT-040a |
+| **Status** | Verified |
+
 ---
 
 - If action resolves a risk → must link risk ID in `related_risks`

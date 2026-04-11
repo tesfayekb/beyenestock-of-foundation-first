@@ -1,6 +1,6 @@
 # Auth Module
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-11
 
 ## Purpose
 
@@ -47,6 +47,7 @@ Authentication flows only. Authorization (permissions) is handled by the RBAC mo
 - Unverified email blocks access to protected features
 - MFA challenge must be completed before session is fully active (admin roles)
 - Expired or invalid sessions require re-authentication
+- `onAuthStateChange` subscribers must never await other Supabase Auth APIs directly; defer follow-up auth reads outside the callback to avoid auth-lock deadlocks and post-login blank screens
 
 ## Shared Functions
 
