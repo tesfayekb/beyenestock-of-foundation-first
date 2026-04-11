@@ -5,6 +5,7 @@ import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
 import { ConfirmActionDialog } from '@/components/dashboard/ConfirmActionDialog';
+import { RequirePermission } from '@/components/auth/RequirePermission';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -146,63 +147,67 @@ export default function UserDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Roles Card */}
+        {/* Roles Card — permission-guarded rendering */}
+        <RequirePermission permission="roles.view">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Assigned Roles</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {rolesLoading ? (
+                <LoadingSkeleton variant="card" rows={2} />
+              ) : roles && roles.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {roles.map((role) => (
+                    <Badge key={role.id} variant="secondary" className="text-sm">
+                      {role.role_name}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No roles assigned</p>
+              )}
+            </CardContent>
+          </Card>
+        </RequirePermission>
+      </div>
+
+      {/* Audit Trail Card — permission-guarded rendering */}
+      <RequirePermission permission="audit.view">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Assigned Roles</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileText className="h-4 w-4" />
+              Recent Activity
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {rolesLoading ? (
-              <LoadingSkeleton variant="card" rows={2} />
-            ) : roles && roles.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {roles.map((role) => (
-                  <Badge key={role.id} variant="secondary" className="text-sm">
-                    {role.role_name}
-                  </Badge>
+            {auditLoading ? (
+              <LoadingSkeleton variant="card" rows={3} />
+            ) : auditEntries.length > 0 ? (
+              <div className="space-y-3">
+                {auditEntries.map((entry) => (
+                  <div key={entry.id} className="flex items-start justify-between gap-4 border-b border-border pb-3 last:border-0 last:pb-0">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground">{entry.action}</p>
+                      {entry.target_type && (
+                        <p className="text-xs text-muted-foreground">
+                          {entry.target_type}{entry.target_id ? ` · ${entry.target_id.slice(0, 8)}…` : ''}
+                        </p>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {format(new Date(entry.created_at), 'MMM d, HH:mm')}
+                    </span>
+                  </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No roles assigned</p>
+              <p className="text-sm text-muted-foreground">No audit records found for this user.</p>
             )}
           </CardContent>
         </Card>
-      </div>
-
-      {/* Audit Trail Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <FileText className="h-4 w-4" />
-            Recent Activity
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {auditLoading ? (
-            <LoadingSkeleton variant="card" rows={3} />
-          ) : auditEntries.length > 0 ? (
-            <div className="space-y-3">
-              {auditEntries.map((entry) => (
-                <div key={entry.id} className="flex items-start justify-between gap-4 border-b border-border pb-3 last:border-0 last:pb-0">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{entry.action}</p>
-                    {entry.target_type && (
-                      <p className="text-xs text-muted-foreground">
-                        {entry.target_type}{entry.target_id ? ` · ${entry.target_id.slice(0, 8)}…` : ''}
-                      </p>
-                    )}
-                  </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {format(new Date(entry.created_at), 'MMM d, HH:mm')}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No audit records found for this user.</p>
-          )}
-        </CardContent>
-      </Card>
+      </RequirePermission>
 
       {/* Deactivate Dialog */}
       <ConfirmActionDialog

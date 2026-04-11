@@ -5,11 +5,14 @@ import { DataTable, DataTableColumn } from '@/components/dashboard/DataTable';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
+import { RequirePermission } from '@/components/auth/RequirePermission';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUsers, UserListItem } from '@/hooks/useUsers';
+import { useUserRoles } from '@/hooks/useUserRoles';
+import { checkPermission } from '@/lib/rbac';
 import { ROUTES } from '@/config/routes';
 import { format } from 'date-fns';
 import { Search } from 'lucide-react';
@@ -22,6 +25,9 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'deactivated'>('all');
   const [page, setPage] = useState(1);
+  const { context } = useUserRoles();
+
+  const canViewRoles = checkPermission(context, 'roles.view');
 
   const debouncedSearch = useDebounce(search, 300);
 
@@ -38,76 +44,87 @@ export default function AdminUsersPage() {
     navigate(ROUTES.ADMIN_USER_DETAIL.replace(':id', row.id));
   }, [navigate]);
 
-  const columns: DataTableColumn<UserListItem>[] = useMemo(() => [
-    {
-      key: 'user',
-      header: 'User',
-      cell: (row) => {
-        const initials = (row.display_name ?? '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-        return (
-          <div className="flex items-center gap-3">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={row.avatar_url ?? undefined} />
-              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-foreground">
-                {row.display_name ?? '—'}
-              </p>
-              <p className="truncate text-xs text-muted-foreground">
-                {row.email ?? row.id}
-              </p>
+  const columns: DataTableColumn<UserListItem>[] = useMemo(() => {
+    const cols: DataTableColumn<UserListItem>[] = [
+      {
+        key: 'user',
+        header: 'User',
+        cell: (row) => {
+          const initials = (row.display_name ?? '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+          return (
+            <div className="flex items-center gap-3">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={row.avatar_url ?? undefined} />
+                <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-foreground">
+                  {row.display_name ?? '—'}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {row.email ?? row.id}
+                </p>
+              </div>
             </div>
-          </div>
-        );
+          );
+        },
       },
-    },
-    {
-      key: 'roles',
-      header: 'Roles',
-      cell: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {row.roles && row.roles.length > 0 ? (
-            row.roles.map((r) => (
-              <Badge key={r.role_key} variant="secondary" className="text-xs">
-                {r.role_name}
-              </Badge>
-            ))
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          )}
-        </div>
-      ),
-      className: 'w-40',
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      cell: (row) => <StatusBadge status={row.status as 'active' | 'deactivated'} />,
-      className: 'w-28',
-    },
-    {
-      key: 'email_verified',
-      header: 'Verified',
-      cell: (row) => (
-        <StatusBadge
-          status={row.email_verified ? 'active' : 'pending'}
-          label={row.email_verified ? 'Yes' : 'No'}
-        />
-      ),
-      className: 'w-24',
-    },
-    {
-      key: 'created_at',
-      header: 'Created',
-      cell: (row) => (
-        <span className="text-sm text-muted-foreground">
-          {format(new Date(row.created_at), 'MMM d, yyyy')}
-        </span>
-      ),
-      className: 'w-32',
-    },
-  ], []);
+    ];
+
+    // Conditionally show roles column based on permission
+    if (canViewRoles) {
+      cols.push({
+        key: 'roles',
+        header: 'Roles',
+        cell: (row) => (
+          <div className="flex flex-wrap gap-1">
+            {row.roles && row.roles.length > 0 ? (
+              row.roles.map((r) => (
+                <Badge key={r.role_key} variant="secondary" className="text-xs">
+                  {r.role_name}
+                </Badge>
+              ))
+            ) : (
+              <span className="text-xs text-muted-foreground">—</span>
+            )}
+          </div>
+        ),
+        className: 'w-40',
+      });
+    }
+
+    cols.push(
+      {
+        key: 'status',
+        header: 'Status',
+        cell: (row) => <StatusBadge status={row.status as 'active' | 'deactivated'} />,
+        className: 'w-28',
+      },
+      {
+        key: 'email_verified',
+        header: 'Verified',
+        cell: (row) => (
+          <StatusBadge
+            status={row.email_verified ? 'active' : 'pending'}
+            label={row.email_verified ? 'Yes' : 'No'}
+          />
+        ),
+        className: 'w-24',
+      },
+      {
+        key: 'created_at',
+        header: 'Created',
+        cell: (row) => (
+          <span className="text-sm text-muted-foreground">
+            {format(new Date(row.created_at), 'MMM d, yyyy')}
+          </span>
+        ),
+        className: 'w-32',
+      },
+    );
+
+    return cols;
+  }, [canViewRoles]);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
