@@ -22,6 +22,8 @@ const QuerySchema = z.object({
   search: z.string().trim().max(255).optional(),
 })
 
+const EMAIL_SEARCH_CAP = 500
+
 Deno.serve(createHandler(async (req: Request) => {
   if (req.method !== 'GET') {
     const { apiError } = await import('../_shared/api-error.ts')
@@ -39,28 +41,32 @@ Deno.serve(createHandler(async (req: Request) => {
     search: params.get('search') ?? undefined,
   })
 
-  // Step 1: Build an email lookup map from auth.users (targeted by page batch)
-  // For scalability, we fetch only needed users after profile query,
-  // but for email search we need to pre-build a map.
-  let emailSearchIds: Set<string> | null = null
+  // Single auth.admin.listUsers call — reused for both search filtering and email enrichment
+  let authUsersCache: { id: string; email?: string }[] | null = null
 
-  if (search) {
-    // Fetch auth users to find email matches
+  async function getAuthUsers() {
+    if (authUsersCache) return authUsersCache
     const { data: authData } = await supabaseAdmin.auth.admin.listUsers({
       page: 1,
       perPage: 1000,
     })
-    if (authData?.users) {
-      const lowerSearch = search.toLowerCase()
-      emailSearchIds = new Set(
-        authData.users
-          .filter((u) => u.email?.toLowerCase().includes(lowerSearch))
-          .map((u) => u.id)
-      )
-    }
+    authUsersCache = authData?.users ?? []
+    return authUsersCache
   }
 
-  // Step 2: Query profiles with display_name filter
+  // Step 1: Build email search ID set if search is active
+  let emailSearchIds: string[] | null = null
+
+  if (search) {
+    const authUsers = await getAuthUsers()
+    const lowerSearch = search.toLowerCase()
+    emailSearchIds = authUsers
+      .filter((u) => u.email?.toLowerCase().includes(lowerSearch))
+      .map((u) => u.id)
+      .slice(0, EMAIL_SEARCH_CAP)
+  }
+
+  // Step 2: Query profiles
   let query = supabaseAdmin
     .from('profiles')
     .select('id, display_name, avatar_url, email_verified, status, created_at, updated_at', { count: 'exact' })
@@ -71,16 +77,13 @@ Deno.serve(createHandler(async (req: Request) => {
   }
 
   if (search) {
-    if (emailSearchIds && emailSearchIds.size > 0) {
-      // Match display_name OR any of the email-matched IDs
-      const emailIdArray = Array.from(emailSearchIds)
-      query = query.or(`display_name.ilike.%${search}%,id.in.(${emailIdArray.join(',')})`)
+    if (emailSearchIds && emailSearchIds.length > 0) {
+      query = query.or(`display_name.ilike.%${search}%,id.in.(${emailSearchIds.join(',')})`)
     } else {
       query = query.or(`display_name.ilike.%${search}%`)
     }
   }
 
-  // Apply pagination after filter
   query = query.range(offset, offset + limit - 1)
 
   const { data, error, count } = await query
@@ -92,27 +95,26 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const profiles = data ?? []
 
-  // Step 3: Enrich with email + roles for the current page only
-  let enrichedUsers = profiles.map((p) => ({ ...p, email: null as string | null, roles: [] as { role_key: string; role_name: string }[] }))
+  // Step 3: Enrich with email + roles — reuse cached auth users
+  let enrichedUsers = profiles.map((p) => ({
+    ...p,
+    email: null as string | null,
+    roles: [] as { role_key: string; role_name: string }[],
+  }))
 
   if (profiles.length > 0) {
     const userIds = profiles.map((p) => p.id)
 
-    // Fetch emails — targeted by IDs on this page
-    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({
-      page: 1,
-      perPage: 1000,
-    })
+    // Email enrichment from cached auth users
+    const authUsers = await getAuthUsers()
     const emailMap = new Map<string, string>()
-    if (authData?.users) {
-      for (const u of authData.users) {
-        if (userIds.includes(u.id) && u.email) {
-          emailMap.set(u.id, u.email)
-        }
+    for (const u of authUsers) {
+      if (userIds.includes(u.id) && u.email) {
+        emailMap.set(u.id, u.email)
       }
     }
 
-    // Fetch roles for these users
+    // Roles enrichment — single batch query for this page
     const { data: userRoles } = await supabaseAdmin
       .from('user_roles')
       .select('user_id, roles(key, name)')
