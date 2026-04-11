@@ -54,7 +54,7 @@ export const adminNavigation: NavSection[] = [
     ],
   },
   {
-    label: 'Switch',
+    label: 'Account',
     items: [
       {
         title: 'My Dashboard',

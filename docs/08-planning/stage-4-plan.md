@@ -1,9 +1,9 @@
 # Phase 4 — Admin & User Interfaces Plan (v3)
 
-> **Status:** IMPLEMENTED (Stage 4A ✅, Stage 4B ✅, Stage 4C ✅, Stage 4D ✅, Stage 4E ✅, Stage 4H ✅, Stage 4J ✅, Stage 4K ✅, Stage 4I ✅)  
+> **Status:** IMPLEMENTED (Stage 4A ✅, Stage 4B ✅, Stage 4C ✅, Stage 4D ✅, Stage 4E ✅, Stage 4H ✅, Stage 4J ✅, Stage 4K ✅, Stage 4I ✅, Stage 4L ✅)  
 > **Owner:** AI  
 > **Created:** 2026-04-10  
-> **Revised:** 2026-04-11 (v7 — Stage 4I navigation enhancements implemented; ACT-044)  
+> **Revised:** 2026-04-11 (v8 — Stage 4L cross-panel navigation implemented; ACT-045)
 > **Scope:** PLAN-ADMIN-001 (Admin Panel) + PLAN-USRPNL-001 (User Panel)  
 > **Baseline:** Executes against approved plan baseline v9  
 > **Supersedes:** Stage 4 Plan v1, v2
@@ -613,6 +613,27 @@ User pages may simplify **content** (fewer fields, fewer actions), but NOT **she
 - Introduce components not in governed component inventory
 - Use raw colors outside semantic token system
 - Create page-local dialog/table/form/card variants
+
+---
+
+## Stage 4L — Cross-Panel Navigation (ACT-045) — IMPLEMENTED
+
+**Status:** IMPLEMENTED  
+**Date:** 2026-04-11  
+**Scope:** Add navigation links between admin and user panels
+
+### Items Implemented
+
+1. **UserMenu cross-panel links** — Conditional "Admin Console" (in user panel) / "My Dashboard" (in admin panel) links gated by `checkPermission(context, 'admin.access')` and `useLocation()` panel detection
+2. **Admin sidebar "My Dashboard"** — "Account" section at bottom of admin-navigation.ts with link to `/dashboard`
+3. **User sidebar "Admin Console"** — Separate "Administration" section in user-navigation.ts with `permission: 'admin.access'` — auto-hidden for non-admins via existing sidebar permission gating
+
+### Success Criteria
+
+- [x] Admin users can navigate from admin panel to user panel and back
+- [x] Non-admin users never see Admin Console link
+- [x] Zero new components, zero new API calls
+- [x] All three enforcement layers (route, edge function, RLS) unchanged
 
 ---
 

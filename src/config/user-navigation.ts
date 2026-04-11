@@ -23,6 +23,11 @@ export const userNavigation: NavSection[] = [
         icon: ShieldCheck,
         permission: 'mfa.self_manage',
       },
+    ],
+  },
+  {
+    label: 'Administration',
+    items: [
       {
         title: 'Admin Console',
         url: ROUTES.ADMIN,

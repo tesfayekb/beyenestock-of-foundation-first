@@ -36,7 +36,7 @@ status: implementation in progress
 phase: development
 code_generation: allowed
 modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 denial logging hardened), api implemented (Stage 3A closed + Phase 3.5 superadmin guardrails hardened)
-active_work: Phase 4 gate CLOSED (ACT-041). Stage 4H COMPLETE. Stage 4J COMPLETE (ACT-042, DW-018). Stage 4K COMPLETE (ACT-043, DW-027). Stage 4I COMPLETE (ACT-044: nested nav, dynamic breadcrumbs, active parent highlighting, mobile isMobile fix, badge support).
+active_work: Phase 4 gate CLOSED (ACT-041). Stage 4H COMPLETE. Stage 4J COMPLETE (ACT-042, DW-018). Stage 4K COMPLETE (ACT-043, DW-027). Stage 4I COMPLETE (ACT-044). Stage 4L COMPLETE (ACT-045: cross-panel navigation).
 current_plan_version: v9
 approved_plan_baseline: v9
 plan_status: approved
