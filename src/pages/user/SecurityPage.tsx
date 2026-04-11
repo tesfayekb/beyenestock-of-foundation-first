@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMfaFactors, MfaFactor } from '@/hooks/useMfaFactors';
@@ -11,13 +12,9 @@ import { ShieldCheck, ShieldOff, Plus, Trash2, KeyRound, Clock, LogIn, AlertTria
 
 export default function SecurityPage() {
   const { user, mfaStatus, checkMfaStatus } = useAuth();
-  const { factors, loading, unenrolling, listFactors, unenrollFactor } = useMfaFactors();
+  const { factors, loading, unenrolling, unenrollFactor } = useMfaFactors();
   const navigate = useNavigate();
   const [factorToRemove, setFactorToRemove] = useState<MfaFactor | null>(null);
-
-  useEffect(() => {
-    listFactors();
-  }, [listFactors]);
 
   const handleUnenroll = async () => {
     if (!factorToRemove) return;
