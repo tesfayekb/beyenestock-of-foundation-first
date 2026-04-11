@@ -18,6 +18,11 @@ import { ROUTES } from '@/config/routes';
 export function UserMenu() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { context } = useUserRoles();
+
+  const isInAdmin = location.pathname.startsWith('/admin');
+  const hasAdminAccess = checkPermission(context, 'admin.access');
 
   const displayName = user?.user_metadata?.display_name || user?.email || 'User';
   const initials = displayName
