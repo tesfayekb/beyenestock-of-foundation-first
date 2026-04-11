@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
-import { ShieldCheck, ShieldOff, Plus, Trash2, KeyRound, Clock, LogIn, AlertTriangle, Lock } from 'lucide-react';
+import { ShieldCheck, ShieldOff, Trash2, KeyRound, Clock, LogIn, AlertTriangle, Lock } from 'lucide-react';
 import { PasswordChangeCard } from '@/components/user/PasswordChangeCard';
 
 export default function SecurityPage() {
@@ -76,7 +76,6 @@ export default function SecurityPage() {
                   No authenticator app configured. Enable TOTP to secure your account.
                 </p>
                 <Button size="sm" onClick={() => navigate(ROUTES.MFA_ENROLL)}>
-                  <Plus className="mr-2 h-4 w-4" />
                   Set Up TOTP
                 </Button>
               </div>
