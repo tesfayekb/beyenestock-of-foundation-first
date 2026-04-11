@@ -47,37 +47,47 @@ export default function MfaEnroll() {
 
   const hasVerifiedFactor = mfaStatus === 'enrolled' || verifiedFactors.length > 0;
   const hasPendingUnverifiedFactor = unverifiedFactors.length > 0;
-  const nextFriendlyName = factors.length === 0 ? 'Authenticator App' : `Authenticator App ${factors.length + 1}`;
 
+  // Auto-redirect: admin user with MFA already set up
   useEffect(() => {
     if (step === 'complete' || (hasReturnTarget && hasVerifiedFactor && step === 'start')) {
       const timeout = window.setTimeout(() => {
         navigate(returnTo, { replace: true });
       }, 2000);
-
       return () => window.clearTimeout(timeout);
     }
   }, [hasReturnTarget, hasVerifiedFactor, navigate, returnTo, step]);
 
   const handleEnroll = async () => {
     setLoading(true);
+
+    // Single-factor policy: unenroll any existing verified factors first
+    if (verifiedFactors.length > 0) {
+      for (const factor of verifiedFactors) {
+        const success = await unenrollFactor(factor.id);
+        if (!success) {
+          toast({
+            variant: 'destructive',
+            title: 'Could not replace existing factor',
+            description: 'Failed to remove the current authenticator. Please try again.',
+          });
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
     const { data, error } = await supabase.auth.mfa.enroll({
       factorType: 'totp',
-      friendlyName: nextFriendlyName,
+      friendlyName: 'Authenticator App',
     });
 
     if (error) {
-      const isFactorConflict =
-        'code' in error && error.code === 'mfa_factor_name_conflict';
-
       await checkMfaStatus();
-
       toast({
         variant: 'destructive',
         title: 'Enrollment failed',
-        description: isFactorConflict
-          ? 'This authenticator already exists on your account. Refreshing your MFA status now.'
-          : error.message,
+        description: error.message,
       });
       setLoading(false);
       return;
@@ -297,22 +307,19 @@ export default function MfaEnroll() {
     );
   }
 
+  // Default: no MFA yet — show enrollment CTA
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">
-            {hasVerifiedFactor ? 'Add another authenticator app' : 'Enable two-factor authentication'}
-          </CardTitle>
+          <CardTitle className="text-2xl">Enable two-factor authentication</CardTitle>
           <CardDescription>
-            {hasVerifiedFactor
-              ? 'MFA is already enabled. Add another authenticator app as a backup factor.'
-              : 'Add an extra layer of security to your account using an authenticator app.'}
+            Add an extra layer of security to your account using an authenticator app.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Button onClick={handleEnroll} className="w-full" disabled={loading}>
-            {loading ? 'Setting up...' : hasVerifiedFactor ? 'Add authenticator app' : 'Set up authenticator app'}
+            {loading ? 'Setting up...' : 'Set up authenticator app'}
           </Button>
         </CardContent>
       </Card>

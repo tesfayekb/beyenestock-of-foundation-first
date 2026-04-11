@@ -111,14 +111,6 @@ export default function SecurityPage() {
                   </div>
                 ))}
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(ROUTES.MFA_ENROLL)}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Another Factor
-                </Button>
               </div>
             )}
           </CardContent>
