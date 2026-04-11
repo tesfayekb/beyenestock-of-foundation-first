@@ -45,7 +45,7 @@ function resolveEntityName(
 
   if (parentSegment === 'roles') {
     // Role detail cache key
-    const data = queryClient.getQueryData<any>(['roles', 'detail', uuid]);
+    const data = queryClient.getQueryData<any>(['admin', 'role', uuid]);
     if (data?.name) return data.name;
   }
 
