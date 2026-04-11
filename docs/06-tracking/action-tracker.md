@@ -1196,6 +1196,24 @@ Each action must include:
 
 ---
 
+### ACT-045: Stage 4L — Cross-Panel Navigation
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-045 |
+| **Date** | 2026-04-11 |
+| **Action** | Stage 4L: Added cross-panel navigation links. UserMenu.tsx: conditional "Admin Console" / "My Dashboard" links based on `checkPermission(context, 'admin.access')` and `useLocation()` panel detection. admin-navigation.ts: added "Switch" section with "My Dashboard" link to /dashboard. user-navigation.ts: added "Admin Console" item with `permission: 'admin.access'` — hidden for non-admins via existing sidebar permission gating. Zero new components, zero new API calls. |
+| **Type** | Feature |
+| **Impact Classification** | Low |
+| **Modules Affected** | admin-panel, user-panel |
+| **Files Changed** | UserMenu.tsx, admin-navigation.ts, user-navigation.ts |
+| **Docs Updated** | system-state.md, action-tracker.md |
+| **Evidence** | TypeScript build: zero errors. Cross-panel links use existing permission cache (useUserRoles, 5min staleTime). No security model changes — all three enforcement layers (route-level RequirePermission, edge function checkPermissionOrThrow, RLS) remain independent. |
+| **Verified By** | AI Agent |
+| **Status** | Verified |
+
+---
+
 - If action introduces regression → must link watchlist item in `related_watchlist`
 - Regression fix actions must reference the original regression
 - Repeated failures in same area → tracked via recurrence in watchlist, referenced here
