@@ -50,7 +50,11 @@ async function handleResponse<T>(res: Response): Promise<T> {
     );
   }
   const json = await res.json();
-  // Edge functions return payload directly via apiSuccess() — no .data wrapper
+  // Edge functions wrap payloads via apiSuccess({ data: ... })
+  // Unwrap .data if present, otherwise return raw response
+  if (json && typeof json === 'object' && 'data' in json) {
+    return json.data as T;
+  }
   return json as T;
 }
 
