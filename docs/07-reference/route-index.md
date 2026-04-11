@@ -1,6 +1,6 @@
 # Route Index
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-10 | **Status:** Living Document | **Index Version:** `route-v1.6`
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-11 | **Status:** Living Document | **Index Version:** `route-v1.7`
 
 ## Purpose
 
@@ -786,6 +786,71 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related functions** | `authenticateRequest()`, `checkPermissionOrThrow()`, `validateRequest()`, `logAuditEvent()` |
 | **Related events** | `rbac.permission_revoked` |
 | **Related permissions** | `permissions.revoke` |
+| **Lifecycle** | active |
+
+#### `GET /list-roles`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/list-roles` |
+| **Method** | `GET` |
+| **Classification** | privileged |
+| **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
+| **Permission** | `roles.view` |
+| **Scope** | system-wide |
+| **Request Body** | None |
+| **Response (200)** | `{ data: RoleListItem[] }` — each item: `{ id, key, name, description, is_base, is_immutable, created_at, updated_at, permission_count, user_count }` |
+| **Error (401)** | Missing/invalid token |
+| **Error (403)** | Permission denied |
+| **Rate Limit** | standard (via `createHandler`) |
+| **Audit Required** | No (read-only) |
+| **Idempotent** | Yes |
+| **Related functions** | `authenticateRequest()`, `checkPermissionOrThrow()` |
+| **Related permissions** | `roles.view` |
+| **Lifecycle** | active |
+
+#### `GET /get-role-detail`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/get-role-detail` |
+| **Method** | `GET` |
+| **Classification** | privileged |
+| **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
+| **Permission** | `roles.view` |
+| **Scope** | system-wide |
+| **Query Params** | `role_id: string (UUID)` — Zod-validated |
+| **Response (200)** | `{ data: RoleDetail }` — includes `permissions[]` and `users[]` |
+| **Error (400)** | Validation error (invalid UUID) |
+| **Error (401)** | Missing/invalid token |
+| **Error (403)** | Permission denied |
+| **Error (404)** | Role not found |
+| **Rate Limit** | standard (via `createHandler`) |
+| **Audit Required** | No (read-only) |
+| **Idempotent** | Yes |
+| **Related functions** | `authenticateRequest()`, `checkPermissionOrThrow()`, `validateRequest()` |
+| **Related permissions** | `roles.view` |
+| **Lifecycle** | active |
+
+#### `GET /list-permissions`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/list-permissions` |
+| **Method** | `GET` |
+| **Classification** | privileged |
+| **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
+| **Permission** | `roles.view` |
+| **Scope** | system-wide |
+| **Request Body** | None |
+| **Response (200)** | `{ data: PermissionListItem[] }` — each item: `{ id, key, description, created_at, role_names[] }` |
+| **Error (401)** | Missing/invalid token |
+| **Error (403)** | Permission denied |
+| **Rate Limit** | standard (via `createHandler`) |
+| **Audit Required** | No (read-only) |
+| **Idempotent** | Yes |
+| **Related functions** | `authenticateRequest()`, `checkPermissionOrThrow()` |
+| **Related permissions** | `roles.view` |
 | **Lifecycle** | active |
 
 ### User Management API Endpoints

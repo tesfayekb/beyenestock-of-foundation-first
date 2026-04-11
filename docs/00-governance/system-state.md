@@ -80,7 +80,7 @@ If inconsistency is detected → execution must **STOP** and be corrected.
 | auth | in progress (A+D implemented + hardened: shared functions, events, email gate; B+C deferred [DW-001/002], MFA recovery codes deferred [DW-008]) | 2026-04-10 |
 | rbac | implemented (Phase 2 gate 12/12 closed + Phase 3.5 hardened: requireRecentAuth on 4 RBAC endpoints, self-superadmin-revocation prevention [DW-015]) | 2026-04-10 |
 | user-management | implemented (Phase 3C closed [ACT-032]: lifecycle, deactivate/reactivate, auth ban/unban; Phase 3D Gate 1 runtime-verified [ACT-035]) | 2026-04-10 |
-| admin-panel | in progress (Stage 4A shell ✅, Stage 4B user management ✅ [ACT-037], Stage 4C role/permission management in progress) | 2026-04-11 |
+| admin-panel | in progress (Stage 4A shell ✅, Stage 4B user management ✅ [ACT-037], Stage 4C role/permission management ✅ [ACT-038], Stage 4D audit viewer pending) | 2026-04-11 |
 | user-panel | not started | — |
 | audit-logging | implemented (Phase 3B closed + Phase 3.5 hardened: centralized denial audit logging via auth.permission_denied event, nullable actor_id, correlation_id in metadata [DW-014]) | 2026-04-10 |
 | health-monitoring | not started | — |
