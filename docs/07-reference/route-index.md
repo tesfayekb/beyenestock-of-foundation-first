@@ -293,7 +293,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Panel** | user-panel |
 | **Related functions** | `getCurrentUser()`, `requireAuth()` |
 | **Related tests** | Dashboard render test, unauthenticated deny test |
-| **Lifecycle** | planned |
+| **Lifecycle** | active |
 
 #### `/settings` — User Settings
 
@@ -309,7 +309,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Related functions** | `requireAuth()`, `requireSelfScope()`, `getUserProfile()`, `updateUserProfile()` |
 | **Related events** | `user_panel.settings_changed` |
 | **Related tests** | Settings render test, update flow test, self-scope denial test |
-| **Lifecycle** | planned |
+| **Lifecycle** | active |
 
 #### `/settings/security` — MFA Settings
 
@@ -325,7 +325,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Reauth required** | Yes (sensitive security action) |
 | **Related functions** | `requireAuth()`, `requireRecentAuth()`, `requireSelfScope()` |
 | **Related events** | `auth.mfa_enrolled`, `user_panel.mfa_updated`, `auth.session_revoked` |
-| **Lifecycle** | planned |
+| **Lifecycle** | active |
 
 ### Admin Panel Routes (Privileged)
 
