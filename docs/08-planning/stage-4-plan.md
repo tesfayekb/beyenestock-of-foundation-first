@@ -1,6 +1,6 @@
 # Phase 4 — Admin & User Interfaces Plan (v3)
 
-> **Status:** APPROVED-PARTIAL (Stage 4A ✅, Stage 4B ✅, Stage 4C ✅, Stage 4D ✅, Stage 4E pending)  
+> **Status:** APPROVED (Stage 4A ✅, Stage 4B ✅, Stage 4C ✅, Stage 4D ✅, Stage 4E ✅)  
 > **Owner:** AI  
 > **Created:** 2026-04-10  
 > **Revised:** 2026-04-11 (v5 — Stage 4C gate closed, all data access moved to edge functions)  
@@ -373,7 +373,8 @@ No UI code may begin until ALL three governance docs are approved:
 | `src/pages/user/UserDashboard.tsx` | New |
 | `src/pages/user/ProfilePage.tsx` | New |
 | `src/pages/user/SecurityPage.tsx` | New |
-| `src/pages/user/index.ts` | New |
+| `src/hooks/useProfile.ts` | New — React Query hooks (fetch + mutation) |
+| `src/hooks/useMfaFactors.ts` | New — React Query hooks (list + unenroll) |
 | `src/hooks/useProfile.ts` | New — React Query hooks |
 | `src/hooks/useProfileMutations.ts` | New — update profile mutation |
 
