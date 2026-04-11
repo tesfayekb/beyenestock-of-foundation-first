@@ -1,4 +1,4 @@
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -43,7 +43,7 @@ export function DashboardBreadcrumbs() {
                 {isLast ? (
                   <BreadcrumbPage>{label}</BreadcrumbPage>
                 ) : (
-                  <BreadcrumbLink href={path}>{label}</BreadcrumbLink>
+                  <BreadcrumbLink asChild><Link to={path}>{label}</Link></BreadcrumbLink>
                 )}
               </BreadcrumbItem>
             </Fragment>
