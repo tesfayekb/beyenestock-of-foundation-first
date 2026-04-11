@@ -1,6 +1,6 @@
 # Stage 4I — Navigation Enhancements Plan
 
-> **Status:** IMPLEMENTING  
+> **Status:** IMPLEMENTED (ACT-044)  
 > **Owner:** AI  
 > **Created:** 2026-04-11  
 > **Parent:** Phase 4 — Admin & User Interfaces (stage-4-plan.md)  
