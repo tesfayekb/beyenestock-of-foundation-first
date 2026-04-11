@@ -18,6 +18,8 @@ interface AuditLogsParams {
   target_id?: string;
   target_type?: string;
   action?: string;
+  date_from?: string;
+  date_to?: string;
   limit?: number;
   before?: string;
 }
