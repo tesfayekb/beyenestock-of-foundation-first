@@ -587,6 +587,102 @@ At each phase boundary (before advancing to the next phase):
 
 ---
 
+### DW-021: DB-Level Admin User Search
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-021 |
+| **Date Deferred** | 2026-04-11 |
+| **Source Plan Section** | PLAN-ADMIN-001 (user management) |
+| **Source Phase** | Phase 4 — Admin & User Interfaces (Stage 4B) |
+| **Title** | Replace auth.admin.listUsers() email search with DB-level mechanism |
+| **Reason Deferred** | Current list-users email search uses auth.admin.listUsers(perPage:1000) + in-memory filter + ID injection. Works at small scale with caching and 500-ID cap, but not institution-grade for large tenants. |
+| **Blocking Dependencies** | DB view or function joining profiles + auth email, or materialized email column synced to profiles |
+| **Impact on Source Phase** | No impact — Stage 4B functionally complete; this is a scalability hardening item |
+| **Future Owner Phase** | Phase 6 — Hardening & System Validation |
+| **Future Owner Module** | PLAN-ADMIN-001, PLAN-USRMGMT-001 |
+| **Required Plan Realignment** | Phase 6 must include admin search scalability review |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Email search works beyond 1000 users; no auth.admin.listUsers() in search path; query performance < 500ms at 10K users |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-022: Server-Shaped Admin User DTO/View
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-022 |
+| **Date Deferred** | 2026-04-11 |
+| **Source Plan Section** | PLAN-ADMIN-001 (user management) |
+| **Source Phase** | Phase 4 — Admin & User Interfaces (Stage 4B) |
+| **Title** | Single DB-level query/view returning fully shaped admin user objects |
+| **Reason Deferred** | Current list-users enriches profiles with email + roles via separate queries in app layer. Functionally correct with batch approach, but not optimally server-shaped. |
+| **Blocking Dependencies** | DB view or function combining profiles + email + roles into single result set |
+| **Impact on Source Phase** | No impact — current batch approach is correct, not N+1 |
+| **Future Owner Phase** | Phase 6 — Hardening & System Validation |
+| **Future Owner Module** | PLAN-ADMIN-001 |
+| **Required Plan Realignment** | Phase 6 must evaluate admin user DTO design |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Single query returns user + email + roles; response time < 200ms at 10K users |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-023: Audit Actor-Scope Display Shaping
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-023 |
+| **Date Deferred** | 2026-04-11 |
+| **Source Plan Section** | PLAN-ADMIN-001 (user detail) |
+| **Source Phase** | Phase 4 — Admin & User Interfaces (Stage 4B) |
+| **Title** | Audit trail actor display name resolution and actor-as-subject scope |
+| **Reason Deferred** | Current user detail audit trail shows events where user is target only, not actor. Actor IDs are raw UUIDs without display name resolution. Both are UX improvements, not plan violations. |
+| **Blocking Dependencies** | Actor display name enrichment in audit query response; design decision on actor-scope inclusion |
+| **Impact on Source Phase** | No impact — target-scope audit is correct for Stage 4B |
+| **Future Owner Phase** | Phase 5+ (deeper audit UX work) |
+| **Future Owner Module** | PLAN-ADMIN-001, PLAN-AUDIT-001 |
+| **Required Plan Realignment** | Future audit UX phase must include actor enrichment |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Audit entries show actor display name; optional actor-scope toggle works; no N+1 for actor resolution |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-024: AdminDashboard Roles Breakdown Unbounded Fetch
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-024 |
+| **Date Deferred** | 2026-04-11 |
+| **Source Plan Section** | PLAN-ADMIN-001 (admin dashboard) |
+| **Source Phase** | Phase 4 — Admin & User Interfaces (Stage 4B) |
+| **Title** | AdminDashboard useRolesBreakdown fetches entire user_roles table |
+| **Reason Deferred** | Uses Supabase client .select('role_id') with no limit — RLS enforced, correct at current scale, but unbounded for large tenants. |
+| **Blocking Dependencies** | DB function for role assignment counts, or server-side aggregation endpoint |
+| **Impact on Source Phase** | No impact — correct at current scale |
+| **Future Owner Phase** | Phase 6 — Hardening & System Validation |
+| **Future Owner Module** | PLAN-ADMIN-001 |
+| **Required Plan Realignment** | Phase 6 must include dashboard query optimization |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Dashboard loads in < 1s at 10K users; no unbounded client-side fetches |
+| **Status** | `assigned` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
 ## Used By / Affects
 
 - Phase gate closure decisions
