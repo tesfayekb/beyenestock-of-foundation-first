@@ -60,5 +60,5 @@ Deno.serve(createHandler(async (req: Request) => {
     }
   })
 
-  return apiSuccess({ data: result })
+  return apiSuccess(result)
 }))

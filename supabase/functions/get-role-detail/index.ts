@@ -85,12 +85,10 @@ Deno.serve(createHandler(async (req: Request) => {
   }
 
   return apiSuccess({
-    data: {
-      ...role,
-      permission_count: permissions.length,
-      user_count: users.length,
-      permissions,
-      users,
-    },
+    ...role,
+    permission_count: permissions.length,
+    user_count: users.length,
+    permissions,
+    users,
   })
 }))

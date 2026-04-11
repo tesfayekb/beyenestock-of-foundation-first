@@ -67,5 +67,5 @@ Deno.serve(createHandler(async (req: Request) => {
     user_count: userCounts.get(r.id) ?? 0,
   }))
 
-  return apiSuccess({ data: result })
+  return apiSuccess(result)
 }))
