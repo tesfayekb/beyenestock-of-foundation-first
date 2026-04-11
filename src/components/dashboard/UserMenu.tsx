@@ -1,5 +1,5 @@
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -10,7 +10,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { UserCircle, Settings, ShieldCheck, LogOut } from 'lucide-react';
+import { UserCircle, ShieldCheck, LogOut, LayoutDashboard, Shield } from 'lucide-react';
+import { useUserRoles } from '@/hooks/useUserRoles';
+import { checkPermission } from '@/lib/rbac';
+import { ROUTES } from '@/config/routes';
 
 export function UserMenu() {
   const { user, signOut } = useAuth();
