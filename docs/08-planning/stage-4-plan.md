@@ -449,6 +449,25 @@ The following admin-panel.md scope items have NO backend implementation yet and 
 
 ---
 
+### Stage 4I — Navigation & Breadcrumb Enhancements (PLANNED — requires plan document)
+
+**Status:** PLANNED — not approved for implementation
+**Prerequisite:** Stage 4H closed
+
+These 5 items require a dedicated plan document before implementation because they touch the nav type contract (`navigation.types.ts`), have dependency chains, or require SSOT type changes:
+
+| # | Item | Complexity Driver |
+|---|------|------------------|
+| 5 | Nested/collapsible nav groups | NavItem.children[] already typed but unused. Needs Collapsible from shadcn + navigation.types.ts update + ui-architecture.md update |
+| 11 | Dynamic breadcrumb entity names | UUIDs in breadcrumbs should resolve to display names from React Query cache. Needs a defined cache-read pattern |
+| 13 | Active parent highlighting | Only meaningful after nested nav exists — dependent on item 5 |
+| 23 | Mobile sidebar isMobile awareness | Prevent collapsed icon-mode on mobile where Sheet is used instead |
+| 24 | Nav item badge support | Extend NavItem type with optional `badge?: string \| number`. Needs navigation.types.ts + component-inventory.md update |
+
+**Dependency chain:** Item 5 → Item 13 (parent highlighting needs nested nav). Item 5 → Item 11 (breadcrumb depth matters with nested nav).
+
+**Rule:** No implementation until a Stage 4I plan document is written and approved.
+
 ## Cross-Stage Requirements
 
 ### Shell Uniformity Rule
