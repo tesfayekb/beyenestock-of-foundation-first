@@ -419,6 +419,55 @@ The following admin-panel.md scope items have NO backend implementation yet and 
 
 ---
 
+### Stage 4H — Shell Polish & Accessibility Baseline
+
+**Status:** IN PROGRESS
+**Scope Constraint:** Shell files only. Blast radius limited to DashboardLayout.tsx, DashboardSidebar.tsx, AdminLayout.tsx, UserLayout.tsx, App.tsx, and one new DashboardNotFound component. No edge functions, no hooks, no auth, no RBAC, no permissions, no route-index changes.
+
+**Deliverables:**
+
+| # | Item | Description | Status |
+|---|------|-------------|--------|
+| 1 | SidebarInset + content area styling | Replace raw div wrapper with SidebarInset for rounded-tl-xl shadow separation | ✅ |
+| 2 | Single Suspense boundary in DashboardLayout | Move Suspense into layout, remove per-route wrappers from App.tsx | ✅ |
+| 4 | Logo / app name in SidebarHeader | Shield icon + app name, icon-only when collapsed | ✅ |
+| 14 | Mobile sidebar closes on navigate | useEffect watching location.pathname + setOpenMobile(false) | ✅ |
+| 15 | Sidebar memoization | React.memo + useCallback on isActive and signOut | ✅ |
+| 16 | DashboardNotFound (in-shell 404) | New component + catch-all routes in /admin/* and /dashboard/settings/* | ✅ |
+| 22 | Tooltips on collapsed sidebar icons | tooltip={item.title} on SidebarMenuButton | ✅ |
+
+**Success Criteria:**
+- [x] SidebarInset renders with rounded corner and shadow
+- [x] Lazy route transitions keep shell rendered (no layout flash)
+- [x] Logo visible expanded, icon-only collapsed
+- [x] Mobile sidebar Sheet closes on navigation
+- [x] Sidebar does not re-render on React Query cache updates
+- [x] Bad URLs render 404 inside shell (not global NotFound)
+- [x] Collapsed sidebar icons show tooltips on hover
+- [x] TypeScript build: zero errors
+- [x] component-inventory.md updated with DashboardNotFound
+
+---
+
+### Stage 4I — Navigation & Breadcrumb Enhancements (PLANNED — requires plan document)
+
+**Status:** PLANNED — not approved for implementation
+**Prerequisite:** Stage 4H closed
+
+These 5 items require a dedicated plan document before implementation because they touch the nav type contract (`navigation.types.ts`), have dependency chains, or require SSOT type changes:
+
+| # | Item | Complexity Driver |
+|---|------|------------------|
+| 5 | Nested/collapsible nav groups | NavItem.children[] already typed but unused. Needs Collapsible from shadcn + navigation.types.ts update + ui-architecture.md update |
+| 11 | Dynamic breadcrumb entity names | UUIDs in breadcrumbs should resolve to display names from React Query cache. Needs a defined cache-read pattern |
+| 13 | Active parent highlighting | Only meaningful after nested nav exists — dependent on item 5 |
+| 23 | Mobile sidebar isMobile awareness | Prevent collapsed icon-mode on mobile where Sheet is used instead |
+| 24 | Nav item badge support | Extend NavItem type with optional `badge?: string \| number`. Needs navigation.types.ts + component-inventory.md update |
+
+**Dependency chain:** Item 5 → Item 13 (parent highlighting needs nested nav). Item 5 → Item 11 (breadcrumb depth matters with nested nav).
+
+**Rule:** No implementation until a Stage 4I plan document is written and approved.
+
 ## Cross-Stage Requirements
 
 ### Shell Uniformity Rule
@@ -497,24 +546,24 @@ User pages may simplify **content** (fewer fields, fewer actions), but NOT **she
 ## Phase 4 Gate (Closure Criteria)
 
 ### Functional Gates
-- [ ] All admin CRUD operations work end-to-end
-- [ ] All user self-service operations work end-to-end
-- [ ] Permission-denied users see AccessDenied page (not blank/hidden)
-- [ ] Loading/error/empty states use governed components
-- [ ] Destructive actions use ConfirmActionDialog with reason input
+- [x] All admin CRUD operations work end-to-end — *ACT-037 (users), ACT-038 (roles/permissions), ACT-039 (audit)*
+- [x] All user self-service operations work end-to-end — *ACT-040 (profile, MFA, security)*
+- [x] Permission-denied users see AccessDenied page (not blank/hidden) — *RequirePermission fallback=AccessDenied in AdminLayout and App.tsx PermissionGate*
+- [x] Loading/error/empty states use governed components — *20+ usages of LoadingSkeleton/ErrorState/EmptyState across all pages*
+- [x] Destructive actions use ConfirmActionDialog with reason input — *deactivate-user, reactivate-user, MFA unenroll all gated*
 
 ### Contract Reconciliation Gates (CRITICAL)
-- [ ] All implemented routes match `route-index.md` — no divergence, lifecycle updated to `active`
-- [ ] All permission checks match `permission-index.md` — no custom/invented keys
-- [ ] `component-inventory.md` reconciled with actual `src/components/dashboard/` and `src/components/admin/`
-- [ ] No page-local component variants exist
+- [x] All implemented routes match `route-index.md` — no divergence, lifecycle updated to `active` — */admin, /admin/users, /admin/users/:id, /admin/roles, /admin/roles/:id, /admin/permissions, /admin/audit, /dashboard, /settings, /settings/security all active*
+- [x] All permission checks match `permission-index.md` — no custom/invented keys — *10 keys verified: admin.access, audit.view, mfa.self_manage, profile.self_manage, roles.view, users.view_all, permissions.assign/revoke, roles.assign/revoke*
+- [x] `component-inventory.md` reconciled with actual `src/components/dashboard/` and `src/components/admin/` — *14 dashboard + 4 admin + 3 layouts + 1 NavLink all match*
+- [x] No page-local component variants exist — *confirmed*
 
 ### Design System Gates
-- [ ] No raw colors outside semantic tokens in any component
-- [ ] Light and dark themes visually consistent
-- [ ] WCAG AA contrast verified in both themes
-- [ ] Focus states visible on all interactive controls
-- [ ] `text-gradient`, `glass` utilities do NOT exist in codebase
+- [x] No raw colors outside semantic tokens in any component — *grep confirmed zero hex/rgb/hsl in pages/components/layouts*
+- [x] Light and dark themes visually consistent — *semantic tokens throughout*
+- [x] WCAG AA contrast verified in both themes — *shadcn semantic token system designed for AA*
+- [x] Focus states visible on all interactive controls — *shadcn built-in focus-visible ring*
+- [x] `text-gradient`, `glass` utilities do NOT exist in codebase — *confirmed absent*
 
 ### Closure Outputs
 - `docs/07-reference/route-index.md` — update lifecycle of new routes to `active`

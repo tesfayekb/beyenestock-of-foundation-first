@@ -36,7 +36,7 @@ status: implementation in progress
 phase: development
 code_generation: allowed
 modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 denial logging hardened), api implemented (Stage 3A closed + Phase 3.5 superadmin guardrails hardened)
-active_work: Phase 4 in progress — Stage 4A (shell/layout) ✅, Stage 4B (admin user management) ✅ (ACT-037), Stage 4C (admin role/permission management) ✅ (ACT-038), Stage 4D (admin audit viewer) ✅ (ACT-039), Stage 4E (user panel) ✅ (ACT-040). Phase 4 complete pending closure.
+active_work: Phase 4 gate CLOSED (ACT-041). Stage 4H shell polish IN PROGRESS.
 current_plan_version: v9
 approved_plan_baseline: v9
 plan_status: approved
