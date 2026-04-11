@@ -33,7 +33,6 @@ export function useProfile() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
-  // SCENARIO-5: Only fetch when authenticated
   const query = useQuery({
     queryKey: PROFILE_KEY,
     queryFn: () => apiClient.get<ProfileResponse>('get-profile').then((r) => r.profile),
@@ -44,8 +43,11 @@ export function useProfile() {
   const mutation = useMutation({
     mutationFn: (payload: UpdateProfilePayload) =>
       apiClient.patch<ProfileResponse>('update-profile', payload).then((r) => r.profile),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(PROFILE_KEY, updated);
+    onSuccess: () => {
+      // FINDING-1 FIX: invalidate instead of setQueryData because update-profile
+      // response does not include email (only get-profile does).
+      // This triggers a refetch from get-profile which returns the full profile.
+      queryClient.invalidateQueries({ queryKey: PROFILE_KEY });
       toast.success('Profile updated');
     },
     onError: (err: Error) => {

@@ -1,5 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfile } from '@/hooks/useProfile';
+import { useMfaFactors } from '@/hooks/useMfaFactors';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,8 +11,9 @@ import { ROUTES } from '@/config/routes';
 import { UserCircle, ShieldCheck, ShieldOff, ArrowRight } from 'lucide-react';
 
 export default function UserDashboard() {
-  const { user, mfaStatus } = useAuth();
+  const { user } = useAuth();
   const { profile, isLoading } = useProfile();
+  const { factors } = useMfaFactors();
 
   if (isLoading) return <LoadingSkeleton />;
 
@@ -19,7 +21,9 @@ export default function UserDashboard() {
     ? `Welcome back, ${profile.display_name}`
     : 'Welcome back';
 
-  const hasMfa = mfaStatus === 'enrolled';
+  // FINDING-3 FIX: Use verifiedFactors.length > 0 (consistent with SecurityPage)
+  const verifiedFactors = factors.filter((f) => f.status === 'verified');
+  const hasMfa = verifiedFactors.length > 0;
 
   return (
     <>
