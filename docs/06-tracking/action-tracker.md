@@ -1054,6 +1054,28 @@ Each action must include:
 | **Related Actions** | ACT-038 (Stage 4C), ACT-037 (Stage 4B) |
 | **Status** | Verified |
 
+### ACT-040: Stage 4E — User Panel Implementation + Quality Hardening
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-040 |
+| **Date** | 2026-04-11 |
+| **Action** | Implemented Stage 4E user panel: ProfilePage (view/edit via get-profile/update-profile edge functions), SecurityPage (MFA factor list/unenroll via React Query, session info with last_sign_in_at, recovery codes placeholder for DW-008, MFA downgrade warning), UserDashboard (welcome + status cards). Fixed GAP-1 (session info section), GAP-2 (recovery codes placeholder), SCENARIO-1 (display_name nullable in edge function schema), SCENARIO-2 (avatar_url restricted to https:// in edge function + client validation), SCENARIO-3 (MFA downgrade warning in unenroll dialog), SCENARIO-4 (useMfaFactors migrated to React Query), SCENARIO-5 (useProfile enabled guard). |
+| **Type** | Feature |
+| **Impact Classification** | High |
+| **Modules Affected** | user-panel, admin-panel, api |
+| **Docs Updated** | stage-4-plan.md (4E criteria checked, files reconciled, useProfileMutations.ts removed), system-state.md (user-panel implemented, admin-panel complete), route-index.md (/dashboard, /settings, /settings/security → active) |
+| **Evidence** | TypeScript build: zero errors ✅. update-profile edge function deployed ✅. All 7 success criteria met. GAP-1/2 plan requirements resolved. SCENARIO-1–5 quality hardening applied. |
+| **Verified By** | AI Agent |
+| **Before State** | User panel pages were stubs with no data binding; useMfaFactors used local state; useProfile had no auth guard; update-profile rejected null display_name and accepted non-https avatar URLs |
+| **After State** | Full user panel with edge function integration, React Query caching, session info, recovery codes placeholder, MFA downgrade warning, https-only avatar validation, nullable display_name |
+| **Rollback Available** | Yes — revert to stubs |
+| **Blast Radius** | Medium (user-facing pages + edge function schema change) |
+| **Health Impact** | Positive |
+| **Related Actions** | ACT-037 (Stage 4B), ACT-038 (Stage 4C), ACT-039 (Stage 4D) |
+| **Related Routes** | /dashboard, /settings, /settings/security |
+| **Status** | Verified |
+
 ---
 
 - If action resolves a risk → must link risk ID in `related_risks`
@@ -1088,7 +1110,7 @@ Each action must include:
 
 | Type | Count | High Impact |
 |------|-------|-------------|
-| Feature | 9 | 9 |
+| Feature | 10 | 10 |
 | Documentation | 14 | 13 |
 | Fix | 4 | 2 |
 | Security | 10 | 10 |
@@ -1099,7 +1121,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 37 |
+| Verified | 38 |
 | Superseded | 2 (ACT-027, ACT-028) |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -1109,7 +1131,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 1 (reactivation auth-unban gap — ACT-029)
 - Open (unverified) actions: 0
-- High-impact actions this period: 36
+- High-impact actions this period: 37
 
 _Updated as actions are added._
 

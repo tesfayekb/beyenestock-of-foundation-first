@@ -4,6 +4,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 export interface UserProfile {
@@ -22,7 +23,7 @@ interface ProfileResponse {
 }
 
 interface UpdateProfilePayload {
-  display_name?: string;
+  display_name?: string | null;
   avatar_url?: string | null;
 }
 
@@ -30,11 +31,14 @@ const PROFILE_KEY = ['profile', 'self'] as const;
 
 export function useProfile() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
+  // SCENARIO-5: Only fetch when authenticated
   const query = useQuery({
     queryKey: PROFILE_KEY,
     queryFn: () => apiClient.get<ProfileResponse>('get-profile').then((r) => r.profile),
     staleTime: 30_000,
+    enabled: !!user,
   });
 
   const mutation = useMutation({

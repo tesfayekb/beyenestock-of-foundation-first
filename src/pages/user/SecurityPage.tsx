@@ -8,10 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
-import { ShieldCheck, ShieldOff, Plus, Trash2, KeyRound, Clock } from 'lucide-react';
+import { ShieldCheck, ShieldOff, Plus, Trash2, KeyRound, Clock, LogIn, AlertTriangle, Lock } from 'lucide-react';
 
 export default function SecurityPage() {
-  const { mfaStatus, checkMfaStatus } = useAuth();
+  const { user, mfaStatus, checkMfaStatus } = useAuth();
   const { factors, loading, unenrolling, listFactors, unenrollFactor } = useMfaFactors();
   const navigate = useNavigate();
   const [factorToRemove, setFactorToRemove] = useState<MfaFactor | null>(null);
@@ -31,6 +31,11 @@ export default function SecurityPage() {
 
   const verifiedFactors = factors.filter((f) => f.status === 'verified');
   const hasMfa = mfaStatus === 'enrolled' || verifiedFactors.length > 0;
+
+  // SCENARIO-3: Build unenroll warning based on current MFA state
+  const unenrollDescription = hasMfa && verifiedFactors.length === 1
+    ? "This will remove the only authenticator app from your account. Your next sign-in will no longer require MFA, reducing your account security. You'll need to set up a new one to re-enable MFA."
+    : "This will remove the authenticator app from your account. You'll need to set up a new one to re-enable MFA.";
 
   return (
     <>
@@ -122,7 +127,73 @@ export default function SecurityPage() {
           </CardContent>
         </Card>
 
-        {/* Password section — informational */}
+        {/* GAP-2: Recovery codes placeholder */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Lock className="h-4 w-4" />
+              Recovery Codes
+            </CardTitle>
+            <CardDescription>
+              Backup codes for account recovery when MFA is unavailable
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border border-dashed p-4 text-center">
+              <AlertTriangle className="h-5 w-5 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Recovery codes are not yet available. This feature is planned for a future release (DW-008).
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* GAP-1: Session info */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <LogIn className="h-4 w-4" />
+              Session Information
+            </CardTitle>
+            <CardDescription>
+              Details about your current session
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs">Last sign-in</p>
+                <p className="mt-1 font-medium">
+                  {user?.last_sign_in_at
+                    ? new Date(user.last_sign_in_at).toLocaleString()
+                    : '—'}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Auth provider</p>
+                <p className="mt-1 font-medium">
+                  {user?.app_metadata?.provider ?? 'email'}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Assurance level</p>
+                <Badge variant="outline" className="mt-1 text-xs">
+                  {mfaStatus === 'enrolled' ? 'AAL2 (MFA)' : 'AAL1 (Password)'}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs">Account created</p>
+                <p className="mt-1 font-medium">
+                  {user?.created_at
+                    ? new Date(user.created_at).toLocaleDateString()
+                    : '—'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Password section */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Password</CardTitle>
@@ -142,12 +213,12 @@ export default function SecurityPage() {
         </Card>
       </div>
 
-      {/* Unenroll confirmation dialog */}
+      {/* Unenroll confirmation dialog — SCENARIO-3: includes MFA downgrade warning */}
       <ConfirmActionDialog
         open={!!factorToRemove}
         onOpenChange={(open) => { if (!open) setFactorToRemove(null); }}
         title="Remove MFA Factor"
-        description="This will remove the authenticator app from your account. You'll need to set up a new one to re-enable MFA."
+        description={unenrollDescription}
         confirmLabel="Remove"
         destructive
         loading={unenrolling}

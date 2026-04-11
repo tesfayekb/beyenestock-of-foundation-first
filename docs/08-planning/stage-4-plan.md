@@ -1,6 +1,6 @@
 # Phase 4 — Admin & User Interfaces Plan (v3)
 
-> **Status:** APPROVED-PARTIAL (Stage 4A ✅, Stage 4B ✅, Stage 4C ✅, Stage 4D ✅, Stage 4E pending)  
+> **Status:** APPROVED (Stage 4A ✅, Stage 4B ✅, Stage 4C ✅, Stage 4D ✅, Stage 4E ✅)  
 > **Owner:** AI  
 > **Created:** 2026-04-10  
 > **Revised:** 2026-04-11 (v5 — Stage 4C gate closed, all data access moved to edge functions)  
@@ -373,18 +373,17 @@ No UI code may begin until ALL three governance docs are approved:
 | `src/pages/user/UserDashboard.tsx` | New |
 | `src/pages/user/ProfilePage.tsx` | New |
 | `src/pages/user/SecurityPage.tsx` | New |
-| `src/pages/user/index.ts` | New |
-| `src/hooks/useProfile.ts` | New — React Query hooks |
-| `src/hooks/useProfileMutations.ts` | New — update profile mutation |
+| `src/hooks/useProfile.ts` | New — React Query hooks (fetch + mutation) |
+| `src/hooks/useMfaFactors.ts` | New — React Query hooks (list + unenroll) |
 
 **Success Criteria:**
-- [ ] User can view and edit own profile
-- [ ] MFA status displayed correctly
-- [ ] Profile update calls edge function with audit logging
-- [ ] Self-scope enforced (cannot edit other users' profiles)
-- [ ] Loading/error states use governed components
-- [ ] Toast feedback on save
-- [ ] Same shell, dialog, form, card components as admin pages
+- [x] User can view and edit own profile — ACT-040
+- [x] MFA status displayed correctly — ACT-040
+- [x] Profile update calls edge function with audit logging — ACT-040
+- [x] Self-scope enforced (cannot edit other users' profiles) — ACT-040
+- [x] Loading/error states use governed components — ACT-040
+- [x] Toast feedback on save — ACT-040
+- [x] Same shell, dialog, form, card components as admin pages — ACT-040
 
 ---
 

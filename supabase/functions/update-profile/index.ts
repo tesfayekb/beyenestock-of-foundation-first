@@ -5,7 +5,7 @@
  * Admin access: requires users.edit_any (any user).
  *
  * PATCH /update-profile
- * Body: { user_id?: string, display_name?: string, avatar_url?: string }
+ * Body: { user_id?: string, display_name?: string | null, avatar_url?: string | null }
  * If user_id omitted, updates the authenticated user's own profile.
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
@@ -20,8 +20,19 @@ const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 
 const BodySchema = z.object({
   user_id: z.string().trim().regex(uuidRegex, 'Invalid UUID').optional(),
-  display_name: z.string().trim().min(1).max(255).optional(),
-  avatar_url: z.string().url().max(2048).nullable().optional(),
+  // SCENARIO-1: Allow null to clear display name
+  display_name: z.union([
+    z.string().trim().min(1).max(255),
+    z.null(),
+  ]).optional(),
+  // SCENARIO-2: Restrict to https:// URLs only
+  avatar_url: z.union([
+    z.string().url().max(2048).refine(
+      (val) => val.startsWith('https://'),
+      { message: 'Avatar URL must use HTTPS' }
+    ),
+    z.null(),
+  ]).optional(),
 }).refine(
   (d) => d.display_name !== undefined || d.avatar_url !== undefined,
   { message: 'At least one field to update is required' }

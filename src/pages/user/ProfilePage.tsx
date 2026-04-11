@@ -9,6 +9,18 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Save, Mail, Shield } from 'lucide-react';
+import { toast } from 'sonner';
+
+// SCENARIO-2: Only allow https:// avatar URLs
+function isValidAvatarUrl(url: string): boolean {
+  if (!url) return true; // empty is valid (clears avatar)
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 export default function ProfilePage() {
   const { profile, isLoading, isError, refetch, updateProfile, isUpdating } = useProfile();
@@ -32,11 +44,21 @@ export default function ProfilePage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isDirty) return;
+
+    // SCENARIO-2: Validate avatar URL scheme
+    if (avatarUrl && !isValidAvatarUrl(avatarUrl)) {
+      toast.error('Avatar URL must use HTTPS');
+      return;
+    }
+
     const payload: Record<string, string | null> = {};
-    if (displayName !== (profile?.display_name ?? '')) payload.display_name = displayName;
+    if (displayName !== (profile?.display_name ?? '')) {
+      // SCENARIO-1: Allow clearing display name by sending null
+      payload.display_name = displayName.trim() || null;
+    }
     if (avatarUrl !== (profile?.avatar_url ?? ''))
       payload.avatar_url = avatarUrl || null;
-    updateProfile(payload as { display_name?: string; avatar_url?: string | null });
+    updateProfile(payload as { display_name?: string | null; avatar_url?: string | null });
   };
 
   if (isLoading) return <LoadingSkeleton />;
@@ -97,9 +119,12 @@ export default function ProfilePage() {
                   id="display_name"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Your name"
+                  placeholder="Your name (leave empty to clear)"
                   maxLength={255}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to remove your display name.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -111,6 +136,9 @@ export default function ProfilePage() {
                   onChange={(e) => setAvatarUrl(e.target.value)}
                   placeholder="https://example.com/avatar.png"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Must be an HTTPS URL.
+                </p>
               </div>
 
               <Button type="submit" disabled={!isDirty || isUpdating} size="sm">
