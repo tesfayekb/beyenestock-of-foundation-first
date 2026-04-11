@@ -102,7 +102,7 @@ export default function RoleDetailPage() {
               <Key className="h-4 w-4" />
               Permissions ({role.permissions.length})
             </CardTitle>
-            {canAssignPerms && availablePermissions.length > 0 && (
+            {canAssignPerms && !role.is_immutable && availablePermissions.length > 0 && (
               <Button size="sm" variant="outline" onClick={() => setShowAddPermission(true)}>
                 <Plus className="mr-1 h-3 w-3" />
                 Add
@@ -121,7 +121,7 @@ export default function RoleDetailPage() {
                       <p className="text-xs text-muted-foreground">{perm.description}</p>
                     )}
                   </div>
-                  {canRevokePerms && (
+                  {canRevokePerms && !role.is_immutable && (
                     <Button
                       variant="ghost"
                       size="icon"
