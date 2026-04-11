@@ -130,20 +130,7 @@ export default function UserDetailPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Profile Card */}
         <Card className="lg:col-span-2">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Profile Information</CardTitle>
-              {!editing && (
-                <AdminEditProfileCard
-                  userId={id!}
-                  displayName={profile.display_name}
-                  avatarUrl={profile.avatar_url}
-                  canEdit={canEditProfile}
-                  isSelf={isSelf}
-                />
-              )}
-            </div>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">Profile Information</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16">
@@ -166,16 +153,13 @@ export default function UserDetailPage() {
               <InfoRow icon={Calendar} label="Created" value={format(new Date(profile.created_at), 'MMM d, yyyy')} />
               <InfoRow icon={Clock} label="Last Updated" value={format(new Date(profile.updated_at), 'MMM d, yyyy HH:mm')} />
             </div>
-            {/* Admin edit form — inline toggle */}
-            {editing && (
-              <AdminEditProfileCard
-                userId={id!}
-                displayName={profile.display_name}
-                avatarUrl={profile.avatar_url}
-                canEdit={canEditProfile}
-                isSelf={isSelf}
-              />
-            )}
+            <AdminEditProfileCard
+              userId={id!}
+              displayName={profile.display_name}
+              avatarUrl={profile.avatar_url}
+              canEdit={canEditProfile}
+              isSelf={isSelf}
+            />
           </CardContent>
         </Card>
 
