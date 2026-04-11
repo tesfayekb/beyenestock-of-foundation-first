@@ -443,7 +443,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Scope** | system-wide |
 | **Panel** | admin-panel |
 | **Related tests** | Role listing allow/deny tests |
-| **Lifecycle** | planned |
+| **Lifecycle** | active |
 
 #### `/admin/roles/:id` — Role Detail
 
@@ -458,7 +458,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Panel** | admin-panel |
 | **Related functions** | `checkPermission()` |
 | **Related tests** | Role detail view tests |
-| **Lifecycle** | planned |
+| **Lifecycle** | active |
 
 #### `/admin/permissions` — Permission List
 
@@ -472,7 +472,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Scope** | system-wide |
 | **Panel** | admin-panel |
 | **Related tests** | Permission list view tests |
-| **Lifecycle** | planned |
+| **Lifecycle** | active |
 
 #### `/admin/audit` — Audit Logs
 
