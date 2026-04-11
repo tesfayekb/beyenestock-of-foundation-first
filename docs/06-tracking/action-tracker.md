@@ -1033,6 +1033,27 @@ Each action must include:
 | **Related Actions** | ACT-038 (corrected by this entry) |
 | **Status** | Verified |
 
+### ACT-039: Stage 4D — Admin Audit Log Viewer Gate Closure
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-039 |
+| **Date** | 2026-04-11 |
+| **Action** | Implemented Stage 4D audit log viewer: AdminAuditPage with cursor-based pagination, action/target/actor/date filters, AuditActionBadge (color-coded with denial highlighting), AuditMetadataViewer (expandable JSON), CSV export via direct fetch+blob. Extended useAuditLogs with date_from/date_to/target_type params. Created useAuditExport hook bypassing apiClient for CSV responses. Fixed GAP-1 (ACTION_OPTIONS corrected to actual system event names) and GAP-2 (added rbac. prefix to categorizer). |
+| **Type** | Feature |
+| **Impact Classification** | High |
+| **Modules Affected** | admin-panel, audit-logging |
+| **Docs Updated** | stage-4-plan.md (4D criteria checked, files reconciled), system-state.md (4D ✅), component-inventory.md (pre-registered), route-index.md (4D route active) |
+| **Evidence** | TypeScript build: zero errors ✅. Reviewer verification: cursor pagination correct, export pattern correct, denial styling correct, stopPropagation on metadata viewer correct. GAP-1 fix: all 10 action options match actual edge function event names. GAP-2 fix: rbac. prefix categorized as 'role'. |
+| **Verified By** | AI Agent + Project Lead review |
+| **Before State** | AdminAuditPage was a stub ("Coming Soon") |
+| **After State** | Full audit log viewer with filters, cursor pagination, metadata expansion, CSV export, denial highlighting |
+| **Rollback Available** | Yes — revert to stub |
+| **Blast Radius** | Medium (new UI page, no backend changes) |
+| **Health Impact** | Positive (compliance visibility) |
+| **Related Actions** | ACT-038 (Stage 4C), ACT-037 (Stage 4B) |
+| **Status** | Verified |
+
 ---
 
 - If action resolves a risk → must link risk ID in `related_risks`
