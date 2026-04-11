@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { AdminEditProfileCard } from '@/components/admin/AdminEditProfileCard';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { StatusBadge } from '@/components/dashboard/StatusBadge';
@@ -34,6 +35,7 @@ export default function UserDetailPage() {
   const canViewAudit = checkPermission(context, 'audit.view');
   const canAssignRoles = checkPermission(context, 'roles.assign');
   const canRevokeRoles = checkPermission(context, 'roles.revoke');
+  const canEditProfile = checkPermission(context, 'users.edit_any');
 
   const { data: profile, isLoading, error, refetch } = useUserDetail(id);
   const { data: userRoles, isLoading: rolesLoading, refetch: refetchRoles } = useUserRolesAdmin(canViewRoles ? id : undefined);
