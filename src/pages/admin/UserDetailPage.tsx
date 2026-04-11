@@ -11,11 +11,12 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useUserDetail } from '@/hooks/useUsers';
 import { useUserRolesAdmin } from '@/hooks/useUserRolesAdmin';
+import { useAuditLogs, AuditLogEntry } from '@/hooks/useAuditLogs';
 import { useDeactivateUser, useReactivateUser } from '@/hooks/useUserActions';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { format } from 'date-fns';
-import { ArrowLeft, ShieldAlert, ShieldCheck, Mail, Calendar, Clock } from 'lucide-react';
+import { ArrowLeft, ShieldAlert, ShieldCheck, Mail, Calendar, Clock, FileText } from 'lucide-react';
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +25,10 @@ export default function UserDetailPage() {
 
   const { data: profile, isLoading, error, refetch } = useUserDetail(id);
   const { data: roles, isLoading: rolesLoading } = useUserRolesAdmin(id);
+  const { data: auditData, isLoading: auditLoading } = useAuditLogs({
+    target_id: id,
+    limit: 10,
+  });
   const deactivateMutation = useDeactivateUser();
   const reactivateMutation = useReactivateUser();
 
@@ -69,6 +74,8 @@ export default function UserDetailPage() {
       { onSuccess: () => setShowReactivate(false) },
     );
   };
+
+  const auditEntries: AuditLogEntry[] = auditData?.data ?? [];
 
   return (
     <div className="space-y-6">
@@ -161,6 +168,41 @@ export default function UserDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Audit Trail Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FileText className="h-4 w-4" />
+            Recent Activity
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {auditLoading ? (
+            <LoadingSkeleton variant="card" rows={3} />
+          ) : auditEntries.length > 0 ? (
+            <div className="space-y-3">
+              {auditEntries.map((entry) => (
+                <div key={entry.id} className="flex items-start justify-between gap-4 border-b border-border pb-3 last:border-0 last:pb-0">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">{entry.action}</p>
+                    {entry.target_type && (
+                      <p className="text-xs text-muted-foreground">
+                        {entry.target_type}{entry.target_id ? ` · ${entry.target_id.slice(0, 8)}…` : ''}
+                      </p>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {format(new Date(entry.created_at), 'MMM d, HH:mm')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No audit records found for this user.</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Deactivate Dialog */}
       <ConfirmActionDialog

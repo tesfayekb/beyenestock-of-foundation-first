@@ -47,6 +47,15 @@ const LazyFallback = () => (
   </div>
 );
 
+/** Wraps a page with route-level permission enforcement */
+function PermissionGate({ permission, children }: { permission: string | string[]; children: React.ReactNode }) {
+  return (
+    <RequirePermission permission={permission} fallback={<AccessDenied />}>
+      {children}
+    </RequirePermission>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
@@ -79,29 +88,59 @@ const App = () => (
                 </RequireAuth>
               } />
 
-              {/* Admin panel — shared DashboardLayout + admin nav + RequirePermission(admin.access) */}
+              {/* Admin panel — AdminLayout enforces admin.access, individual routes add granular permissions */}
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<Suspense fallback={<LazyFallback />}><AdminDashboard /></Suspense>} />
-              <Route path="users" element={<Suspense fallback={<LazyFallback />}><AdminUsersPage /></Suspense>} />
-                <Route path="users/:id" element={<Suspense fallback={<LazyFallback />}><UserDetailPage /></Suspense>} />
-                <Route path="roles" element={<Suspense fallback={<LazyFallback />}><AdminRolesPage /></Suspense>} />
-                <Route path="permissions" element={<Suspense fallback={<LazyFallback />}><AdminPermissionsPage /></Suspense>} />
-                <Route path="audit" element={<Suspense fallback={<LazyFallback />}><AdminAuditPage /></Suspense>} />
+                <Route path="users" element={
+                  <Suspense fallback={<LazyFallback />}>
+                    <PermissionGate permission="users.view_all">
+                      <AdminUsersPage />
+                    </PermissionGate>
+                  </Suspense>
+                } />
+                <Route path="users/:id" element={
+                  <Suspense fallback={<LazyFallback />}>
+                    <PermissionGate permission="users.view_all">
+                      <UserDetailPage />
+                    </PermissionGate>
+                  </Suspense>
+                } />
+                <Route path="roles" element={
+                  <Suspense fallback={<LazyFallback />}>
+                    <PermissionGate permission="roles.view">
+                      <AdminRolesPage />
+                    </PermissionGate>
+                  </Suspense>
+                } />
+                <Route path="permissions" element={
+                  <Suspense fallback={<LazyFallback />}>
+                    <PermissionGate permission="roles.view">
+                      <AdminPermissionsPage />
+                    </PermissionGate>
+                  </Suspense>
+                } />
+                <Route path="audit" element={
+                  <Suspense fallback={<LazyFallback />}>
+                    <PermissionGate permission="audit.view">
+                      <AdminAuditPage />
+                    </PermissionGate>
+                  </Suspense>
+                } />
               </Route>
 
-              {/* User panel — shared DashboardLayout + user nav + RequireAuth */}
+              {/* User panel */}
               <Route path="/dashboard" element={<UserLayout />}>
                 <Route index element={<Suspense fallback={<LazyFallback />}><UserDashboard /></Suspense>} />
               </Route>
               <Route path="/settings" element={<UserLayout />}>
                 <Route index element={<Suspense fallback={<LazyFallback />}><ProfilePage /></Suspense>} />
-              <Route path="security" element={
-                <Suspense fallback={<LazyFallback />}>
-                  <RequirePermission permission={["mfa.self_manage", "session.self_manage"]} fallback={<AccessDenied />}>
-                    <SecurityPage />
-                  </RequirePermission>
-                </Suspense>
-              } />
+                <Route path="security" element={
+                  <Suspense fallback={<LazyFallback />}>
+                    <PermissionGate permission={["mfa.self_manage", "session.self_manage"]}>
+                      <SecurityPage />
+                    </PermissionGate>
+                  </Suspense>
+                } />
               </Route>
 
               {/* Catch-all */}

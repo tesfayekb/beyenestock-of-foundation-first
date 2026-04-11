@@ -1,5 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { getAuthHeaders, getProjectUrl } from '@/lib/api-headers';
+
+export interface UserRoleSummary {
+  role_key: string;
+  role_name: string;
+}
 
 export interface UserListItem {
   id: string;
@@ -10,6 +15,7 @@ export interface UserListItem {
   status: string;
   created_at: string;
   updated_at: string;
+  roles?: UserRoleSummary[];
 }
 
 interface ListUsersParams {
@@ -26,15 +32,6 @@ interface ListUsersResponse {
   offset: number;
 }
 
-async function getAuthHeaders() {
-  const session = (await supabase.auth.getSession()).data.session;
-  if (!session) throw new Error('Not authenticated');
-  return {
-    'Authorization': `Bearer ${session.access_token}`,
-    'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-  };
-}
-
 async function fetchUsers(params: ListUsersParams): Promise<ListUsersResponse> {
   const searchParams = new URLSearchParams();
   if (params.limit) searchParams.set('limit', String(params.limit));
@@ -43,8 +40,7 @@ async function fetchUsers(params: ListUsersParams): Promise<ListUsersResponse> {
   if (params.search) searchParams.set('search', params.search);
 
   const headers = await getAuthHeaders();
-  const projectUrl = import.meta.env.VITE_SUPABASE_URL;
-  const url = `${projectUrl}/functions/v1/list-users?${searchParams.toString()}`;
+  const url = `${getProjectUrl()}/functions/v1/list-users?${searchParams.toString()}`;
 
   const res = await fetch(url, { method: 'GET', headers });
 
@@ -68,8 +64,7 @@ export function useUsers(params: ListUsersParams = {}) {
 /** Fetch a single user profile for admin detail view */
 async function fetchUserDetail(userId: string): Promise<UserListItem> {
   const headers = await getAuthHeaders();
-  const projectUrl = import.meta.env.VITE_SUPABASE_URL;
-  const url = `${projectUrl}/functions/v1/get-profile?user_id=${userId}`;
+  const url = `${getProjectUrl()}/functions/v1/get-profile?user_id=${userId}`;
 
   const res = await fetch(url, { method: 'GET', headers });
 

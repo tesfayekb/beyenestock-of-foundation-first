@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { getAuthHeaders, getProjectUrl } from '@/lib/api-headers';
 import { toast } from 'sonner';
 
 interface UserActionParams {
@@ -8,19 +8,11 @@ interface UserActionParams {
 }
 
 async function invokeUserAction(functionName: string, params: UserActionParams) {
-  const session = (await supabase.auth.getSession()).data.session;
-  if (!session) throw new Error('Not authenticated');
+  const headers = await getAuthHeaders();
 
-  const projectUrl = import.meta.env.VITE_SUPABASE_URL;
-  const url = `${projectUrl}/functions/v1/${functionName}`;
-
-  const res = await fetch(url, {
+  const res = await fetch(`${getProjectUrl()}/functions/v1/${functionName}`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      'Content-Type': 'application/json',
-    },
+    headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   });
 

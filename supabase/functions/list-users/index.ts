@@ -4,6 +4,9 @@
  * Requires: users.view_all permission.
  *
  * GET /list-users?limit=50&offset=0&status=active&search=...
+ *
+ * Search matches both display_name and email (server-side).
+ * Returns roles summary per user.
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
@@ -36,19 +39,49 @@ Deno.serve(createHandler(async (req: Request) => {
     search: params.get('search') ?? undefined,
   })
 
+  // Step 1: Build an email lookup map from auth.users (targeted by page batch)
+  // For scalability, we fetch only needed users after profile query,
+  // but for email search we need to pre-build a map.
+  let emailSearchIds: Set<string> | null = null
+
+  if (search) {
+    // Fetch auth users to find email matches
+    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    })
+    if (authData?.users) {
+      const lowerSearch = search.toLowerCase()
+      emailSearchIds = new Set(
+        authData.users
+          .filter((u) => u.email?.toLowerCase().includes(lowerSearch))
+          .map((u) => u.id)
+      )
+    }
+  }
+
+  // Step 2: Query profiles with display_name filter
   let query = supabaseAdmin
     .from('profiles')
     .select('id, display_name, avatar_url, email_verified, status, created_at, updated_at', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1)
 
   if (status) {
     query = query.eq('status', status)
   }
 
   if (search) {
-    query = query.or(`display_name.ilike.%${search}%`);
+    if (emailSearchIds && emailSearchIds.size > 0) {
+      // Match display_name OR any of the email-matched IDs
+      const emailIdArray = Array.from(emailSearchIds)
+      query = query.or(`display_name.ilike.%${search}%,id.in.(${emailIdArray.join(',')})`)
+    } else {
+      query = query.or(`display_name.ilike.%${search}%`)
+    }
   }
+
+  // Apply pagination after filter
+  query = query.range(offset, offset + limit - 1)
 
   const { data, error, count } = await query
 
@@ -59,46 +92,54 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const profiles = data ?? []
 
-  // Enrich with email from auth.users for admin display
-  let enrichedUsers = profiles
+  // Step 3: Enrich with email + roles for the current page only
+  let enrichedUsers = profiles.map((p) => ({ ...p, email: null as string | null, roles: [] as { role_key: string; role_name: string }[] }))
+
   if (profiles.length > 0) {
     const userIds = profiles.map((p) => p.id)
-    // Batch fetch auth users — admin API supports listing by page
-    // For small batches (≤100), a single listUsers call with filter is efficient
+
+    // Fetch emails — targeted by IDs on this page
     const { data: authData } = await supabaseAdmin.auth.admin.listUsers({
       page: 1,
       perPage: 1000,
     })
-
+    const emailMap = new Map<string, string>()
     if (authData?.users) {
-      const emailMap = new Map(
-        authData.users
-          .filter((u) => userIds.includes(u.id))
-          .map((u) => [u.id, u.email ?? null])
-      )
-
-      enrichedUsers = profiles.map((p) => ({
-        ...p,
-        email: emailMap.get(p.id) ?? null,
-      }))
+      for (const u of authData.users) {
+        if (userIds.includes(u.id) && u.email) {
+          emailMap.set(u.id, u.email)
+        }
+      }
     }
-  }
 
-  // If search term provided, also filter by email match (post-enrichment)
-  let filteredUsers = enrichedUsers
-  let filteredTotal = count ?? 0
-  if (search && enrichedUsers.length > 0 && enrichedUsers[0] && 'email' in enrichedUsers[0]) {
-    // Re-filter to include email matches that display_name filter missed
-    // Note: primary filter is display_name via DB query; email match is additive client-side
-    // For large-scale, this should move to a DB view or function
-    filteredUsers = enrichedUsers
-    // The DB already filtered by display_name, so all results are relevant
-    // Email-only matches would require a separate query approach (future optimization)
+    // Fetch roles for these users
+    const { data: userRoles } = await supabaseAdmin
+      .from('user_roles')
+      .select('user_id, roles(key, name)')
+      .in('user_id', userIds)
+
+    const rolesMap = new Map<string, { role_key: string; role_name: string }[]>()
+    if (userRoles) {
+      for (const ur of userRoles as any[]) {
+        const existing = rolesMap.get(ur.user_id) ?? []
+        existing.push({
+          role_key: ur.roles?.key ?? '',
+          role_name: ur.roles?.name ?? '',
+        })
+        rolesMap.set(ur.user_id, existing)
+      }
+    }
+
+    enrichedUsers = profiles.map((p) => ({
+      ...p,
+      email: emailMap.get(p.id) ?? null,
+      roles: rolesMap.get(p.id) ?? [],
+    }))
   }
 
   return apiSuccess({
-    users: filteredUsers,
-    total: filteredTotal,
+    users: enrichedUsers,
+    total: count ?? 0,
     limit,
     offset,
   })
