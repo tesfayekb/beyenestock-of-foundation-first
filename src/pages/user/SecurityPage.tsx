@@ -190,24 +190,8 @@ export default function SecurityPage() {
           </CardContent>
         </Card>
 
-        {/* Password section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Password</CardTitle>
-            <CardDescription>
-              Use the password reset flow to change your password
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate(ROUTES.FORGOT_PASSWORD)}
-            >
-              Reset Password
-            </Button>
-          </CardContent>
-        </Card>
+        {/* Password change */}
+        <PasswordChangeCard />
       </div>
 
       {/* Unenroll confirmation dialog — SCENARIO-3: includes MFA downgrade warning */}
