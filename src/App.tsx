@@ -6,6 +6,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { RequireAuth } from "@/components/auth/RequireAuth";
+import { RequirePermission } from "@/components/auth/RequirePermission";
+import { AccessDenied } from "@/components/dashboard/AccessDenied";
 import { RequireVerifiedEmail } from "@/components/auth/RequireVerifiedEmail";
 import { Suspense, lazy } from "react";
 import { LoadingSkeleton } from "@/components/dashboard/LoadingSkeleton";
@@ -91,7 +93,13 @@ const App = () => (
               </Route>
               <Route path="/settings" element={<UserLayout />}>
                 <Route index element={<Suspense fallback={<LazyFallback />}><ProfilePage /></Suspense>} />
-                <Route path="security" element={<Suspense fallback={<LazyFallback />}><SecurityPage /></Suspense>} />
+              <Route path="security" element={
+                <Suspense fallback={<LazyFallback />}>
+                  <RequirePermission permission="mfa.self_manage" fallback={<AccessDenied />}>
+                    <SecurityPage />
+                  </RequirePermission>
+                </Suspense>
+              } />
               </Route>
 
               {/* Catch-all */}

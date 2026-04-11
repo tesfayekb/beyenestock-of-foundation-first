@@ -1,5 +1,6 @@
 import { LayoutDashboard, UserCircle, ShieldCheck } from 'lucide-react';
 import type { NavSection } from './navigation.types';
+import { ROUTES } from './routes';
 
 export const userNavigation: NavSection[] = [
   {
@@ -7,18 +8,18 @@ export const userNavigation: NavSection[] = [
     items: [
       {
         title: 'Dashboard',
-        url: '/dashboard',
+        url: ROUTES.DASHBOARD,
         icon: LayoutDashboard,
       },
       {
         title: 'Profile',
-        url: '/settings',
+        url: ROUTES.SETTINGS,
         icon: UserCircle,
         permission: 'profile.self_manage',
       },
       {
         title: 'Security',
-        url: '/settings/security',
+        url: ROUTES.SETTINGS_SECURITY,
         icon: ShieldCheck,
         permission: 'mfa.self_manage',
       },

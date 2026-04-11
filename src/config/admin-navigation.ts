@@ -1,5 +1,6 @@
 import { LayoutDashboard, Users, Shield, Key, FileText } from 'lucide-react';
 import type { NavSection } from './navigation.types';
+import { ROUTES } from './routes';
 
 export const adminNavigation: NavSection[] = [
   {
@@ -7,7 +8,7 @@ export const adminNavigation: NavSection[] = [
     items: [
       {
         title: 'Dashboard',
-        url: '/admin',
+        url: ROUTES.ADMIN,
         icon: LayoutDashboard,
         permission: 'admin.access',
       },
@@ -18,7 +19,7 @@ export const adminNavigation: NavSection[] = [
     items: [
       {
         title: 'Users',
-        url: '/admin/users',
+        url: ROUTES.ADMIN_USERS,
         icon: Users,
         permission: 'users.view_all',
       },
@@ -29,13 +30,13 @@ export const adminNavigation: NavSection[] = [
     items: [
       {
         title: 'Roles',
-        url: '/admin/roles',
+        url: ROUTES.ADMIN_ROLES,
         icon: Shield,
         permission: 'roles.view',
       },
       {
         title: 'Permissions',
-        url: '/admin/permissions',
+        url: ROUTES.ADMIN_PERMISSIONS,
         icon: Key,
         permission: 'roles.view',
       },
@@ -46,7 +47,7 @@ export const adminNavigation: NavSection[] = [
     items: [
       {
         title: 'Audit Logs',
-        url: '/admin/audit',
+        url: ROUTES.ADMIN_AUDIT,
         icon: FileText,
         permission: 'audit.view',
       },
