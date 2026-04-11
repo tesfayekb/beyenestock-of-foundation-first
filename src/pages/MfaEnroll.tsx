@@ -21,6 +21,7 @@ export default function MfaEnroll() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { checkMfaStatus } = useAuth();
+  const navigate = useNavigate();
 
   const handleEnroll = async () => {
     setLoading(true);
