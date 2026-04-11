@@ -264,10 +264,9 @@ No UI code may begin until ALL three governance docs are approved:
 
 | File | Action |
 |------|--------|
-| `src/pages/admin/access/RoleListPage.tsx` | New |
-| `src/pages/admin/access/RoleDetailPage.tsx` | New |
-| `src/pages/admin/access/PermissionListPage.tsx` | New |
-| `src/pages/admin/access/index.ts` | New |
+| `src/pages/admin/AdminRolesPage.tsx` | New (role list) |
+| `src/pages/admin/RoleDetailPage.tsx` | New (role detail) |
+| `src/pages/admin/AdminPermissionsPage.tsx` | New (permission list) |
 | `src/hooks/useRoles.ts` | New — React Query hooks |
 | `src/hooks/useRoleActions.ts` | New — assign/revoke mutations |
 | `src/components/admin/AssignRoleDialog.tsx` | New |
