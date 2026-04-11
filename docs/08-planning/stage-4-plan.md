@@ -616,6 +616,27 @@ User pages may simplify **content** (fewer fields, fewer actions), but NOT **she
 
 ---
 
+## Stage 4L — Cross-Panel Navigation (ACT-045) — IMPLEMENTED
+
+**Status:** IMPLEMENTED  
+**Date:** 2026-04-11  
+**Scope:** Add navigation links between admin and user panels
+
+### Items Implemented
+
+1. **UserMenu cross-panel links** — Conditional "Admin Console" (in user panel) / "My Dashboard" (in admin panel) links gated by `checkPermission(context, 'admin.access')` and `useLocation()` panel detection
+2. **Admin sidebar "My Dashboard"** — "Account" section at bottom of admin-navigation.ts with link to `/dashboard`
+3. **User sidebar "Admin Console"** — Separate "Administration" section in user-navigation.ts with `permission: 'admin.access'` — auto-hidden for non-admins via existing sidebar permission gating
+
+### Success Criteria
+
+- [x] Admin users can navigate from admin panel to user panel and back
+- [x] Non-admin users never see Admin Console link
+- [x] Zero new components, zero new API calls
+- [x] All three enforcement layers (route, edge function, RLS) unchanged
+
+---
+
 ## Phase 4 Gate (Closure Criteria)
 
 ### Functional Gates
