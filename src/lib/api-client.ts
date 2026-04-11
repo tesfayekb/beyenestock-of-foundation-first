@@ -50,7 +50,8 @@ async function handleResponse<T>(res: Response): Promise<T> {
     );
   }
   const json = await res.json();
-  return json.data as T;
+  // Edge functions return payload directly via apiSuccess() — no .data wrapper
+  return json as T;
 }
 
 export const apiClient = {
