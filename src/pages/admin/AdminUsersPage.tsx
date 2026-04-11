@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUsers, UserListItem } from '@/hooks/useUsers';
@@ -62,6 +63,24 @@ export default function AdminUsersPage() {
       },
     },
     {
+      key: 'roles',
+      header: 'Roles',
+      cell: (row) => (
+        <div className="flex flex-wrap gap-1">
+          {row.roles && row.roles.length > 0 ? (
+            row.roles.map((r) => (
+              <Badge key={r.role_key} variant="secondary" className="text-xs">
+                {r.role_name}
+              </Badge>
+            ))
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </div>
+      ),
+      className: 'w-40',
+    },
+    {
       key: 'status',
       header: 'Status',
       cell: (row) => <StatusBadge status={row.status as 'active' | 'deactivated'} />,
@@ -90,7 +109,6 @@ export default function AdminUsersPage() {
     },
   ], []);
 
-  // Reset page when filters change
   const handleSearchChange = (value: string) => {
     setSearch(value);
     setPage(1);
@@ -110,7 +128,7 @@ export default function AdminUsersPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by name…"
+            placeholder="Search by name or email…"
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9"
