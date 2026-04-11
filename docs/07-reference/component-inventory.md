@@ -26,6 +26,7 @@ Governed registry of all shared Phase 4 components. Pages must assemble from thi
 | `DashboardHeader` | `src/components/dashboard/DashboardHeader.tsx` | Fixed top bar: trigger, search, theme, user menu | Shell |
 | `DashboardBreadcrumbs` | `src/components/dashboard/DashboardBreadcrumbs.tsx` | Route-aware breadcrumb trail | All pages |
 | `PageHeader` | `src/components/dashboard/PageHeader.tsx` | Page title + subtitle + action buttons zone | All pages |
+| `DashboardNotFound` | `src/components/dashboard/DashboardNotFound.tsx` | In-shell 404: icon + message + go-back button, rendered within shell | Invalid routes under /admin/*, /dashboard/*, /settings/* |
 | `UserMenu` | `src/components/dashboard/UserMenu.tsx` | Avatar dropdown: profile, security, sign-out | Header |
 
 ## Data Display Components

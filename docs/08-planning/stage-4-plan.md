@@ -419,6 +419,36 @@ The following admin-panel.md scope items have NO backend implementation yet and 
 
 ---
 
+### Stage 4H — Shell Polish & Accessibility Baseline
+
+**Status:** IN PROGRESS
+**Scope Constraint:** Shell files only. Blast radius limited to DashboardLayout.tsx, DashboardSidebar.tsx, AdminLayout.tsx, UserLayout.tsx, App.tsx, and one new DashboardNotFound component. No edge functions, no hooks, no auth, no RBAC, no permissions, no route-index changes.
+
+**Deliverables:**
+
+| # | Item | Description | Status |
+|---|------|-------------|--------|
+| 1 | SidebarInset + content area styling | Replace raw div wrapper with SidebarInset for rounded-tl-xl shadow separation | ✅ |
+| 2 | Single Suspense boundary in DashboardLayout | Move Suspense into layout, remove per-route wrappers from App.tsx | ✅ |
+| 4 | Logo / app name in SidebarHeader | Shield icon + app name, icon-only when collapsed | ✅ |
+| 14 | Mobile sidebar closes on navigate | useEffect watching location.pathname + setOpenMobile(false) | ✅ |
+| 15 | Sidebar memoization | React.memo + useCallback on isActive and signOut | ✅ |
+| 16 | DashboardNotFound (in-shell 404) | New component + catch-all routes in /admin/* and /dashboard/settings/* | ✅ |
+| 22 | Tooltips on collapsed sidebar icons | tooltip={item.title} on SidebarMenuButton | ✅ |
+
+**Success Criteria:**
+- [x] SidebarInset renders with rounded corner and shadow
+- [x] Lazy route transitions keep shell rendered (no layout flash)
+- [x] Logo visible expanded, icon-only collapsed
+- [x] Mobile sidebar Sheet closes on navigation
+- [x] Sidebar does not re-render on React Query cache updates
+- [x] Bad URLs render 404 inside shell (not global NotFound)
+- [x] Collapsed sidebar icons show tooltips on hover
+- [x] TypeScript build: zero errors
+- [x] component-inventory.md updated with DashboardNotFound
+
+---
+
 ## Cross-Stage Requirements
 
 ### Shell Uniformity Rule

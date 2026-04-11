@@ -9,8 +9,8 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { RequirePermission } from "@/components/auth/RequirePermission";
 import { AccessDenied } from "@/components/dashboard/AccessDenied";
 import { RequireVerifiedEmail } from "@/components/auth/RequireVerifiedEmail";
-import { Suspense, lazy } from "react";
-import { LoadingSkeleton } from "@/components/dashboard/LoadingSkeleton";
+import { DashboardNotFound } from "@/components/dashboard/DashboardNotFound";
+import { lazy } from "react";
 
 // Public pages (eagerly loaded)
 import Index from "./pages/Index";
@@ -41,12 +41,6 @@ const ProfilePage = lazy(() => import("./pages/user/ProfilePage"));
 const SecurityPage = lazy(() => import("./pages/user/SecurityPage"));
 
 const queryClient = new QueryClient();
-
-const LazyFallback = () => (
-  <div className="p-4 sm:p-6 lg:p-8">
-    <LoadingSkeleton variant="page" />
-  </div>
-);
 
 /** Wraps a page with route-level permission enforcement */
 function PermissionGate({ permission, children }: { permission: string | string[]; children: React.ReactNode }) {
@@ -91,70 +85,57 @@ const App = () => (
 
               {/* Admin panel — AdminLayout enforces admin.access, individual routes add granular permissions */}
               <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<Suspense fallback={<LazyFallback />}><AdminDashboard /></Suspense>} />
+                <Route index element={<AdminDashboard />} />
                 <Route path="users" element={
-                  <Suspense fallback={<LazyFallback />}>
-                    <PermissionGate permission="users.view_all">
-                      <AdminUsersPage />
-                    </PermissionGate>
-                  </Suspense>
+                  <PermissionGate permission="users.view_all">
+                    <AdminUsersPage />
+                  </PermissionGate>
                 } />
                 <Route path="users/:id" element={
-                  <Suspense fallback={<LazyFallback />}>
-                    <PermissionGate permission="users.view_all">
-                      <UserDetailPage />
-                    </PermissionGate>
-                  </Suspense>
+                  <PermissionGate permission="users.view_all">
+                    <UserDetailPage />
+                  </PermissionGate>
                 } />
                 <Route path="roles" element={
-                  <Suspense fallback={<LazyFallback />}>
-                    <PermissionGate permission="roles.view">
-                      <AdminRolesPage />
-                    </PermissionGate>
-                  </Suspense>
+                  <PermissionGate permission="roles.view">
+                    <AdminRolesPage />
+                  </PermissionGate>
                 } />
                 <Route path="roles/:id" element={
-                  <Suspense fallback={<LazyFallback />}>
-                    <PermissionGate permission="roles.view">
-                      <RoleDetailPage />
-                    </PermissionGate>
-                  </Suspense>
+                  <PermissionGate permission="roles.view">
+                    <RoleDetailPage />
+                  </PermissionGate>
                 } />
                 <Route path="permissions" element={
-                  <Suspense fallback={<LazyFallback />}>
-                    <PermissionGate permission="roles.view">
-                      <AdminPermissionsPage />
-                    </PermissionGate>
-                  </Suspense>
+                  <PermissionGate permission="roles.view">
+                    <AdminPermissionsPage />
+                  </PermissionGate>
                 } />
                 <Route path="audit" element={
-                  <Suspense fallback={<LazyFallback />}>
-                    <PermissionGate permission="audit.view">
-                      <AdminAuditPage />
-                    </PermissionGate>
-                  </Suspense>
+                  <PermissionGate permission="audit.view">
+                    <AdminAuditPage />
+                  </PermissionGate>
                 } />
+                <Route path="*" element={<DashboardNotFound />} />
               </Route>
 
               {/* User panel */}
               <Route path="/dashboard" element={<UserLayout />}>
-                <Route index element={<Suspense fallback={<LazyFallback />}><UserDashboard /></Suspense>} />
+                <Route index element={<UserDashboard />} />
+                <Route path="*" element={<DashboardNotFound />} />
               </Route>
               <Route path="/settings" element={<UserLayout />}>
                 <Route index element={
-                  <Suspense fallback={<LazyFallback />}>
-                    <PermissionGate permission="profile.self_manage">
-                      <ProfilePage />
-                    </PermissionGate>
-                  </Suspense>
+                  <PermissionGate permission="profile.self_manage">
+                    <ProfilePage />
+                  </PermissionGate>
                 } />
                 <Route path="security" element={
-                  <Suspense fallback={<LazyFallback />}>
-                    <PermissionGate permission="mfa.self_manage">
-                      <SecurityPage />
-                    </PermissionGate>
-                  </Suspense>
+                  <PermissionGate permission="mfa.self_manage">
+                    <SecurityPage />
+                  </PermissionGate>
                 } />
+                <Route path="*" element={<DashboardNotFound />} />
               </Route>
 
               {/* Catch-all */}
