@@ -8,6 +8,8 @@ export interface NavItem {
   permission?: string;
   /** Nested items for collapsible groups */
   children?: NavItem[];
+  /** Optional badge displayed next to the title (e.g. count or label). Only visible in expanded mode. */
+  badge?: string | number;
 }
 
 export interface NavSection {

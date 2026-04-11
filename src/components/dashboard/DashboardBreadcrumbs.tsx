@@ -1,4 +1,5 @@
 import { useLocation, Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -20,8 +21,40 @@ const labelMap: Record<string, string> = {
   security: 'Security',
 };
 
+const UUID_RE = /^[0-9a-f]{8}-/;
+
+/**
+ * Resolves a UUID breadcrumb segment to a display name from React Query cache.
+ * Read-only — no fetches triggered. Falls back to "Detail" on cache miss.
+ */
+function resolveEntityName(
+  queryClient: ReturnType<typeof useQueryClient>,
+  segments: string[],
+  uuid: string,
+): string {
+  // Determine entity type from the segment before the UUID
+  const uuidIndex = segments.indexOf(uuid);
+  const parentSegment = uuidIndex > 0 ? segments[uuidIndex - 1] : '';
+
+  if (parentSegment === 'users') {
+    // useUserDetail uses key ['admin', 'user', id]
+    const data = queryClient.getQueryData<any>(['admin', 'user', uuid]);
+    if (data?.display_name) return data.display_name;
+    if (data?.email) return data.email;
+  }
+
+  if (parentSegment === 'roles') {
+    // Role detail cache key
+    const data = queryClient.getQueryData<any>(['roles', 'detail', uuid]);
+    if (data?.name) return data.name;
+  }
+
+  return 'Detail';
+}
+
 export function DashboardBreadcrumbs() {
   const location = useLocation();
+  const queryClient = useQueryClient();
   const segments = location.pathname.split('/').filter(Boolean);
 
   if (segments.length === 0) return null;
@@ -32,9 +65,10 @@ export function DashboardBreadcrumbs() {
         {segments.map((segment, index) => {
           const path = '/' + segments.slice(0, index + 1).join('/');
           const isLast = index === segments.length - 1;
-          // Skip UUID-like segments for display, show "Detail" instead
-          const isUuid = /^[0-9a-f]{8}-/.test(segment);
-          const label = isUuid ? 'Detail' : (labelMap[segment] || segment.charAt(0).toUpperCase() + segment.slice(1));
+          const isUuid = UUID_RE.test(segment);
+          const label = isUuid
+            ? resolveEntityName(queryClient, segments, segment)
+            : (labelMap[segment] || segment.charAt(0).toUpperCase() + segment.slice(1));
 
           return (
             <Fragment key={path}>
