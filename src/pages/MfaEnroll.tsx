@@ -307,19 +307,30 @@ export default function MfaEnroll() {
     );
   }
 
-  // Default: no MFA yet — show enrollment CTA
+  // Default CTA — context-aware for new enrollment vs replacement
+  const isReplacing = hasVerifiedFactor;
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Enable two-factor authentication</CardTitle>
+          <CardTitle className="text-2xl">
+            {isReplacing ? 'Replace authenticator app' : 'Enable two-factor authentication'}
+          </CardTitle>
           <CardDescription>
-            Add an extra layer of security to your account using an authenticator app.
+            {isReplacing
+              ? 'This will remove your existing authenticator app and set up a new one. You will need to reconfigure your authenticator.'
+              : 'Add an extra layer of security to your account using an authenticator app.'}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {isReplacing && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              Your current authenticator will stop working once replaced. Make sure you have access to your new authenticator app before proceeding.
+            </div>
+          )}
           <Button onClick={handleEnroll} className="w-full" disabled={loading}>
-            {loading ? 'Setting up...' : 'Set up authenticator app'}
+            {loading ? 'Setting up...' : isReplacing ? 'Replace authenticator app' : 'Set up authenticator app'}
           </Button>
         </CardContent>
       </Card>
