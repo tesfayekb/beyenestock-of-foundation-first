@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AuthorizationContext } from '@/lib/rbac';
@@ -12,64 +12,51 @@ interface UseUserRolesResult {
   refetch: () => Promise<void>;
 }
 
+const USER_ROLES_KEY = ['authorization-context'] as const;
+
 /**
  * Fetches the current user's effective authorization context via
- * get_my_authorization_context() RPC. Fail-secure: empty arrays on error.
+ * get_my_authorization_context() RPC. Uses React Query for shared
+ * cross-component cache — all call sites share a single RPC call.
  *
  * UX-only — does NOT enforce access. Server-side enforcement is authoritative.
  */
 export function useUserRoles(): UseUserRolesResult {
   const { user } = useAuth();
-  const [roles, setRoles] = useState<string[]>([]);
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [isSuperadmin, setIsSuperadmin] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [context, setContext] = useState<AuthorizationContext | null>(null);
 
-  const fetchContext = async () => {
-    if (!user) {
-      setRoles([]);
-      setPermissions([]);
-      setIsSuperadmin(false);
-      setContext(null);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
+  const query = useQuery({
+    queryKey: USER_ROLES_KEY,
+    queryFn: async (): Promise<AuthorizationContext> => {
       const { data, error } = await supabase.rpc('get_my_authorization_context');
 
       if (error || !data) {
-        // Fail-secure: empty arrays on error
         console.error('Failed to fetch authorization context:', error?.message);
-        setRoles([]);
-        setPermissions([]);
-        setIsSuperadmin(false);
-        setContext(null);
-        return;
+        // Fail-secure: return empty context
+        return { roles: [], permissions: [], is_superadmin: false };
       }
 
       const ctx = data as unknown as AuthorizationContext;
-      setRoles(ctx.roles ?? []);
-      setPermissions(ctx.permissions ?? []);
-      setIsSuperadmin(ctx.is_superadmin ?? false);
-      setContext(ctx);
-    } catch (err) {
-      // Fail-secure: empty arrays on error
-      console.error('Authorization context fetch failed:', err);
-      setRoles([]);
-      setPermissions([]);
-      setIsSuperadmin(false);
-      setContext(null);
-    } finally {
-      setLoading(false);
-    }
+      return {
+        roles: ctx.roles ?? [],
+        permissions: ctx.permissions ?? [],
+        is_superadmin: ctx.is_superadmin ?? false,
+      };
+    },
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000, // 5 minutes — roles rarely change mid-session
+    retry: 2,
+  });
+
+  const context = query.data ?? null;
+
+  return {
+    roles: context?.roles ?? [],
+    permissions: context?.permissions ?? [],
+    isSuperadmin: context?.is_superadmin ?? false,
+    loading: query.isLoading,
+    context,
+    refetch: async () => { await query.refetch(); },
   };
-
-  useEffect(() => {
-    fetchContext();
-  }, [user?.id]);
-
-  return { roles, permissions, isSuperadmin, loading, context, refetch: fetchContext };
 }
+
+export { USER_ROLES_KEY };

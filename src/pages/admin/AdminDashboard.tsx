@@ -58,7 +58,7 @@ export default function AdminDashboard() {
     return (
       <div className="space-y-6">
         <PageHeader title="Admin Dashboard" subtitle="System overview and management" />
-        <ErrorState message="Failed to load dashboard stats." />
+        <ErrorState message={errorActive.message || 'Failed to load dashboard stats.'} />
       </div>
     );
   }
