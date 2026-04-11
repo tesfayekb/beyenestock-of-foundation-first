@@ -23,9 +23,10 @@ import type { NavSection } from '@/config/navigation.types';
 
 interface DashboardSidebarProps {
   sections: NavSection[];
+  title?: string;
 }
 
-export const DashboardSidebar = React.memo(function DashboardSidebar({ sections }: DashboardSidebarProps) {
+export const DashboardSidebar = React.memo(function DashboardSidebar({ sections, title = 'Foundation First' }: DashboardSidebarProps) {
   const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
@@ -54,7 +55,7 @@ export const DashboardSidebar = React.memo(function DashboardSidebar({ sections 
   }, [signOut]);
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
         <div className="flex items-center gap-2 px-1 py-1">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
@@ -62,7 +63,7 @@ export const DashboardSidebar = React.memo(function DashboardSidebar({ sections 
           </div>
           {!collapsed && (
             <span className="truncate font-display text-sm font-semibold">
-              Admin Console
+              {title}
             </span>
           )}
         </div>

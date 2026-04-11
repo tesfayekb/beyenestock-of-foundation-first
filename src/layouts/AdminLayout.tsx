@@ -13,7 +13,7 @@ import { Outlet } from 'react-router-dom';
 export function AdminLayout() {
   return (
     <RequireAuth>
-      <DashboardLayout sections={adminNavigation}>
+      <DashboardLayout sections={adminNavigation} title="Admin Console">
         <RequirePermission
           permission="admin.access"
           fallback={<AccessDenied message="You need admin access to view this page." />}

@@ -1,14 +1,13 @@
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { FileQuestion } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 /**
  * In-shell 404 page. Renders inside the DashboardLayout so sidebar and header
  * remain visible — unlike the global NotFound which breaks out of the shell.
+ * Uses relative navigation to parent route (always a safe in-app destination).
  */
 export function DashboardNotFound() {
-  const navigate = useNavigate();
-
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16">
       <div className="rounded-full bg-muted p-4">
@@ -20,8 +19,8 @@ export function DashboardNotFound() {
           The page you're looking for doesn't exist or has been moved.
         </p>
       </div>
-      <Button variant="outline" onClick={() => navigate(-1)}>
-        Go back
+      <Button variant="outline" asChild>
+        <Link to=".." relative="path">Go back</Link>
       </Button>
     </div>
   );
