@@ -35,13 +35,13 @@ Tracks:
 status: implementation in progress
 phase: development
 code_generation: allowed
-modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 denial logging hardened), api implemented (Stage 3A closed + Phase 3.5 superadmin guardrails hardened), admin-panel implemented (Phase 4 CLOSED), user-panel implemented (Phase 4 CLOSED)
-active_work: Phase 4 CLOSED (ACT-048). Post-closure hardening patch applied: ACT-049 aligned role-permission mutation recent-auth window to 30 minutes for permission-management consistency. Next: Phase 5 planning.
+modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed + dependency enforcement + roles.edit + permissions.view separated + permissions.assign/revoke restricted to superadmin), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 hardened + RLS INSERT policy removed [ACT-053]), api implemented (Stage 3A closed + Phase 3.5 hardened), admin-panel implemented (Phase 4 CLOSED + post-closure: role CRUD, dependency enforcement, inline edit, superadmin restriction), user-panel implemented (Phase 4 CLOSED)
+active_work: Phase 4 post-closure hardening complete (ACT-050 through ACT-053). Governance docs updated. Next: Phase 5 planning.
 current_plan_version: v9
 approved_plan_baseline: v9
 plan_status: approved
 artifact_governance: active (artifact-index.md, database-migration-ledger.md, phase-closures/)
-deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-011, DW-012, DW-013, DW-021, DW-022, DW-023, DW-024]
+deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-011, DW-012, DW-013, DW-016, DW-017, DW-019, DW-020, DW-021, DW-022, DW-023, DW-024]
 deferred_work_closed_this_phase: [DW-018, DW-025, DW-026, DW-027]
 last_updated: 2026-04-12
 ```
@@ -79,11 +79,11 @@ If inconsistency is detected → execution must **STOP** and be corrected.
 | Module | Status | Last Updated |
 |--------|--------|-------------|
 | auth | in progress (A+D implemented + hardened: shared functions, events, email gate; duplicate MFA enroll prevention + existing-factor/pending-factor MFA route recovery [ACT-047]; B+C deferred [DW-001/002], MFA recovery codes deferred [DW-008]) | 2026-04-11 |
-| rbac | implemented (Phase 2 gate 12/12 closed + Phase 3.5 hardened: requireRecentAuth on 4 RBAC endpoints, self-superadmin-revocation prevention [DW-015]; ACT-049 aligned permission mutation endpoints to 30-minute recent-auth window) | 2026-04-12 |
+| rbac | implemented (Phase 2 gate 12/12 closed + Phase 3.5 hardened + ACT-049/051/052: dependency enforcement, roles.edit, permissions.view separation, permissions.assign/revoke restricted to superadmin) | 2026-04-12 |
 | user-management | implemented (Phase 3C closed [ACT-032]: lifecycle, deactivate/reactivate, auth ban/unban; Phase 3D Gate 1 runtime-verified [ACT-035]) | 2026-04-10 |
-| admin-panel | implemented (Phase 4 CLOSED [ACT-048] + ACT-049 post-closure hardening: role-permission assignment/revocation recent-auth threshold aligned to 30 minutes) | 2026-04-12 |
+| admin-panel | implemented (Phase 4 CLOSED [ACT-048] + post-closure: ACT-049 recent-auth alignment, ACT-050 role CRUD, ACT-051 dependency enforcement + roles.edit, ACT-052 permissions.view + superadmin restriction) | 2026-04-12 |
 | user-panel | implemented (Phase 4 CLOSED [ACT-048]: ProfilePage, SecurityPage, UserDashboard, useProfile, useMfaFactors, ReauthDialog, useInactivityTimeout) | 2026-04-12 |
-| audit-logging | implemented (Phase 3B closed + Phase 3.5 hardened: centralized denial audit logging via auth.permission_denied event, nullable actor_id, correlation_id in metadata [DW-014]) | 2026-04-10 |
+| audit-logging | implemented (Phase 3B closed + Phase 3.5 hardened + ACT-053: removed overly permissive INSERT RLS policy) | 2026-04-12 |
 | health-monitoring | not started | — |
 | api | implemented (Phase 3A closed + Phase 3.5 hardened: PermissionDeniedError enriched with userId/reason, centralized denial interception in handler.ts) | 2026-04-10 |
 | jobs-and-scheduler | not started | — |

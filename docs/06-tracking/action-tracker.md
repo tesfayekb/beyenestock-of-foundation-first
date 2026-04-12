@@ -1321,6 +1321,82 @@ Each action must include:
 
 ---
 
+### ACT-051: Permission Dependency Enforcement + roles.edit
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-051 |
+| **Date** | 2026-04-12 |
+| **Action** | (1) Created PERMISSION_DEPS map (src/config/permission-deps.ts) covering all 30 permissions with transitive dependency resolution. (2) Updated assign-permission-to-role edge function to auto-insert missing dependency permissions server-side; returns auto_added_dependencies in response. (3) Updated RoleDetailPage: dependency badge on permissions required by other assigned permissions; revocation of dependency permissions blocked (disabled checkbox). (4) Client toast shows auto-added deps. (5) Built update-role edge function: roles.edit permission + requireRecentAuth 30min, is_immutable guard, fail-closed audit with rollback. (6) Added inline edit UI on RoleDetailPage (pencil icon → name/description fields → save/cancel). (7) Seeded roles.edit permission via migration, assigned to admin. (8) Added roles.edit to permission-index.md. (9) Added rbac.role_updated event to event-index.md. (10) Updated 04_rbac_seed.sql. |
+| **Type** | Feature |
+| **Impact Classification** | High |
+| **Modules Affected** | rbac, admin-panel, api |
+| **Files Changed** | permission-deps.ts (new), assign-permission-to-role/index.ts, update-role/index.ts (new), RoleDetailPage.tsx, useRoleActions.ts, 04_rbac_seed.sql |
+| **Docs Updated** | permission-index.md, event-index.md, action-tracker.md |
+| **Related Permissions** | permissions.assign, permissions.revoke, roles.edit |
+| **Related Events** | rbac.permission_assigned, rbac.role_updated |
+| **Evidence** | TypeScript: zero errors. Edge functions deployed. Dependency auto-add verified via server response. |
+| **Verified By** | AI Agent + user review |
+| **Before State** | No dependency enforcement — broken permission configs possible. No roles.edit permission. No update-role endpoint. No inline edit on RoleDetailPage. |
+| **After State** | Full dependency enforcement (server + client). roles.edit permission seeded. update-role deployed. Inline edit operational. rbac.role_updated documented. |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert permission-deps.ts, assign-permission-to-role, update-role, RoleDetailPage, useRoleActions. Drop roles.edit via migration. |
+| **Blast Radius** | Medium |
+| **Health Impact** | Improved |
+| **Status** | Verified |
+
+---
+
+### ACT-052: permissions.view Separation + Superadmin Restriction
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-052 |
+| **Date** | 2026-04-12 |
+| **Action** | (1) Seeded permissions.view permission, assigned to admin. (2) Updated list-permissions edge function to check permissions.view instead of roles.view. (3) Updated App.tsx route gate for /admin/permissions to use permissions.view. (4) Updated admin-navigation.ts Permissions nav item to use permissions.view. (5) Removed permissions.assign and permissions.revoke from admin role — now superadmin-only (auto-inherited). (6) Updated 04_rbac_seed.sql to exclude permissions.assign/revoke from admin grant. (7) Updated permission-index.md default_roles for permissions.assign/revoke to superadmin only. (8) Added permissions.view entry to permission-index.md. (9) Added PERMISSION_DEPS entries for permissions.view. (10) Added explanatory message on RoleDetailPage for admin users without superadmin access. |
+| **Type** | Feature / Security |
+| **Impact Classification** | High |
+| **Modules Affected** | rbac, admin-panel, api |
+| **Files Changed** | list-permissions/index.ts, App.tsx, admin-navigation.ts, permission-deps.ts, assign-permission-to-role/index.ts, RoleDetailPage.tsx, 04_rbac_seed.sql |
+| **Docs Updated** | permission-index.md, action-tracker.md |
+| **Related Permissions** | permissions.view, permissions.assign, permissions.revoke |
+| **Evidence** | TypeScript: zero errors. Edge functions deployed. Migration applied. |
+| **Verified By** | AI Agent + user review |
+| **Before State** | Permissions page gated by roles.view (shared). permissions.assign/revoke available to admin — privilege escalation via custom roles possible. |
+| **After State** | Permissions page gated by separate permissions.view. permissions.assign/revoke restricted to superadmin only. Admin sees "superadmin access required" message on disabled checkboxes. |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Re-add permissions.assign/revoke to admin role. Revert permissions.view check to roles.view. |
+| **Blast Radius** | Medium |
+| **Health Impact** | Improved |
+| **Status** | Verified |
+
+---
+
+### ACT-053: Audit Log RLS Security Fix
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-053 |
+| **Date** | 2026-04-12 |
+| **Action** | Removed overly permissive INSERT policy (WITH CHECK true) from audit_logs table. Any authenticated user could previously insert arbitrary rows into the audit trail, enabling audit log pollution or fabrication. Edge functions write audit logs via supabaseAdmin (service role) which bypasses RLS — no INSERT policy needed. Only the SELECT policy (gated by audit.view) remains. |
+| **Type** | Security |
+| **Impact Classification** | High |
+| **Modules Affected** | audit-logging |
+| **Files Changed** | Migration (DROP POLICY audit_logs_insert_policy) |
+| **Docs Updated** | action-tracker.md |
+| **Related Permissions** | audit.view |
+| **Evidence** | pg_policies query confirms only SELECT policy remains. Supabase security linter: WITH CHECK (true) warning eliminated. |
+| **Verified By** | AI Agent |
+| **Before State** | audit_logs had INSERT WITH CHECK (true) — any authenticated user could write rows. |
+| **After State** | No INSERT policy. Audit writes only via service-role client (edge functions). Audit trail integrity restored. |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Re-create INSERT policy (not recommended). |
+| **Blast Radius** | Small |
+| **Health Impact** | Improved |
+| **Status** | Verified |
+
+---
+
 - If action introduces regression → must link watchlist item in `related_watchlist`
 - Regression fix actions must reference the original regression
 - Repeated failures in same area → tracked via recurrence in watchlist, referenced here
@@ -1347,10 +1423,10 @@ Each action must include:
 
 | Type | Count | High Impact |
 |------|-------|-------------|
-| Feature | 12 | 12 |
+| Feature | 14 | 14 |
 | Documentation | 14 | 13 |
 | Fix | 6 | 4 |
-| Security | 11 | 11 |
+| Security | 12 | 12 |
 | Performance | 1 | 1 |
 | Regression | 0 | 0 |
 
@@ -1358,7 +1434,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 42 |
+| Verified | 45 |
 | Superseded | 2 (ACT-027, ACT-028) |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -1368,7 +1444,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 1 (reactivation auth-unban gap — ACT-029)
 - Open (unverified) actions: 0
-- High-impact actions this period: 40
+- High-impact actions this period: 43
 
 _Updated as actions are added._
 
