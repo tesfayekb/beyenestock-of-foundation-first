@@ -15,7 +15,7 @@
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { apiError } from '../_shared/api-error.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
-import { checkPermissionOrThrow } from '../_shared/authorization.ts'
+import { checkPermissionOrThrow, requireRecentAuth } from '../_shared/authorization.ts'
 import { validateRequest, z } from '../_shared/validate-request.ts'
 import { supabaseAdmin } from '../_shared/supabase-admin.ts'
 import { logAuditEvent } from '../_shared/audit.ts'
@@ -42,6 +42,7 @@ const UpdateSchema = z.object({
 Deno.serve(createHandler(async (req: Request): Promise<Response> => {
   const ctx = await authenticateRequest(req)
   await checkPermissionOrThrow(ctx.user.id, 'monitoring.configure')
+  requireRecentAuth(ctx.user.lastSignInAt, 30 * 60 * 1000, ctx.user.id)
 
   const body = await req.json()
 

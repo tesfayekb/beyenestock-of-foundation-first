@@ -107,6 +107,8 @@ export async function logAuditEvent(
 const FORBIDDEN_METADATA_KEYS = new Set([
   'password', 'token', 'secret', 'access_token', 'refresh_token',
   'mfa_secret', 'totp_secret', 'api_key', 'service_role_key',
+  'code_hash', 'recovery_code', 'otp', 'otp_code', 'totp_code',
+  'private_key', 'private_key_id', 'client_secret', 'webhook_secret',
 ])
 
 function sanitizeMetadata(

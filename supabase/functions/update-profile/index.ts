@@ -10,7 +10,7 @@
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
-import { checkPermissionOrThrow, requireSelfScope } from '../_shared/authorization.ts'
+import { checkPermissionOrThrow, requireSelfScope, requireRecentAuth } from '../_shared/authorization.ts'
 import { logAuditEvent } from '../_shared/audit.ts'
 import { supabaseAdmin } from '../_shared/supabase-admin.ts'
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
@@ -56,7 +56,9 @@ Deno.serve(createHandler(async (req: Request) => {
     await checkPermissionOrThrow(ctx.user.id, 'users.edit_self')
     requireSelfScope(ctx, targetUserId)
   } else {
+    // Admin editing another user — require recent auth
     await checkPermissionOrThrow(ctx.user.id, 'users.edit_any')
+    requireRecentAuth(ctx.user.lastSignInAt, 30 * 60 * 1000, ctx.user.id)
   }
 
   // Build update payload — only include provided fields

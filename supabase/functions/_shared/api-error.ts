@@ -10,13 +10,15 @@
  *
  * Never exposes internal details. All edge functions use this
  * for consistent error responses.
+ *
+ * Accepts optional _cors headers from handler for dynamic origin support.
  */
 import { corsHeaders } from './cors.ts'
 
 export function apiError(
   status: number,
   message: string,
-  opts?: { code?: string; field?: string; correlationId?: string }
+  opts?: { code?: string; field?: string; correlationId?: string; _cors?: Record<string, string> }
 ): Response {
   const body: Record<string, string> = {
     error: message,
@@ -25,9 +27,11 @@ export function apiError(
   if (opts?.field) body.field = opts.field
   if (opts?.correlationId) body.correlation_id = opts.correlationId
 
+  const headers = opts?._cors ?? corsHeaders
+
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...headers, 'Content-Type': 'application/json' },
   })
 }
 
