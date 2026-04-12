@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { useMfaFactors, MfaFactor } from '@/hooks/useMfaFactors';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
-import { ShieldCheck, ShieldOff, Trash2, KeyRound, Clock, LogIn, AlertTriangle, Lock, Monitor, LogOut } from 'lucide-react';
+import { ShieldCheck, ShieldOff, Trash2, KeyRound, Clock, LogIn, Lock, Monitor, LogOut, Copy, RefreshCw, Link2, Unlink } from 'lucide-react';
 import { PasswordChangeCard } from '@/components/user/PasswordChangeCard';
 import { ReauthDialog } from '@/components/auth/ReauthDialog';
 import { ConfirmActionDialog } from '@/components/dashboard/ConfirmActionDialog';
@@ -23,6 +24,14 @@ export default function SecurityPage() {
   const [showRevokeOthers, setShowRevokeOthers] = useState(false);
   const [showRevokeAll, setShowRevokeAll] = useState(false);
   const [revoking, setRevoking] = useState(false);
+
+  // Recovery codes state
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [generatingCodes, setGeneratingCodes] = useState(false);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+
+  // OAuth linking state
+  const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
 
   const handleRequestUnenroll = (factor: MfaFactor) => {
     setFactorToRemove(factor);
@@ -61,9 +70,65 @@ export default function SecurityPage() {
     }
   };
 
+  const handleGenerateRecoveryCodes = async () => {
+    setGeneratingCodes(true);
+    try {
+      const result = await apiClient.post<{ codes: string[]; message: string }>('mfa-recovery-generate');
+      setRecoveryCodes(result.codes);
+      toast.success('Recovery codes generated. Save them now — they won\'t be shown again.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to generate recovery codes';
+      toast.error(msg);
+    } finally {
+      setGeneratingCodes(false);
+      setShowRegenerateConfirm(false);
+    }
+  };
+
+  const handleCopyRecoveryCodes = () => {
+    if (!recoveryCodes) return;
+    navigator.clipboard.writeText(recoveryCodes.join('\n'));
+    toast.success('Recovery codes copied to clipboard');
+  };
+
+  // OAuth identity helpers
+  const identities = user?.identities ?? [];
+  const linkedProviders = identities.map(i => i.provider);
+  const hasEmailAuth = linkedProviders.includes('email');
+  const hasGoogle = linkedProviders.includes('google');
+  const hasApple = linkedProviders.includes('apple');
+  const canUnlink = identities.length > 1; // must keep at least one auth method
+
+  const handleLinkProvider = async (provider: 'google' | 'apple') => {
+    setLinkingProvider(provider);
+    const { error } = await supabase.auth.linkIdentity({
+      provider,
+      options: { redirectTo: `${window.location.origin}/settings/security` },
+    });
+    if (error) {
+      toast.error(error.message);
+      setLinkingProvider(null);
+    }
+  };
+
+  const handleUnlinkProvider = async (identityId: string, provider: string) => {
+    if (!canUnlink) {
+      toast.error('Cannot unlink — you must keep at least one authentication method.');
+      return;
+    }
+    setLinkingProvider(provider);
+    const { error } = await supabase.auth.unlinkIdentity({ provider, id: identityId } as any);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success(`${provider} account unlinked.`);
+    }
+    setLinkingProvider(null);
+  };
+
   return (
     <>
-      <PageHeader title="Security" subtitle="Manage MFA and account security settings" />
+      <PageHeader title="Security" subtitle="Manage MFA, recovery codes, linked accounts, and session security" />
 
       <div className="grid gap-6 max-w-2xl">
         {/* MFA Status */}
@@ -141,7 +206,7 @@ export default function SecurityPage() {
           </CardContent>
         </Card>
 
-        {/* GAP-2: Recovery codes placeholder */}
+        {/* Recovery Codes (DW-008) */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -149,20 +214,156 @@ export default function SecurityPage() {
               Recovery Codes
             </CardTitle>
             <CardDescription>
-              Backup codes for account recovery when MFA is unavailable
+              Backup codes for account recovery when your authenticator is unavailable
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="rounded-md border border-dashed p-4 text-center">
-              <AlertTriangle className="h-5 w-5 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">
-                Recovery codes are not yet available. This feature is planned for a future release (DW-008).
-              </p>
-            </div>
+          <CardContent className="space-y-4">
+            {recoveryCodes ? (
+              <div className="space-y-3">
+                <div className="rounded-md border bg-muted p-4">
+                  <div className="grid grid-cols-2 gap-2 font-mono text-sm">
+                    {recoveryCodes.map((code, i) => (
+                      <div key={i} className="rounded bg-background px-2 py-1 text-center">
+                        {code}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={handleCopyRecoveryCodes}>
+                    <Copy className="mr-2 h-3 w-3" />
+                    Copy all
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowRegenerateConfirm(true)}>
+                    <RefreshCw className="mr-2 h-3 w-3" />
+                    Regenerate
+                  </Button>
+                </div>
+                <p className="text-xs text-destructive font-medium">
+                  Save these codes in a safe place. They will not be shown again after you leave this page.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed p-4 text-center space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  {hasMfa
+                    ? 'Generate backup codes in case you lose access to your authenticator app. Each code can only be used once.'
+                    : 'Enable MFA first to generate recovery codes.'}
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => handleGenerateRecoveryCodes()}
+                  disabled={!hasMfa || generatingCodes}
+                >
+                  {generatingCodes ? 'Generating…' : 'Generate Recovery Codes'}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* GAP-1: Session info */}
+        {/* Linked Accounts (DW-001, DW-002) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Link2 className="h-4 w-4" />
+              Linked Accounts
+            </CardTitle>
+            <CardDescription>
+              Connect external accounts for faster sign-in
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Google */}
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div className="flex items-center gap-3">
+                <svg className="h-5 w-5" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                <div>
+                  <p className="text-sm font-medium">Google</p>
+                  <p className="text-xs text-muted-foreground">
+                    {hasGoogle ? 'Connected' : 'Not connected'}
+                  </p>
+                </div>
+              </div>
+              {hasGoogle ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={!canUnlink || linkingProvider === 'google'}
+                  onClick={() => {
+                    const identity = identities.find(i => i.provider === 'google');
+                    if (identity) handleUnlinkProvider(identity.id, 'google');
+                  }}
+                >
+                  <Unlink className="mr-1 h-3 w-3" />
+                  Unlink
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!!linkingProvider}
+                  onClick={() => handleLinkProvider('google')}
+                >
+                  <Link2 className="mr-1 h-3 w-3" />
+                  {linkingProvider === 'google' ? 'Redirecting…' : 'Link'}
+                </Button>
+              )}
+            </div>
+
+            {/* Apple */}
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div className="flex items-center gap-3">
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                </svg>
+                <div>
+                  <p className="text-sm font-medium">Apple</p>
+                  <p className="text-xs text-muted-foreground">
+                    {hasApple ? 'Connected' : 'Not connected'}
+                  </p>
+                </div>
+              </div>
+              {hasApple ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={!canUnlink || linkingProvider === 'apple'}
+                  onClick={() => {
+                    const identity = identities.find(i => i.provider === 'apple');
+                    if (identity) handleUnlinkProvider(identity.id, 'apple');
+                  }}
+                >
+                  <Unlink className="mr-1 h-3 w-3" />
+                  Unlink
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!!linkingProvider}
+                  onClick={() => handleLinkProvider('apple')}
+                >
+                  <Link2 className="mr-1 h-3 w-3" />
+                  {linkingProvider === 'apple' ? 'Redirecting…' : 'Link'}
+                </Button>
+              )}
+            </div>
+
+            {!canUnlink && identities.length === 1 && (
+              <p className="text-xs text-muted-foreground">
+                You must keep at least one authentication method linked.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Session info */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -269,6 +470,18 @@ export default function SecurityPage() {
         destructive
         onConfirm={() => handleRevokeSessions('global')}
         loading={revoking}
+      />
+
+      {/* Recovery code regeneration confirm */}
+      <ConfirmActionDialog
+        open={showRegenerateConfirm}
+        onOpenChange={setShowRegenerateConfirm}
+        title="Regenerate Recovery Codes"
+        description="This will invalidate all existing recovery codes and generate new ones. Any unused codes will stop working."
+        confirmLabel="Regenerate"
+        destructive
+        onConfirm={handleGenerateRecoveryCodes}
+        loading={generatingCodes}
       />
 
       {/* Re-authentication dialog for MFA removal */}
