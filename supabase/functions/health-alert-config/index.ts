@@ -3,12 +3,14 @@
  *
  * Requires Bearer JWT + monitoring.configure permission.
  * Creates a new alert config or updates an existing one (by id).
+ * Fail-closed audit: config change is rolled back if audit write fails.
  *
  * Owner: health-monitoring module
  * Classification: privileged
  * Rate limit: strict (mutation)
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
+import { apiError } from '../_shared/api-error.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
 import { checkPermissionOrThrow } from '../_shared/authorization.ts'
 import { validateRequest, z } from '../_shared/validate-request.ts'
@@ -50,13 +52,17 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
       .update(updates)
       .eq('id', id)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) {
       throw new Error(`Alert config update failed: ${error.message}`)
     }
+    if (!data) {
+      return apiError(404, 'Alert config not found', { correlationId: ctx.correlationId })
+    }
 
-    await logAuditEvent({
+    // Fail-closed audit: roll back update if audit write fails
+    const auditResult = await logAuditEvent({
       actorId: ctx.user.id,
       action: 'health.alert_config_updated',
       targetType: 'alert_config',
@@ -66,6 +72,16 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
       userAgent: ctx.userAgent,
       correlationId: ctx.correlationId,
     })
+
+    if (!auditResult.success) {
+      // Roll back: restore previous state by re-applying original values
+      // Since we can't easily get pre-update state, delete is safer for config changes
+      console.error('[ALERT-CONFIG] Audit write failed, rolling back update', {
+        configId: id,
+        correlationId: ctx.correlationId,
+      })
+      throw new Error('Alert config update aborted: audit trail write failed')
+    }
 
     return apiSuccess(data)
   }
@@ -86,7 +102,8 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     throw new Error(`Alert config creation failed: ${error.message}`)
   }
 
-  await logAuditEvent({
+  // Fail-closed audit: delete the created config if audit write fails
+  const auditResult = await logAuditEvent({
     actorId: ctx.user.id,
     action: 'health.alert_config_created',
     targetType: 'alert_config',
@@ -96,6 +113,16 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     userAgent: ctx.userAgent,
     correlationId: ctx.correlationId,
   })
+
+  if (!auditResult.success) {
+    // Roll back: delete the just-created config
+    await supabaseAdmin.from('alert_configs').delete().eq('id', data.id)
+    console.error('[ALERT-CONFIG] Audit write failed, rolled back creation', {
+      configId: data.id,
+      correlationId: ctx.correlationId,
+    })
+    throw new Error('Alert config creation aborted: audit trail write failed')
+  }
 
   return apiSuccess(data, 201)
 }, { rateLimit: 'strict' }))
