@@ -9,6 +9,9 @@
  * Sort: created_at DESC (fixed — no user-controlled sort)
  * Pagination: cursor-based via `before` (created_at of last item)
  * Max page size: 100
+ *
+ * DW-023 resolved: Actor display names are batch-resolved from profiles
+ * table (no N+1). Each audit entry includes actor_display_name.
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
@@ -60,10 +63,37 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
   }
 
   const rows = data ?? []
+
+  // Batch-resolve actor display names (DW-023: no N+1)
+  const uniqueActorIds = [...new Set(
+    rows.map((r) => r.actor_id).filter((id): id is string => id !== null)
+  )]
+
+  const actorNameMap = new Map<string, string>()
+
+  if (uniqueActorIds.length > 0) {
+    const { data: profiles } = await supabaseAdmin
+      .from('profiles')
+      .select('id, display_name, email')
+      .in('id', uniqueActorIds)
+
+    if (profiles) {
+      for (const p of profiles) {
+        actorNameMap.set(p.id, p.display_name || p.email || p.id)
+      }
+    }
+  }
+
+  // Enrich rows with actor_display_name
+  const enrichedRows = rows.map((r) => ({
+    ...r,
+    actor_display_name: r.actor_id ? (actorNameMap.get(r.actor_id) ?? r.actor_id) : null,
+  }))
+
   const nextCursor = rows.length === params.limit ? rows[rows.length - 1].created_at : null
 
   return apiSuccess({
-    data: rows,
+    data: enrichedRows,
     pagination: {
       count: rows.length,
       limit: params.limit,
