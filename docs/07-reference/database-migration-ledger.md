@@ -250,6 +250,173 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 
 ---
 
+### MIG-013: Orphaned Test User Cleanup
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-013 |
+| **Migration File** | `20260410094323_07a7f7d5-46f4-4dd6-b1b7-bcfbdb64e853.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-10 |
+| **Sequence Order** | 13 |
+| **Purpose** | Remove orphaned test user and nullify assigned_by FK reference |
+| **Objects Affected** | Data: removed test user from `auth.users`, `user_roles.assigned_by` nullified |
+| **Status** | `active` |
+| **Linked Actions** | ACT-035 |
+| **Notes** | Cleanup of test data created during runtime verification. |
+
+---
+
+### MIG-014: Denial Test User (Create)
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-014 |
+| **Migration File** | `20260410114737_7df7b041-1cc8-48f8-9fd2-66fc6f0a7651.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-10 |
+| **Sequence Order** | 14 |
+| **Purpose** | Create denial-test user for permission denial E2E testing |
+| **Objects Affected** | Data: `auth.users` row for denial-test user |
+| **Status** | `superseded` |
+| **Superseded By** | MIG-017 |
+| **Linked Actions** | ACT-035 |
+| **Notes** | Test user for verifying 403 responses. Cleaned up by MIG-017. |
+
+---
+
+### MIG-015: Denial Test User (Identity)
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-015 |
+| **Migration File** | `20260410114816_4fed871b-8da6-4477-b8a1-5f9132ab37d8.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-10 |
+| **Sequence Order** | 15 |
+| **Purpose** | Add identity record for denial-test user |
+| **Objects Affected** | Data: `auth.identities` row |
+| **Status** | `superseded` |
+| **Superseded By** | MIG-017 |
+| **Linked Actions** | ACT-035 |
+
+---
+
+### MIG-016: Denial Test User (Token Cleanup)
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-016 |
+| **Migration File** | `20260410114851_9b540bfe-469e-498e-9d69-8c7540ca0246.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-10 |
+| **Sequence Order** | 16 |
+| **Purpose** | Clear token fields on denial-test user to avoid conflicts |
+| **Objects Affected** | Data: `auth.users` token fields cleared |
+| **Status** | `superseded` |
+| **Superseded By** | MIG-017 |
+| **Linked Actions** | ACT-035 |
+
+---
+
+### MIG-017: Denial Test User (Full Cleanup)
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-017 |
+| **Migration File** | `20260410114940_4cd8c806-e107-4e0b-b4e0-0f2c9c003fc2.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-10 |
+| **Sequence Order** | 17 |
+| **Purpose** | Remove denial-test user and all related data (audit logs, roles, profile, identity) |
+| **Objects Affected** | Data: cleanup across `audit_logs`, `user_roles`, `profiles`, `auth.identities`, `auth.users` |
+| **Status** | `active` |
+| **Linked Actions** | ACT-035 |
+| **Notes** | Completes the test-user lifecycle: create → test → cleanup. |
+
+---
+
+### MIG-018: Seed roles.edit Permission
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-018 |
+| **Migration File** | `20260412031302_392e6a97-0e9f-4e62-a918-a49ddce7f616.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-12 |
+| **Sequence Order** | 18 |
+| **Purpose** | Add `roles.edit` permission and assign to admin role |
+| **Objects Affected** | Data: `permissions` row, `role_permissions` row |
+| **Status** | `active` |
+| **Linked Actions** | ACT-051 |
+
+---
+
+### MIG-019: permissions.view Separation + Superadmin Restriction
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-019 |
+| **Migration File** | `20260412032343_866f12ae-0a5b-47d3-bc54-40e230c0d642.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-12 |
+| **Sequence Order** | 19 |
+| **Purpose** | Add `permissions.view` permission, assign to admin; remove `permissions.assign` and `permissions.revoke` from admin (superadmin-only) |
+| **Objects Affected** | Data: `permissions` row, `role_permissions` inserts + deletes |
+| **Status** | `active` |
+| **Linked Actions** | ACT-052 |
+
+---
+
+### MIG-020: Drop audit_logs INSERT Policy
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-020 |
+| **Migration File** | `20260412033224_d8a7f542-9e13-417c-a695-06e7f528d5b6.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-12 |
+| **Sequence Order** | 20 |
+| **Purpose** | Remove overly permissive INSERT policy from audit_logs (service_role bypasses RLS — policy was redundant and dangerous) |
+| **Objects Affected** | RLS policy: `audit_logs_insert_policy` dropped |
+| **Status** | `active` |
+| **Linked Actions** | ACT-053 |
+| **Notes** | Closes audit trail fabrication vulnerability. MIG-010 policy superseded. |
+
+---
+
+### MIG-021: RLS Fix + target_id Index
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-021 |
+| **Migration File** | `20260412033957_7cfe13c5-199a-4b49-9b69-065bb74e7b37.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-12 |
+| **Sequence Order** | 21 |
+| **Purpose** | Update `permissions_select_policy` to check `permissions.view` (was `roles.view`); add index on `audit_logs.target_id` |
+| **Objects Affected** | RLS policy: `permissions_select_policy` re-created; Index: `idx_audit_logs_target_id` |
+| **Status** | `active` |
+| **Linked Actions** | ACT-054 |
+
+---
+
+### MIG-022: correlation_id Column + Index
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-022 |
+| **Migration File** | `20260412035203_b58e597c-8634-434d-9d79-0d367e396a00.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-12 |
+| **Sequence Order** | 22 |
+| **Purpose** | Add `correlation_id` as top-level indexed column on `audit_logs`; backfill from metadata JSONB |
+| **Objects Affected** | Column: `audit_logs.correlation_id`; Index: `idx_audit_logs_correlation_id` (partial, WHERE NOT NULL) |
+| **Status** | `active` |
+| **Linked Actions** | ACT-055 |
+
+---
+
 ### Tables (6)
 
 | Table | Created By | Status |
@@ -292,20 +459,20 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `trg_validate_profile_status` | `profiles` | `validate_profile_status` | MIG-011 |
 | `check_user_active_before_login` | `auth.users` | `check_user_active_on_login` | MIG-012 |
 
-### RLS Policies (10)
+### RLS Policies (9)
 
-| Policy | Table | Created By |
-|--------|-------|-----------|
-| Roles view (roles.view permission) | `roles` | MIG-003 |
-| Permissions view (roles.view permission) | `permissions` | MIG-003 |
-| User roles self-access | `user_roles` | MIG-003 |
-| Role permissions view (roles.view permission) | `role_permissions` | MIG-003 |
-| Audit logs view (audit.view permission) | `audit_logs` | MIG-003 |
-| Audit logs insert (authenticated, append-only) | `audit_logs` | MIG-010 |
-| Admins can view all profiles | `profiles` | MIG-011 |
-| Admins can update any profile | `profiles` | MIG-011 |
-| Users can read own profile (self-scope) | `profiles` | MIG-012 |
-| Users can update own profile (self-scope) | `profiles` | MIG-012 |
+| Policy | Table | Created By | Status |
+|--------|-------|-----------|--------|
+| Roles view (roles.view permission) | `roles` | MIG-003 | Active |
+| Permissions view (permissions.view permission) | `permissions` | MIG-021 (re-created from MIG-003) | Active |
+| User roles self-access | `user_roles` | MIG-003 | Active |
+| Role permissions view (roles.view permission) | `role_permissions` | MIG-003 | Active |
+| Audit logs view (audit.view permission) | `audit_logs` | MIG-003 | Active |
+| Audit logs insert (authenticated, append-only) | `audit_logs` | MIG-010 | Dropped (MIG-020) |
+| Admins can view all profiles | `profiles` | MIG-011 | Active |
+| Admins can update any profile | `profiles` | MIG-011 | Active |
+| Users can read own profile (self-scope) | `profiles` | MIG-012 | Active |
+| Users can update own profile (self-scope) | `profiles` | MIG-012 | Active |
 
 ---
 
