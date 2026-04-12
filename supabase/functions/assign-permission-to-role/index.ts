@@ -29,8 +29,6 @@ const BodySchema = z.object({
 /**
  * Permission dependency map — server-side copy.
  * Mirrors src/config/permission-deps.ts (canonical source).
- * Kept inline to avoid import-path issues in the Deno edge function runtime.
- *
  * ⚠️  SYNC: Must match src/config/permission-deps.ts and
  *    supabase/functions/revoke-permission-from-role/index.ts.
  *    See RW-008 in regression-watchlist.md for drift detection protocol.
@@ -89,9 +87,15 @@ Deno.serve(createHandler(async (req: Request) => {
   const body = await req.json()
   const { role_id, permission_id } = validateRequest(BodySchema, body)
 
-  // Validate role exists
-  const { data: role } = await supabaseAdmin
-    .from('roles').select('id, key, is_immutable').eq('id', role_id).single()
+  // Validate role and permission in parallel (independent lookups)
+  const [roleResult, permResult] = await Promise.all([
+    supabaseAdmin.from('roles').select('id, key, is_immutable').eq('id', role_id).single(),
+    supabaseAdmin.from('permissions').select('id, key').eq('id', permission_id).single(),
+  ])
+
+  const role = roleResult.data
+  const permission = permResult.data
+
   if (!role) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(404, 'Role not found', { correlationId: ctx.correlationId })
@@ -104,9 +108,6 @@ Deno.serve(createHandler(async (req: Request) => {
     })
   }
 
-  // Validate permission exists
-  const { data: permission } = await supabaseAdmin
-    .from('permissions').select('id, key').eq('id', permission_id).single()
   if (!permission) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(404, 'Permission not found', { correlationId: ctx.correlationId })
@@ -117,14 +118,13 @@ Deno.serve(createHandler(async (req: Request) => {
   let autoAddedKeys: string[] = []
 
   if (depKeys.length > 0) {
-    // Fetch all permissions that are dependencies
+    // Fetch dependency permissions and existing mappings in parallel
     const { data: depPerms } = await supabaseAdmin
       .from('permissions')
       .select('id, key')
       .in('key', depKeys)
 
     if (depPerms && depPerms.length > 0) {
-      // Check which are already assigned
       const { data: existingMappings } = await supabaseAdmin
         .from('role_permissions')
         .select('permission_id')
@@ -135,13 +135,13 @@ Deno.serve(createHandler(async (req: Request) => {
       const missing = depPerms.filter(p => !existingIds.has(p.id))
 
       if (missing.length > 0) {
+        // Batch insert all missing dependencies at once
         const rows = missing.map(p => ({ role_id, permission_id: p.id }))
         const { error: depInsertErr } = await supabaseAdmin
           .from('role_permissions')
           .insert(rows)
 
         if (depInsertErr) {
-          // 23505 means some already exist (race), which is fine — ignore
           if (depInsertErr.code !== '23505') throw depInsertErr
         }
         autoAddedKeys = missing.map(p => p.key)
@@ -184,27 +184,22 @@ Deno.serve(createHandler(async (req: Request) => {
 
   if (!auditResult.success) {
     // Rollback: remove the permission assignment + auto-added deps
-    await supabaseAdmin
-      .from('role_permissions')
-      .delete()
-      .eq('role_id', role_id)
-      .eq('permission_id', permission_id)
-
+    const rollbackIds = [permission_id]
     if (autoAddedKeys.length > 0) {
       const { data: depPermsToRemove } = await supabaseAdmin
         .from('permissions')
         .select('id')
         .in('key', autoAddedKeys)
       if (depPermsToRemove) {
-        for (const dp of depPermsToRemove) {
-          await supabaseAdmin
-            .from('role_permissions')
-            .delete()
-            .eq('role_id', role_id)
-            .eq('permission_id', dp.id)
-        }
+        rollbackIds.push(...depPermsToRemove.map(dp => dp.id))
       }
     }
+
+    await supabaseAdmin
+      .from('role_permissions')
+      .delete()
+      .eq('role_id', role_id)
+      .in('permission_id', rollbackIds)
 
     const { apiError } = await import('../_shared/api-error.ts')
     console.error('[ASSIGN-PERM] Audit write failed — rolling back', auditResult)

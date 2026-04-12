@@ -48,6 +48,8 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 2 * 60 * 1000, // 2 minutes — admin data changes infrequently
       gcTime: 10 * 60 * 1000,   // 10 minutes — keep cache across navigation
+      retry: 2,
+      retryDelay: (attemptIndex) => Math.min(500 * 2 ** attemptIndex, 5000),
     },
   },
 });

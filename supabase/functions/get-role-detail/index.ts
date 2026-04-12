@@ -47,55 +47,11 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(404, 'Role not found', { correlationId: ctx.correlationId })
   }
 
-  // Get permissions — superadmin inherits ALL, others use role_permissions join
-  let permissions: { id: string; key: string; description: string | null }[] = []
-
-  if (role.key === 'superadmin') {
-    const { data: allPerms } = await supabaseAdmin
-      .from('permissions')
-      .select('id, key, description')
-      .order('key', { ascending: true })
-
-    permissions = allPerms ?? []
-  } else {
-    const { data: rpData } = await supabaseAdmin
-      .from('role_permissions')
-      .select('permission_id')
-      .eq('role_id', role_id)
-
-    const permissionIds = (rpData ?? []).map((rp) => rp.permission_id)
-
-    if (permissionIds.length > 0) {
-      const { data: permData } = await supabaseAdmin
-        .from('permissions')
-        .select('id, key, description')
-        .in('id', permissionIds)
-
-      permissions = permData ?? []
-    }
-  }
-
-  // Get users with this role
-  const { data: urData } = await supabaseAdmin
-    .from('user_roles')
-    .select('user_id, assigned_at')
-    .eq('role_id', role_id)
-
-  let users: { id: string; display_name: string | null; assigned_at: string }[] = []
-  if (urData && urData.length > 0) {
-    const userIds = urData.map((ur) => ur.user_id)
-    const { data: profiles } = await supabaseAdmin
-      .from('profiles')
-      .select('id, display_name')
-      .in('id', userIds)
-
-    const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name]))
-    users = urData.map((ur) => ({
-      id: ur.user_id,
-      display_name: profileMap.get(ur.user_id) ?? null,
-      assigned_at: ur.assigned_at,
-    }))
-  }
+  // Fetch permissions and users in parallel (independent queries after role is resolved)
+  const [permissions, users] = await Promise.all([
+    resolvePermissions(role_id, role.key),
+    resolveUsers(role_id),
+  ])
 
   return apiSuccess({
     ...role,
@@ -105,3 +61,50 @@ Deno.serve(createHandler(async (req: Request) => {
     users,
   })
 }))
+
+async function resolvePermissions(roleId: string, roleKey: string) {
+  if (roleKey === 'superadmin') {
+    const { data } = await supabaseAdmin
+      .from('permissions')
+      .select('id, key, description')
+      .order('key', { ascending: true })
+    return data ?? []
+  }
+
+  const { data: rpData } = await supabaseAdmin
+    .from('role_permissions')
+    .select('permission_id')
+    .eq('role_id', roleId)
+
+  const permissionIds = (rpData ?? []).map((rp) => rp.permission_id)
+  if (permissionIds.length === 0) return []
+
+  const { data } = await supabaseAdmin
+    .from('permissions')
+    .select('id, key, description')
+    .in('id', permissionIds)
+
+  return data ?? []
+}
+
+async function resolveUsers(roleId: string) {
+  const { data: urData } = await supabaseAdmin
+    .from('user_roles')
+    .select('user_id, assigned_at')
+    .eq('role_id', roleId)
+
+  if (!urData || urData.length === 0) return []
+
+  const userIds = urData.map((ur) => ur.user_id)
+  const { data: profiles } = await supabaseAdmin
+    .from('profiles')
+    .select('id, display_name')
+    .in('id', userIds)
+
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name]))
+  return urData.map((ur) => ({
+    id: ur.user_id,
+    display_name: profileMap.get(ur.user_id) ?? null,
+    assigned_at: ur.assigned_at,
+  }))
+}
