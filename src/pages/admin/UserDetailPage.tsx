@@ -184,7 +184,7 @@ export default function UserDetailPage() {
               ) : userRoles && userRoles.length > 0 ? (
                 <div className="space-y-2">
                   {userRoles.map((role) => {
-                    const isBaseRole = role.is_base || role.role_key === 'user';
+                    const isIrrevocableForActor = role.role_key === 'user' || (role.is_base && !context?.is_superadmin);
                     return (
                       <div key={role.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
                         <Badge variant="secondary" className="text-sm">{role.role_name}</Badge>
