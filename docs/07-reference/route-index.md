@@ -1258,6 +1258,87 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 
 ---
 
+### POST /jobs-kill-switch — Emergency Kill Switch
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /jobs-kill-switch` |
+| **Classification** | privileged |
+| **Owner Module** | jobs-and-scheduler |
+| **Auth** | Bearer JWT required |
+| **Permission** | `jobs.emergency` + `requireRecentAuth()` |
+| **Rate Limit** | strict (10/min) |
+| **Request Body** | `{ activate: boolean, scope: 'global' \| 'class', class?: string, reason: string }` |
+| **Response** | `{ target, activated, scope, class, reason }` |
+| **Audit** | `job.kill_switch_activated` / `job.kill_switch_deactivated` |
+| **Lifecycle** | active |
+| **Added By** | Stage 5E |
+
+### POST /jobs-pause — Pause Job or Class
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /jobs-pause` |
+| **Classification** | privileged |
+| **Owner Module** | jobs-and-scheduler |
+| **Auth** | Bearer JWT required |
+| **Permission** | `jobs.pause` |
+| **Rate Limit** | strict (10/min) |
+| **Request Body** | `{ job_id?: string, class?: string, reason: string }` |
+| **Response** | `{ paused: string[], reason }` |
+| **Audit** | `job.paused` |
+| **Lifecycle** | active |
+| **Added By** | Stage 5E |
+
+### POST /jobs-resume — Resume Paused Job or Class
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /jobs-resume` |
+| **Classification** | privileged |
+| **Owner Module** | jobs-and-scheduler |
+| **Auth** | Bearer JWT required |
+| **Permission** | `jobs.pause` |
+| **Rate Limit** | strict (10/min) |
+| **Request Body** | `{ job_id?: string, class?: string, reason: string }` |
+| **Response** | `{ resumed: string[], reason }` |
+| **Audit** | `job.resumed` |
+| **Lifecycle** | active |
+| **Added By** | Stage 5E |
+
+### GET /jobs-dead-letters — List Dead-Lettered Executions
+
+| Field | Value |
+|-------|-------|
+| **Path** | `GET /jobs-dead-letters` |
+| **Classification** | privileged |
+| **Owner Module** | jobs-and-scheduler |
+| **Auth** | Bearer JWT required |
+| **Permission** | `jobs.deadletter.manage` |
+| **Rate Limit** | standard (60/min) |
+| **Query Params** | `page`, `page_size`, `job_id` (optional filter) |
+| **Response** | `{ data: JobExecution[], pagination: { page, page_size, total, total_pages } }` |
+| **Lifecycle** | active |
+| **Added By** | Stage 5E |
+
+### POST /jobs-replay-dead-letter — Replay Dead-Lettered Execution
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /jobs-replay-dead-letter` |
+| **Classification** | privileged |
+| **Owner Module** | jobs-and-scheduler |
+| **Auth** | Bearer JWT required |
+| **Permission** | `jobs.deadletter.manage` + `requireRecentAuth()` |
+| **Rate Limit** | strict (10/min) |
+| **Request Body** | `{ execution_id: uuid, reason: string }` |
+| **Response** | `{ replayed, original_execution_id, new_execution_id, job_id }` |
+| **Audit** | `job.replayed` |
+| **Lifecycle** | active |
+| **Added By** | Stage 5E |
+
+---
+
 ## Related Documents
 
 - [Auth Module](../04-modules/auth.md)
