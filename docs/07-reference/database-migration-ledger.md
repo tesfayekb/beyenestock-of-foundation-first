@@ -417,6 +417,22 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 
 ---
 
+### MIG-023: system_health_snapshots Table
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-023 |
+| **Migration File** | `20260412043940_5d8b246c-3d1d-421a-9277-d174019b14be.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-12 |
+| **Sequence Order** | 23 |
+| **Purpose** | Create `system_health_snapshots` table for health monitoring (Stage 5A) |
+| **Objects Affected** | Table: `system_health_snapshots`; RLS policy: `monitoring_view_select` |
+| **Status** | `active` |
+| **Linked Actions** | ACT-057 |
+
+---
+
 ### Tables (6)
 
 | Table | Created By | Status |
@@ -427,6 +443,7 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `role_permissions` | MIG-001 | Active |
 | `audit_logs` | MIG-001 | Active |
 | `profiles` | (pre-existing) | Active — status column added MIG-011 |
+| `system_health_snapshots` | MIG-023 | Active |
 
 ### Functions (12)
 

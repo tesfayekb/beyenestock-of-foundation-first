@@ -35,10 +35,10 @@ Tracks:
 status: implementation in progress
 phase: development
 code_generation: allowed
-modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed + dependency enforcement + roles.edit + permissions.view separated + permissions.assign/revoke restricted to superadmin), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 hardened + RLS INSERT policy removed [ACT-053] + correlation_id top-level column [ACT-055]), api implemented (Stage 3A closed + Phase 3.5 hardened), admin-panel implemented (Phase 4 CLOSED + post-closure: role CRUD, dependency enforcement, inline edit, superadmin restriction + performance hardening [ACT-056]), user-panel implemented (Phase 4 CLOSED)
-active_work: Phase 5 — Operations & Reliability. Stage 5A (Health Check Infrastructure) pending approval. Plan documented in stage-5-plan.md. DW-019 included in Phase 5 scope. DW-020/DW-023 deferred to Phase 6.
-current_plan_version: v10
-approved_plan_baseline: v10
+modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed + dependency enforcement + roles.edit + permissions.view separated + permissions.assign/revoke restricted to superadmin), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 hardened + RLS INSERT policy removed [ACT-053] + correlation_id top-level column [ACT-055]), api implemented (Stage 3A closed + Phase 3.5 hardened), admin-panel implemented (Phase 4 CLOSED + post-closure: role CRUD, dependency enforcement, inline edit, superadmin restriction + performance hardening [ACT-056]), user-panel implemented (Phase 4 CLOSED), health-monitoring partial (Stage 5A implemented [ACT-057])
+active_work: Phase 5 — Operations & Reliability. Stage 5A COMPLETE (system_health_snapshots table + health-check + health-detailed edge functions deployed). Stage 5B (Metrics & Alerting Infrastructure) next. DW-019 included in Phase 5 scope. DW-020/DW-023/DW-024 deferred to Phase 6.
+current_plan_version: v10.1
+approved_plan_baseline: v10.1
 plan_status: approved
 artifact_governance: active (artifact-index.md, database-migration-ledger.md, phase-closures/)
 deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-011, DW-012, DW-013, DW-016, DW-017, DW-019, DW-020, DW-021, DW-022, DW-023, DW-024]
