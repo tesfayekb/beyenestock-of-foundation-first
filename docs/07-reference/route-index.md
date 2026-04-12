@@ -673,6 +673,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Response contract** | `200: text/csv` (with Content-Disposition) / `401` / `403` / `400` / `503` (audit integrity failure) |
 | **Rate limit class** | strict |
 | **Audit required** | Yes — HIGH-RISK (fail-closed: export aborted if audit write fails) |
+| **Reauth Required** | Yes (30 min) |
 | **Idempotent** | Yes |
 | **Max export size** | 10,000 rows |
 | **Related functions** | `authenticateRequest()`, `checkPermissionOrThrow()`, `logAuditEvent()` |
@@ -1014,6 +1015,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Error (409)** | Already deactivated |
 | **Error (500)** | Audit write failed (fail-closed) |
 | **Rate Limit** | strict |
+| **Reauth Required** | Yes (30 min) |
 | **Audit Required** | Yes — `user.account_deactivated` (HIGH-RISK, fail-closed) |
 | **Related events** | `user.account_deactivated`, `auth.session_revoked` |
 | **Lifecycle** | active |
@@ -1035,6 +1037,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Error (409)** | Already active |
 | **Error (500)** | Audit write failed (fail-closed) / Auth unban failed / Profile update failed (with compensating re-ban) |
 | **Rate Limit** | strict |
+| **Reauth Required** | Yes (30 min) |
 | **Audit Required** | Yes — `user.account_reactivated` (HIGH-RISK, fail-closed) |
 | **Related events** | `user.account_reactivated` |
 | **Idempotent** | No (auth state mutation) |
