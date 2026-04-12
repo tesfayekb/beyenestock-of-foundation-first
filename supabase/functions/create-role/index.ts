@@ -56,9 +56,11 @@ Deno.serve(createHandler(async (req: Request) => {
 
   if (insertError) {
     if (insertError.code === '23505') {
-      const { apiError } = await import('../_shared/api-error.ts')
-      return apiError(409, `Role with key "${key}" already exists`, {
-        correlationId: ctx.correlationId,
+      return apiSuccess({
+        success: false,
+        error: `Role with key "${key}" already exists`,
+        code: 'CONFLICT',
+        correlation_id: ctx.correlationId,
       })
     }
     throw insertError

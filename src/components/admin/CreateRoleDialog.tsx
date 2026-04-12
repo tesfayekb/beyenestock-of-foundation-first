@@ -49,6 +49,22 @@ interface CreateRolePayload {
   description?: string;
 }
 
+interface CreateRoleSuccessResponse {
+  id: string;
+  key: string;
+  name: string;
+  correlation_id?: string;
+}
+
+interface CreateRoleConflictResponse {
+  success: false;
+  error: string;
+  code: 'CONFLICT';
+  correlation_id: string;
+}
+
+type CreateRoleResponse = CreateRoleSuccessResponse | CreateRoleConflictResponse;
+
 export function CreateRoleDialog({ open, onOpenChange }: CreateRoleDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -82,10 +98,10 @@ export function CreateRoleDialog({ open, onOpenChange }: CreateRoleDialogProps) 
     setPendingPayload(null);
   }, []);
 
-  const handleOpenChange = (nextOpen: boolean) => {
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
     if (!nextOpen) resetForm();
     onOpenChange(nextOpen);
-  };
+  }, [onOpenChange, resetForm]);
 
   const normalizedKey = key.trim().toLowerCase();
   const existingRole = useMemo(() => {
@@ -101,7 +117,13 @@ export function CreateRoleDialog({ open, onOpenChange }: CreateRoleDialogProps) 
     setSubmitting(true);
 
     try {
-      const result = await apiClient.post<{ id: string; key: string; name: string }>('create-role', payload);
+      const result = await apiClient.post<CreateRoleResponse>('create-role', payload);
+
+      if ('success' in result && result.success === false) {
+        await queryClient.invalidateQueries({ queryKey: ROLES_QUERY_KEY });
+        setError(`A role with key "${payload.key}" already exists. Choose another name or open the existing role.`);
+        return;
+      }
 
       await queryClient.invalidateQueries({ queryKey: ROLES_QUERY_KEY });
       toast.success(`Role "${result.name}" created`);
@@ -127,13 +149,13 @@ export function CreateRoleDialog({ open, onOpenChange }: CreateRoleDialogProps) 
     } finally {
       setSubmitting(false);
     }
-  }, [navigate, queryClient]);
+  }, [handleOpenChange, navigate, queryClient]);
 
   const openExistingRole = useCallback(() => {
     if (!existingRole) return;
     handleOpenChange(false);
     navigate(ROUTES.ADMIN_ROLE_DETAIL.replace(':id', existingRole.id));
-  }, [existingRole, navigate]);
+  }, [existingRole, handleOpenChange, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
