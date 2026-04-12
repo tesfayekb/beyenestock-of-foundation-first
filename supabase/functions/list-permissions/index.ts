@@ -1,7 +1,7 @@
 /**
  * list-permissions — Return all permissions with their assigned role names.
  *
- * Requires: roles.view permission.
+ * Requires: permissions.view permission.
  *
  * GET /list-permissions
  * Response: { data: PermissionListItem[] }
@@ -18,7 +18,7 @@ Deno.serve(createHandler(async (req: Request) => {
   }
 
   const ctx = await authenticateRequest(req)
-  await checkPermissionOrThrow(ctx.user.id, 'roles.view')
+  await checkPermissionOrThrow(ctx.user.id, 'permissions.view')
 
   // Fetch all permissions
   const { data: perms, error } = await supabaseAdmin

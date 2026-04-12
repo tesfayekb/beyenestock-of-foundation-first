@@ -130,7 +130,7 @@ const App = () => (
                   </PermissionGate>
                 } />
                 <Route path="permissions" element={
-                  <PermissionGate permission="roles.view">
+                  <PermissionGate permission="permissions.view">
                     <AdminPermissionsPage />
                   </PermissionGate>
                 } />

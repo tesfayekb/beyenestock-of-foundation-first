@@ -8,6 +8,9 @@
  *
  * Key   = the permission being assigned
  * Value = array of permission keys that MUST also be present
+ *
+ * NOTE: permissions.assign and permissions.revoke are superadmin-only.
+ * They are still listed here for completeness (superadmin auto-inherits).
  */
 export const PERMISSION_DEPS: Record<string, string[]> = {
   // RBAC
@@ -16,8 +19,9 @@ export const PERMISSION_DEPS: Record<string, string[]> = {
   'roles.create':        ['roles.view', 'admin.access'],
   'roles.delete':        ['roles.view', 'admin.access'],
   'roles.edit':          ['roles.view', 'admin.access'],
-  'permissions.assign':  ['roles.view', 'admin.access'],
-  'permissions.revoke':  ['roles.view', 'admin.access'],
+  'permissions.assign':  ['roles.view', 'permissions.view', 'admin.access'],
+  'permissions.revoke':  ['roles.view', 'permissions.view', 'admin.access'],
+  'permissions.view':    ['admin.access'],
 
   // User management
   'users.edit_any':      ['users.view_all', 'admin.access'],

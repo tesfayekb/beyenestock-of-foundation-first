@@ -21,6 +21,7 @@ INSERT INTO public.permissions (key, description) VALUES
   ('roles.edit', 'Allows editing role name and description for non-immutable roles'),
   ('permissions.assign', 'Allows assigning permissions to roles via privileged server-side RPCs'),
   ('permissions.revoke', 'Allows revoking permissions from roles via privileged server-side RPCs'),
+  ('permissions.view', 'Allows viewing the permissions catalog independently of role management'),
   ('users.view_all', 'Allows viewing all user profiles and account data'),
   ('users.edit_any', 'Allows editing any user profile data'),
   ('users.deactivate', 'Allows deactivating user accounts'),
@@ -46,11 +47,12 @@ INSERT INTO public.permissions (key, description) VALUES
 
 -- ===================== ROLE-PERMISSION MAPPINGS =====================
 
--- admin: all permissions EXCEPT jobs.emergency
+-- admin: all permissions EXCEPT jobs.emergency, permissions.assign, permissions.revoke
 INSERT INTO public.role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM public.roles r, public.permissions p
-WHERE r.key = 'admin' AND p.key != 'jobs.emergency';
+WHERE r.key = 'admin'
+  AND p.key NOT IN ('jobs.emergency', 'permissions.assign', 'permissions.revoke');
 
 -- user: self-scope permissions only
 INSERT INTO public.role_permissions (role_id, permission_id)

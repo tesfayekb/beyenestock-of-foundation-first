@@ -38,7 +38,7 @@ export const adminNavigation: NavSection[] = [
         title: 'Permissions',
         url: ROUTES.ADMIN_PERMISSIONS,
         icon: Key,
-        permission: 'roles.view',
+        permission: 'permissions.view',
       },
     ],
   },

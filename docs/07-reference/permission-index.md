@@ -314,7 +314,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Description** | Allows assigning permissions to roles. Governs permission-to-role mutation via privileged server-side RPCs. |
 | **Classification** | admin-critical |
 | **Scope** | system-wide |
-| **Default roles** | admin, superadmin |
+| **Default roles** | superadmin |
 | **Used by** | admin-panel (role-permission management), `assign-permission-to-role` edge function |
 | **Blast radius** | system-wide |
 | **Approval required** | Yes — Lead |
@@ -336,7 +336,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Description** | Allows revoking permissions from roles. Separate from assign to enable split governance. |
 | **Classification** | admin-critical, destructive |
 | **Scope** | system-wide |
-| **Default roles** | admin, superadmin |
+| **Default roles** | superadmin |
 | **Used by** | admin-panel (role-permission management), `revoke-permission-from-role` edge function |
 | **Blast radius** | system-wide |
 | **Approval required** | Yes — Lead |
@@ -347,6 +347,26 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `rbac.permission_revoked` |
 | **Related risks** | RISK-002 (privilege escalation — access removal) |
 | **Related tests** | Permission revocation allow/deny suite |
+| **Lifecycle** | active |
+
+#### `permissions.view`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-permissions-view` (actual UUID assigned at DB creation) |
+| **Module** | rbac |
+| **Description** | Allows viewing the permissions catalog (list of all permissions and which roles hold them). Separate from roles.view — a read-only operator may need to see the permission catalog without role management capability. |
+| **Classification** | read-only |
+| **Scope** | system-wide |
+| **Default roles** | admin, superadmin |
+| **Used by** | admin-panel (permissions page), `list-permissions` edge function |
+| **Blast radius** | small |
+| **Approval required** | No |
+| **Audit required** | No |
+| **Reauth required** | No |
+| **Related routes** | `/admin/permissions` |
+| **Related functions** | `checkPermission()` |
+| **Related tests** | Permissions view allow/deny tests |
 | **Lifecycle** | active |
 
 ### User Management Permissions
