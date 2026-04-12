@@ -1,21 +1,26 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
-import { ConfirmActionDialog } from '@/components/dashboard/ConfirmActionDialog';
-import { ManagePermissionsDialog } from '@/components/admin/ManagePermissionsDialog';
-import { RequirePermission } from '@/components/auth/RequirePermission';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useRoleDetail } from '@/hooks/useRoles';
 import { usePermissions } from '@/hooks/useRoles';
 import { useAssignPermission, useRevokePermission } from '@/hooks/useRoleActions';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { checkPermission } from '@/lib/rbac';
 import { ROUTES } from '@/config/routes';
-import { ArrowLeft, Plus, X, Shield, Users, Key } from 'lucide-react';
+import { ArrowLeft, Shield, Users, Key, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface PermissionGroup {
+  resource: string;
+  label: string;
+  permissions: { id: string; key: string; description: string | null; assigned: boolean }[];
+}
 
 export default function RoleDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,21 +29,65 @@ export default function RoleDetailPage() {
 
   const canAssignPerms = checkPermission(context, 'permissions.assign');
   const canRevokePerms = checkPermission(context, 'permissions.revoke');
+  const canModifyPerms = (canAssignPerms || canRevokePerms);
 
   const { data: role, isLoading, error, refetch } = useRoleDetail(id);
   const { data: allPermissions } = usePermissions();
   const assignPermission = useAssignPermission();
   const revokePermission = useRevokePermission();
 
-  const [showAddPermission, setShowAddPermission] = useState(false);
-  const [revokeTarget, setRevokeTarget] = useState<{ id: string; key: string } | null>(null);
+  // Track in-flight toggles to show spinners per-permission
+  const [pendingToggles, setPendingToggles] = useState<Set<string>>(new Set());
 
-  // Permissions not yet assigned to this role
-  const availablePermissions = useMemo(() => {
+  // Build grouped permission matrix
+  const groups = useMemo<PermissionGroup[]>(() => {
     if (!allPermissions || !role) return [];
     const assignedIds = new Set(role.permissions.map((p) => p.id));
-    return allPermissions.filter((p) => !assignedIds.has(p.id));
+    const map = new Map<string, PermissionGroup['permissions']>();
+
+    for (const p of allPermissions) {
+      const dotIdx = p.key.indexOf('.');
+      const resource = dotIdx > 0 ? p.key.slice(0, dotIdx) : 'other';
+      if (!map.has(resource)) map.set(resource, []);
+      map.get(resource)!.push({
+        id: p.id,
+        key: p.key,
+        description: p.description,
+        assigned: assignedIds.has(p.id),
+      });
+    }
+
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([resource, perms]) => ({
+        resource,
+        label: resource.charAt(0).toUpperCase() + resource.slice(1),
+        permissions: perms.sort((a, b) => a.key.localeCompare(b.key)),
+      }));
   }, [allPermissions, role]);
+
+  const handleToggle = useCallback(
+    (permissionId: string, currentlyAssigned: boolean) => {
+      if (!id || role?.is_immutable) return;
+      setPendingToggles((prev) => new Set(prev).add(permissionId));
+
+      const mutation = currentlyAssigned ? revokePermission : assignPermission;
+      mutation.mutate(
+        { role_id: id, permission_id: permissionId },
+        {
+          onSettled: () => {
+            setPendingToggles((prev) => {
+              const next = new Set(prev);
+              next.delete(permissionId);
+              return next;
+            });
+            refetch();
+          },
+        },
+      );
+    },
+    [id, role?.is_immutable, assignPermission, revokePermission, refetch],
+  );
 
   if (isLoading) {
     return <div className="space-y-6"><LoadingSkeleton variant="page" /></div>;
@@ -48,31 +97,13 @@ export default function RoleDetailPage() {
     return <div className="space-y-6"><ErrorState message={error?.message ?? 'Role not found'} onRetry={() => refetch()} /></div>;
   }
 
-  const handleAssignPermission = (permissionId: string) => {
-    assignPermission.mutate(
-      { role_id: id!, permission_id: permissionId },
-      { onSuccess: () => { setShowAddPermission(false); refetch(); } },
-    );
-  };
-
-  const handleRevokePermission = () => {
-    if (!revokeTarget) return;
-    revokePermission.mutate(
-      { role_id: id!, permission_id: revokeTarget.id },
-      { onSuccess: () => { setRevokeTarget(null); refetch(); } },
-    );
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate(ROUTES.ADMIN_ROLES)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <PageHeader
-          title={role.name}
-          subtitle={role.key}
-        />
+        <PageHeader title={role.name} subtitle={role.key} />
       </div>
 
       {/* Role Info */}
@@ -94,48 +125,71 @@ export default function RoleDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Permissions */}
+      {/* Permission Matrix */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Key className="h-4 w-4" />
-              Permissions ({role.permissions.length})
-            </CardTitle>
-            {canAssignPerms && !role.is_immutable && availablePermissions.length > 0 && (
-              <Button size="sm" variant="outline" onClick={() => setShowAddPermission(true)}>
-                <Plus className="mr-1 h-3 w-3" />
-                Add
-              </Button>
-            )}
-          </div>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Key className="h-4 w-4" />
+            Permissions ({role.permissions.length} / {allPermissions?.length ?? '…'})
+          </CardTitle>
+          {role.is_immutable && (
+            <p className="text-xs text-muted-foreground mt-1">
+              This role is immutable — permissions cannot be changed.
+            </p>
+          )}
         </CardHeader>
         <CardContent>
-          {role.permissions.length > 0 ? (
-            <div className="space-y-2">
-              {role.permissions.map((perm) => (
-                <div key={perm.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium font-mono text-foreground">{perm.key}</p>
-                    {perm.description && (
-                      <p className="text-xs text-muted-foreground">{perm.description}</p>
-                    )}
+          {groups.length > 0 ? (
+            <div className="space-y-5">
+              {groups.map((group) => {
+                const assignedCount = group.permissions.filter((p) => p.assigned).length;
+                return (
+                  <div key={group.resource}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h4 className="text-sm font-semibold text-foreground">{group.label}</h4>
+                      <Badge variant="secondary" className="text-xs font-normal">
+                        {assignedCount}/{group.permissions.length}
+                      </Badge>
+                    </div>
+                    <div className="grid gap-1.5">
+                      {group.permissions.map((perm) => {
+                        const isPending = pendingToggles.has(perm.id);
+                        const isDisabled = role.is_immutable || isPending || !canModifyPerms ||
+                          (perm.assigned && !canRevokePerms) || (!perm.assigned && !canAssignPerms);
+                        return (
+                          <label
+                            key={perm.id}
+                            className={`flex items-start gap-3 rounded-md border border-border px-3 py-2 transition-colors ${
+                              isDisabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-muted/50'
+                            }`}
+                          >
+                            <div className="pt-0.5">
+                              {isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                              ) : (
+                                <Checkbox
+                                  checked={perm.assigned}
+                                  disabled={isDisabled}
+                                  onCheckedChange={() => handleToggle(perm.id, perm.assigned)}
+                                />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-mono text-foreground leading-tight">{perm.key}</p>
+                              {perm.description && (
+                                <p className="text-xs text-muted-foreground mt-0.5">{perm.description}</p>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
-                  {canRevokePerms && !role.is_immutable && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => setRevokeTarget({ id: perm.id, key: perm.key })}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No permissions assigned to this role.</p>
+            <p className="text-sm text-muted-foreground">No permissions available.</p>
           )}
         </CardContent>
       </Card>
@@ -168,27 +222,6 @@ export default function RoleDetailPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Add Permission Dialog */}
-      <ManagePermissionsDialog
-        open={showAddPermission}
-        onOpenChange={setShowAddPermission}
-        availablePermissions={availablePermissions}
-        onConfirm={handleAssignPermission}
-        loading={assignPermission.isPending}
-      />
-
-      {/* Revoke Permission Confirm */}
-      <ConfirmActionDialog
-        open={!!revokeTarget}
-        onOpenChange={(open) => !open && setRevokeTarget(null)}
-        title="Revoke Permission"
-        description={`Remove "${revokeTarget?.key}" from role "${role.name}"? This action is audited.`}
-        confirmLabel="Revoke"
-        destructive
-        onConfirm={handleRevokePermission}
-        loading={revokePermission.isPending}
-      />
     </div>
   );
 }

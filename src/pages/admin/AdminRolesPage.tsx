@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { DataTable, DataTableColumn } from '@/components/dashboard/DataTable';
@@ -6,12 +6,29 @@ import { StatusBadge } from '@/components/dashboard/StatusBadge';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { useRoles, RoleListItem } from '@/hooks/useRoles';
+import { useDebounce } from '@/hooks/useDebounce';
 import { ROUTES } from '@/config/routes';
+import { Search } from 'lucide-react';
 
 export default function AdminRolesPage() {
   const navigate = useNavigate();
   const { data: roles, isLoading, error, refetch } = useRoles();
+  const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 250);
+
+  const filteredRoles = useMemo(() => {
+    if (!roles) return [];
+    if (!debouncedSearch) return roles;
+    const q = debouncedSearch.toLowerCase();
+    return roles.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.key.toLowerCase().includes(q) ||
+        (r.description ?? '').toLowerCase().includes(q),
+    );
+  }, [roles, debouncedSearch]);
 
   const handleRowClick = useCallback((row: RoleListItem) => {
     navigate(ROUTES.ADMIN_ROLE_DETAIL.replace(':id', row.id));
@@ -62,6 +79,16 @@ export default function AdminRolesPage() {
     <>
       <PageHeader title="Roles" subtitle="View and manage system roles and their permissions." />
 
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search roles…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9 max-w-sm"
+        />
+      </div>
+
       {isLoading ? (
         <LoadingSkeleton variant="table" rows={6} />
       ) : error ? (
@@ -69,10 +96,10 @@ export default function AdminRolesPage() {
       ) : (
         <DataTable
           columns={columns}
-          data={roles ?? []}
+          data={filteredRoles}
           onRowClick={handleRowClick}
           emptyTitle="No roles found"
-          emptyDescription="No roles have been created yet."
+          emptyDescription={debouncedSearch ? 'No roles match your search.' : 'No roles have been created yet.'}
         />
       )}
     </>
