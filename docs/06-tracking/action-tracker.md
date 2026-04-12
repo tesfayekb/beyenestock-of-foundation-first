@@ -1475,6 +1475,33 @@ Each action must include:
 
 ---
 
+### ACT-057: Stage 5A — Health Check Infrastructure
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-057 |
+| **Date** | 2026-04-12 |
+| **Action** | (1) Created `system_health_snapshots` table with RLS (SELECT for `monitoring.view` only, no client mutations). (2) Created `GET /health-check` public edge function — runs DB/auth/audit subsystem checks, stores snapshot, emits `health.status_changed` on status transition, returns minimal `{ status, timestamp }`. (3) Created `GET /health-detailed` authenticated edge function — requires `monitoring.view`, returns per-subsystem check results with latency, error details, and summary counts. (4) Deployed and verified both endpoints. |
+| **Type** | Feature |
+| **Impact Classification** | High |
+| **Modules Affected** | health-monitoring |
+| **Files Changed** | supabase/functions/health-check/index.ts (new), supabase/functions/health-detailed/index.ts (new) |
+| **Docs Updated** | route-index.md, action-tracker.md, database-migration-ledger.md |
+| **Related Routes** | GET /health-check, GET /health-detailed |
+| **Related Functions** | authenticateRequest, checkPermissionOrThrow, logAuditEvent |
+| **Related Events** | health.status_changed |
+| **Evidence** | health-check returns 200 with `{ status: "healthy" }`. health-detailed returns 401 without auth. Migration applied. TypeScript zero errors. |
+| **Verified By** | AI Agent |
+| **Before State** | No health check infrastructure |
+| **After State** | system_health_snapshots table + 2 edge functions (public + authenticated) deployed and verified |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Drop table, remove edge functions |
+| **Blast Radius** | Low |
+| **Health Impact** | Improved — system now has self-monitoring capability |
+| **Status** | Verified |
+
+---
+
 - If action introduces regression → must link watchlist item in `related_watchlist`
 - Regression fix actions must reference the original regression
 - Repeated failures in same area → tracked via recurrence in watchlist, referenced here

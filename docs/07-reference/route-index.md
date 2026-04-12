@@ -1065,6 +1065,43 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Notes** | Returns COUNT(*) aggregates only — no email enrichment, no auth.admin.listUsers calls. Designed for dashboard stat cards. |
 | **Lifecycle** | active |
 
+#### `GET /health-check`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/health-check` |
+| **Method** | `GET` |
+| **Classification** | public |
+| **Auth Model** | None — unauthenticated |
+| **Permission** | None |
+| **Response (200)** | `{ status: 'healthy' \| 'degraded' \| 'unhealthy', timestamp: string }` |
+| **Rate Limit** | standard |
+| **Audit Required** | Only on status transition (`health.status_changed`) |
+| **Idempotent** | Yes |
+| **Related functions** | `logAuditEvent()` |
+| **Notes** | Public endpoint for monitoring/load balancers. No sensitive internals. Stores snapshot in `system_health_snapshots`. |
+| **Lifecycle** | active |
+
+#### `GET /health-detailed`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/health-detailed` |
+| **Method** | `GET` |
+| **Classification** | privileged |
+| **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
+| **Permission** | `monitoring.view` |
+| **Response (200)** | `{ status, timestamp, subsystems: { database, auth, audit_pipeline }, summary: { total, healthy, degraded, unhealthy } }` |
+| **Error (401)** | Missing/invalid token |
+| **Error (403)** | Permission denied |
+| **Rate Limit** | standard |
+| **Audit Required** | No (read-only) |
+| **Idempotent** | Yes |
+| **Related functions** | `authenticateRequest()`, `checkPermissionOrThrow()` |
+| **Related permissions** | `monitoring.view` |
+| **Notes** | Returns per-subsystem check results with latency and error details. |
+| **Lifecycle** | active |
+
 ---
 
 ## Critical Route Summary
@@ -1093,7 +1130,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 
 | Route | Purpose | Lifecycle |
 |-------|---------|-----------|
-| `GET /health` | System health check for monitoring / load balancers | planned |
+| `GET /health-check` | System health check for monitoring / load balancers | active |
 
 ### Destructive Routes (Require Re-Auth)
 
