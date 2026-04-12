@@ -96,6 +96,7 @@ function backoffWithJitter(attempt: number): number {
 // ---------------------------------------------------------------------------
 
 const POISON_THRESHOLD = 5
+const DEFAULT_CIRCUIT_BREAKER_THRESHOLD = 3
 
 /**
  * Checks if a job has consecutive cross-execution failures meeting the
@@ -114,6 +115,93 @@ export async function detectPoisonJob(jobId: string): Promise<boolean> {
 
   const failureStates = new Set(['failed', 'dead_lettered'])
   return data.every((row: { state: string }) => failureStates.has(row.state))
+}
+
+// ---------------------------------------------------------------------------
+// Circuit breaker — auto-pause on repeated dependency failures
+// ---------------------------------------------------------------------------
+
+/**
+ * Checks if a job has N consecutive dependency failures (cross-execution).
+ * If so, auto-pauses the job and emits job.circuit_breaker_tripped.
+ */
+async function checkCircuitBreaker(
+  jobId: string,
+  threshold: number,
+  correlationId: string,
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from('job_executions')
+    .select('failure_type')
+    .eq('job_id', jobId)
+    .in('state', ['failed', 'dead_lettered'])
+    .order('created_at', { ascending: false })
+    .limit(threshold)
+
+  if (error || !data || data.length < threshold) return false
+
+  const allDependency = data.every(
+    (row: { failure_type: string | null }) => row.failure_type === 'dependency',
+  )
+
+  if (!allDependency) return false
+
+  // Auto-pause the job
+  await supabaseAdmin
+    .from('job_registry')
+    .update({ status: 'paused', enabled: false, updated_at: new Date().toISOString() })
+    .eq('id', jobId)
+
+  await logAuditEvent({
+    actorId: null,
+    action: 'job.circuit_breaker_tripped',
+    targetType: 'job',
+    metadata: {
+      jobId,
+      threshold,
+      reason: `${threshold} consecutive dependency failures`,
+    },
+    correlationId,
+  })
+
+  console.warn(
+    `[JOB-EXECUTOR] Circuit breaker tripped: job ${jobId} auto-paused after ${threshold} consecutive dependency failures`,
+  )
+
+  return true
+}
+
+// ---------------------------------------------------------------------------
+// Kill switch & class pause checks
+// ---------------------------------------------------------------------------
+
+/**
+ * Checks if the global kill switch is active.
+ * Kill switch row: __kill_switch__ — active when enabled = false.
+ */
+async function isGlobalKillSwitchActive(): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('job_registry')
+    .select('enabled')
+    .eq('id', '__kill_switch__')
+    .single()
+
+  // If no row or enabled = true → kill switch is NOT active
+  // If enabled = false → kill switch IS active (jobs should stop)
+  return data ? !data.enabled : false
+}
+
+/**
+ * Checks if the class-level pause is active for a given job class.
+ */
+async function isClassPaused(jobClass: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('job_registry')
+    .select('enabled')
+    .eq('id', `__class_pause:${jobClass}__`)
+    .single()
+
+  return data ? !data.enabled : false
 }
 
 /**
@@ -198,6 +286,32 @@ export async function executeWithRetry(
       attempt: 0,
       durationMs: 0,
       error: { message: `Job disabled or poisoned: ${jobId}`, failureType: 'permanent' },
+    }
+  }
+
+  // ── Global kill switch check ──
+  const killSwitchActive = await isGlobalKillSwitchActive()
+  if (killSwitchActive) {
+    return {
+      success: false,
+      executionId: '',
+      state: 'cancelled',
+      attempt: 0,
+      durationMs: 0,
+      error: { message: 'Global kill switch is active — all job execution halted', failureType: 'permanent' },
+    }
+  }
+
+  // ── Class-level pause check ──
+  const classPaused = await isClassPaused(jobConfig.class)
+  if (classPaused) {
+    return {
+      success: false,
+      executionId: '',
+      state: 'cancelled',
+      attempt: 0,
+      durationMs: 0,
+      error: { message: `Class-level pause active for ${jobConfig.class}`, failureType: 'permanent' },
     }
   }
 
@@ -411,6 +525,12 @@ export async function executeWithRetry(
   if (isPoisoned) {
     await markJobPoison(jobId)
     console.error(`[JOB-EXECUTOR] Job ${jobId} marked as POISON after ${POISON_THRESHOLD} consecutive failures`)
+  }
+
+  // Circuit breaker: auto-pause on repeated dependency failures
+  if (lastFailureType === 'dependency' && !isPoisoned) {
+    const cbThreshold = jobConfig.circuit_breaker_threshold ?? DEFAULT_CIRCUIT_BREAKER_THRESHOLD
+    await checkCircuitBreaker(jobId, cbThreshold, correlationId ?? executionId)
   }
 
   return {

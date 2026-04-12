@@ -260,6 +260,7 @@ export type Database = {
       }
       job_registry: {
         Row: {
+          circuit_breaker_threshold: number | null
           class: string
           concurrency_policy: string
           created_at: string
@@ -280,6 +281,7 @@ export type Database = {
           version: string
         }
         Insert: {
+          circuit_breaker_threshold?: number | null
           class?: string
           concurrency_policy?: string
           created_at?: string
@@ -300,6 +302,7 @@ export type Database = {
           version?: string
         }
         Update: {
+          circuit_breaker_threshold?: number | null
           class?: string
           concurrency_policy?: string
           created_at?: string

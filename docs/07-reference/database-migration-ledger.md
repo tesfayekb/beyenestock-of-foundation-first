@@ -562,6 +562,21 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | **Linked Actions** | ACT-062 |
 | **Notes** | In `sql/` (not `supabase/migrations/`) because it contains environment-specific secrets. MIG-029 (superseded) → MIG-030 (unschedule) → MIG-031 (secure reschedule). |
 
+### MIG-032: Kill Switch & Class Pause Reserved Rows + Circuit Breaker
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-032 |
+| **Migration File** | (Lovable-managed migration) |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-12 |
+| **Sequence Order** | 32 |
+| **Purpose** | Adds reserved rows to `job_registry` for global kill switch and 5 class-level pause rows. Adds `circuit_breaker_threshold` column (default 3) to `job_registry`. |
+| **Depends On** | MIG-025 |
+| **Status** | `active` |
+| **Linked Actions** | Stage 5E |
+| **Notes** | Reserved IDs: `__kill_switch__`, `__class_pause:{class}__`. Circuit breaker threshold configurable per job. |
+
 ---
 
 ### Tables (12)

@@ -1236,6 +1236,84 @@ Key event chains showing upstream triggers and downstream effects:
 | **Observability** | Logged, monitored |
 | **Lifecycle** | active |
 
+#### `job.circuit_breaker_tripped` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | system |
+| **Severity** | HIGH |
+| **Owner module** | jobs-and-scheduler |
+| **Consumers** | health-monitoring, admin-panel |
+| **Description** | Circuit breaker auto-paused a job after repeated dependency failures |
+| **Payload schema** | `{ jobId: string, threshold: integer, reason: string }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert |
+| **Observability** | Logged, traced, alerted |
+| **Lifecycle** | active |
+
+#### `job.paused` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | system |
+| **Severity** | MEDIUM |
+| **Owner module** | jobs-and-scheduler |
+| **Consumers** | audit-logging, admin-panel |
+| **Description** | Job manually paused by operator |
+| **Payload schema** | `{ job_id?: string, class?: string, reason: string, paused_jobs: string[] }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Lifecycle** | active |
+
+#### `job.resumed` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | system |
+| **Severity** | MEDIUM |
+| **Owner module** | jobs-and-scheduler |
+| **Consumers** | audit-logging, admin-panel |
+| **Description** | Job manually resumed by operator |
+| **Payload schema** | `{ job_id?: string, class?: string, reason: string, resumed_jobs: string[] }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Lifecycle** | active |
+
+#### `job.replayed` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | system |
+| **Severity** | MEDIUM |
+| **Owner module** | jobs-and-scheduler |
+| **Consumers** | audit-logging, admin-panel |
+| **Description** | Dead-lettered execution replayed by operator |
+| **Payload schema** | `{ original_execution_id: uuid, new_execution_id: uuid, job_id: string, reason: string }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Lifecycle** | active |
+
+#### `job.kill_switch_deactivated` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | system |
+| **Severity** | HIGH |
+| **Owner module** | jobs-and-scheduler |
+| **Consumers** | audit-logging, health-monitoring, admin-panel |
+| **Description** | Kill switch deactivated — jobs resuming |
+| **Payload schema** | `{ scope: string, class?: string, reason: string, deactivated_by: uuid }` |
+| **Delivery guarantee** | exactly-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Lifecycle** | active |
+
 ---
 
 ## Dependencies
