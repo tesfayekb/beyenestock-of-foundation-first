@@ -55,6 +55,7 @@ Governed registry of all shared Phase 4 components. Pages must assemble from thi
 |-----------|------|---------|---------|
 | `ConfirmActionDialog` | `src/components/dashboard/ConfirmActionDialog.tsx` | Standard destructive confirmation: title + description + reason input + confirm/cancel | Deactivate, revoke, delete actions |
 | `AssignRoleDialog` | `src/components/admin/AssignRoleDialog.tsx` | Role selection dialog for user role assignment | User detail page |
+| `CreateRoleDialog` | `src/components/admin/CreateRoleDialog.tsx` | Role creation dialog with auto-slugified key | AdminRolesPage |
 | `ReauthDialog` | `src/components/auth/ReauthDialog.tsx` | Email OTP identity verification dialog for sensitive actions | Security, PasswordChange |
 
 | `AdminEditProfileCard` | `src/components/admin/AdminEditProfileCard.tsx` | Inline admin edit form for user profile (display name, avatar) with permission gate | UserDetailPage |

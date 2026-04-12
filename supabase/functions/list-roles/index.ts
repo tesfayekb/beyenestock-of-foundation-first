@@ -5,6 +5,10 @@
  *
  * GET /list-roles
  * Response: { data: RoleListItem[] }
+ *
+ * Superadmin auto-inherits all permissions via is_superadmin() — it has zero
+ * rows in role_permissions by design. permission_count is overridden to the
+ * total permission count for the superadmin role.
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
@@ -51,6 +55,11 @@ Deno.serve(createHandler(async (req: Request) => {
     permCounts.set(rp.role_id, (permCounts.get(rp.role_id) ?? 0) + 1)
   }
 
+  // Get total permission count (for superadmin override)
+  const { count: totalPermCount } = await supabaseAdmin
+    .from('permissions')
+    .select('id', { count: 'exact', head: true })
+
   // Get user counts per role
   const { data: urData } = await supabaseAdmin
     .from('user_roles')
@@ -63,7 +72,9 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const result: RoleListItem[] = (roles ?? []).map((r) => ({
     ...r,
-    permission_count: permCounts.get(r.id) ?? 0,
+    permission_count: r.key === 'superadmin'
+      ? (totalPermCount ?? 0)
+      : (permCounts.get(r.id) ?? 0),
     user_count: userCounts.get(r.id) ?? 0,
   }))
 

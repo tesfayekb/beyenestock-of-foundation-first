@@ -5,6 +5,9 @@
  *
  * GET /get-role-detail?role_id=<uuid>
  * Response: { data: RoleDetail }
+ *
+ * Superadmin auto-inherits all permissions via is_superadmin() — when role.key
+ * is 'superadmin', ALL permissions are returned instead of role_permissions rows.
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
@@ -44,22 +47,32 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(404, 'Role not found', { correlationId: ctx.correlationId })
   }
 
-  // Get permissions for this role
-  const { data: rpData } = await supabaseAdmin
-    .from('role_permissions')
-    .select('permission_id')
-    .eq('role_id', role_id)
-
-  const permissionIds = (rpData ?? []).map((rp) => rp.permission_id)
+  // Get permissions — superadmin inherits ALL, others use role_permissions join
   let permissions: { id: string; key: string; description: string | null }[] = []
 
-  if (permissionIds.length > 0) {
-    const { data: permData } = await supabaseAdmin
+  if (role.key === 'superadmin') {
+    const { data: allPerms } = await supabaseAdmin
       .from('permissions')
       .select('id, key, description')
-      .in('id', permissionIds)
+      .order('key', { ascending: true })
 
-    permissions = permData ?? []
+    permissions = allPerms ?? []
+  } else {
+    const { data: rpData } = await supabaseAdmin
+      .from('role_permissions')
+      .select('permission_id')
+      .eq('role_id', role_id)
+
+    const permissionIds = (rpData ?? []).map((rp) => rp.permission_id)
+
+    if (permissionIds.length > 0) {
+      const { data: permData } = await supabaseAdmin
+        .from('permissions')
+        .select('id, key, description')
+        .in('id', permissionIds)
+
+      permissions = permData ?? []
+    }
   }
 
   // Get users with this role

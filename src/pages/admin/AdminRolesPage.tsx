@@ -2,21 +2,28 @@ import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { DataTable, DataTableColumn } from '@/components/dashboard/DataTable';
-
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useRoles, RoleListItem } from '@/hooks/useRoles';
+import { useUserRoles } from '@/hooks/useUserRoles';
+import { checkPermission } from '@/lib/rbac';
 import { useDebounce } from '@/hooks/useDebounce';
 import { ROUTES } from '@/config/routes';
-import { Search } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
+import { CreateRoleDialog } from '@/components/admin/CreateRoleDialog';
 
 export default function AdminRolesPage() {
   const navigate = useNavigate();
   const { data: roles, isLoading, error, refetch } = useRoles();
+  const { context } = useUserRoles();
   const [search, setSearch] = useState('');
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const debouncedSearch = useDebounce(search, 250);
+
+  const canCreateRole = checkPermission(context, 'roles.create');
 
   const filteredRoles = useMemo(() => {
     if (!roles) return [];
@@ -77,7 +84,18 @@ export default function AdminRolesPage() {
 
   return (
     <>
-      <PageHeader title="Roles" subtitle="View and manage system roles and their permissions." />
+      <PageHeader
+        title="Roles"
+        subtitle="View and manage system roles and their permissions."
+        actions={
+          canCreateRole ? (
+            <Button size="sm" onClick={() => setShowCreateDialog(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Role
+            </Button>
+          ) : undefined
+        }
+      />
 
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -102,6 +120,8 @@ export default function AdminRolesPage() {
           emptyDescription={debouncedSearch ? 'No roles match your search.' : 'No roles have been created yet.'}
         />
       )}
+
+      <CreateRoleDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
     </>
   );
 }

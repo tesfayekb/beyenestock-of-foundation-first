@@ -7,13 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useRoleDetail } from '@/hooks/useRoles';
 import { usePermissions } from '@/hooks/useRoles';
 import { useAssignPermission, useRevokePermission } from '@/hooks/useRoleActions';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { checkPermission } from '@/lib/rbac';
 import { ROUTES } from '@/config/routes';
-import { ArrowLeft, Shield, Users, Key, Loader2 } from 'lucide-react';
+import { ArrowLeft, Shield, Users, Key, Loader2, Info } from 'lucide-react';
 
 
 interface PermissionGroup {
@@ -35,6 +36,8 @@ export default function RoleDetailPage() {
   const { data: allPermissions } = usePermissions();
   const assignPermission = useAssignPermission();
   const revokePermission = useRevokePermission();
+
+  const isSuperadmin = role?.key === 'superadmin';
 
   // Track in-flight toggles to show spinners per-permission
   const [pendingToggles, setPendingToggles] = useState<Set<string>>(new Set());
@@ -68,7 +71,7 @@ export default function RoleDetailPage() {
 
   const handleToggle = useCallback(
     (permissionId: string, currentlyAssigned: boolean) => {
-      if (!id || role?.is_immutable) return;
+      if (!id || role?.is_immutable || isSuperadmin) return;
       setPendingToggles((prev) => new Set(prev).add(permissionId));
 
       const mutation = currentlyAssigned ? revokePermission : assignPermission;
@@ -88,7 +91,7 @@ export default function RoleDetailPage() {
         },
       );
     },
-    [id, role?.is_immutable, assignPermission, revokePermission, refetch],
+    [id, role?.is_immutable, isSuperadmin, assignPermission, revokePermission, refetch],
   );
 
   if (isLoading) {
@@ -127,6 +130,16 @@ export default function RoleDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Superadmin auto-inherit banner */}
+      {isSuperadmin && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            Superadmin inherits <strong>all</strong> permissions automatically. New permissions added to the system are available to superadmin immediately without any configuration. The checkboxes below are read-only and reflect the current full permission set.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Permission Matrix */}
       <Card>
         <CardHeader>
@@ -134,7 +147,7 @@ export default function RoleDetailPage() {
             <Key className="h-4 w-4" />
             Permissions ({role.permissions.length} / {allPermissions?.length ?? '…'})
           </CardTitle>
-          {role.is_immutable && (
+          {role.is_immutable && !isSuperadmin && (
             <p className="text-xs text-muted-foreground mt-1">
               This role is immutable — permissions cannot be changed.
             </p>
@@ -156,7 +169,7 @@ export default function RoleDetailPage() {
                     <div className="grid gap-1.5">
                       {group.permissions.map((perm) => {
                         const isPending = pendingToggles.has(perm.id);
-                        const isDisabled = role.is_immutable || isPending || !canModifyPerms ||
+                        const isDisabled = role.is_immutable || isSuperadmin || isPending || !canModifyPerms ||
                           (perm.assigned && !canRevokePerms) || (!perm.assigned && !canAssignPerms);
                         return (
                           <label
