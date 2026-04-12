@@ -14,7 +14,7 @@ import { useUserRoles } from '@/hooks/useUserRoles';
 import { checkPermission } from '@/lib/rbac';
 import { ROUTES } from '@/config/routes';
 import { ArrowLeft, Shield, Users, Key, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+
 
 interface PermissionGroup {
   resource: string;

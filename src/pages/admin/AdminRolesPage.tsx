@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { DataTable, DataTableColumn } from '@/components/dashboard/DataTable';
-import { StatusBadge } from '@/components/dashboard/StatusBadge';
+
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
 import { Badge } from '@/components/ui/badge';
