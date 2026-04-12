@@ -1,5 +1,6 @@
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { checkPermission } from '@/lib/rbac';
+import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 
 interface RequirePermissionProps {
   /** Single permission key or array of keys (all must be satisfied). */
@@ -12,8 +13,8 @@ interface RequirePermissionProps {
 /**
  * Hides children if the current user lacks the specified permission(s).
  *
- * During loading, renders null — the surrounding layout shell remains visible.
- * This prevents full-page skeleton flashes when used inside an already-rendered layout.
+ * During loading, renders a lightweight skeleton inside the already-visible
+ * layout shell — prevents the blank content flash on first navigation.
  *
  * UX convenience ONLY — does NOT enforce access.
  * Server-side enforcement (RLS, edge functions, has_permission()) is authoritative.
@@ -26,7 +27,7 @@ export function RequirePermission({
   const { context, loading } = useUserRoles();
 
   if (loading) {
-    return null;
+    return <LoadingSkeleton variant="page" />;
   }
 
   const permissions = Array.isArray(permission) ? permission : [permission];
