@@ -569,8 +569,6 @@ export type Database = {
         Args: { batch_size?: number; cutoff: string }
         Returns: number
       }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
