@@ -32,8 +32,8 @@ export function AdminLayout() {
     queryClient.prefetchQuery({ queryKey: [...ROLES_QUERY_KEY], queryFn: rolesQueryFn, staleTime: 5 * 60 * 1000 });
     queryClient.prefetchQuery({ queryKey: [...PERMISSIONS_QUERY_KEY], queryFn: permissionsQueryFn, staleTime: 5 * 60 * 1000 });
     queryClient.prefetchQuery({
-      queryKey: ['admin', 'users', { limit: 25, offset: 0 }],
-      queryFn: () => apiClient.get('list-users', { limit: 25, offset: 0 }),
+      queryKey: ['admin', 'users', { limit: 50, offset: 0 }],
+      queryFn: () => apiClient.get('list-users', { limit: 50, offset: 0 }),
       staleTime: 30_000,
     });
   }, [user, queryClient]);
