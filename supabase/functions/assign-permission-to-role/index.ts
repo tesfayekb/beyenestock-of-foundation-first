@@ -4,6 +4,10 @@
  * Requires: permissions.assign permission.
  * Audit: HIGH-RISK (fail-closed with rollback).
  *
+ * Dependency enforcement: when assigning a permission that has
+ * dependencies (defined in PERMISSION_DEPS), any missing deps
+ * are auto-inserted in the same operation.
+ *
  * POST /assign-permission-to-role
  * Body: { role_id: string (UUID), permission_id: string (UUID) }
  */
@@ -21,6 +25,50 @@ const BodySchema = z.object({
   role_id: z.string().trim().regex(uuidRegex, 'Invalid UUID'),
   permission_id: z.string().trim().regex(uuidRegex, 'Invalid UUID'),
 })
+
+/**
+ * Permission dependency map — server-side copy.
+ * Mirrors src/config/permission-deps.ts. Kept inline to avoid
+ * import-path issues in the Deno edge function runtime.
+ */
+const PERMISSION_DEPS: Record<string, string[]> = {
+  'roles.assign':        ['roles.view', 'users.view_all', 'admin.access'],
+  'roles.revoke':        ['roles.view', 'users.view_all', 'admin.access'],
+  'roles.create':        ['roles.view', 'admin.access'],
+  'roles.delete':        ['roles.view', 'admin.access'],
+  'roles.edit':          ['roles.view', 'admin.access'],
+  'permissions.assign':  ['roles.view', 'admin.access'],
+  'permissions.revoke':  ['roles.view', 'admin.access'],
+  'users.edit_any':      ['users.view_all', 'admin.access'],
+  'users.deactivate':    ['users.view_all', 'admin.access'],
+  'users.reactivate':    ['users.view_all', 'admin.access'],
+  'audit.export':        ['audit.view', 'admin.access'],
+  'audit.view':          ['admin.access'],
+  'monitoring.configure': ['monitoring.view', 'admin.access'],
+  'monitoring.view':      ['admin.access'],
+  'jobs.trigger':            ['jobs.view', 'admin.access'],
+  'jobs.pause':              ['jobs.view', 'admin.access'],
+  'jobs.resume':             ['jobs.view', 'admin.access'],
+  'jobs.retry':              ['jobs.view', 'admin.access'],
+  'jobs.deadletter.manage':  ['jobs.view', 'admin.access'],
+  'jobs.emergency':          ['admin.access'],
+  'jobs.view':               ['admin.access'],
+  'admin.config':            ['admin.access'],
+}
+
+function resolveAllDeps(key: string): string[] {
+  const visited = new Set<string>()
+  const queue = [...(PERMISSION_DEPS[key] ?? [])]
+  for (let i = 0; i < queue.length; i++) {
+    const dep = queue[i]
+    if (visited.has(dep)) continue
+    visited.add(dep)
+    for (const t of (PERMISSION_DEPS[dep] ?? [])) {
+      if (!visited.has(t)) queue.push(t)
+    }
+  }
+  return Array.from(visited)
+}
 
 Deno.serve(createHandler(async (req: Request) => {
   if (req.method !== 'POST') {
@@ -43,7 +91,6 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(404, 'Role not found', { correlationId: ctx.correlationId })
   }
 
-  // Gap 3 fix: Immutable role check
   if (role.is_immutable) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(409, `Cannot modify permissions of immutable role: ${role.key}`, {
@@ -59,7 +106,44 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(404, 'Permission not found', { correlationId: ctx.correlationId })
   }
 
-  // Assign permission to role
+  // --- Dependency resolution ---
+  const depKeys = resolveAllDeps(permission.key)
+  let autoAddedKeys: string[] = []
+
+  if (depKeys.length > 0) {
+    // Fetch all permissions that are dependencies
+    const { data: depPerms } = await supabaseAdmin
+      .from('permissions')
+      .select('id, key')
+      .in('key', depKeys)
+
+    if (depPerms && depPerms.length > 0) {
+      // Check which are already assigned
+      const { data: existingMappings } = await supabaseAdmin
+        .from('role_permissions')
+        .select('permission_id')
+        .eq('role_id', role_id)
+        .in('permission_id', depPerms.map(p => p.id))
+
+      const existingIds = new Set((existingMappings ?? []).map(m => m.permission_id))
+      const missing = depPerms.filter(p => !existingIds.has(p.id))
+
+      if (missing.length > 0) {
+        const rows = missing.map(p => ({ role_id, permission_id: p.id }))
+        const { error: depInsertErr } = await supabaseAdmin
+          .from('role_permissions')
+          .insert(rows)
+
+        if (depInsertErr) {
+          // 23505 means some already exist (race), which is fine — ignore
+          if (depInsertErr.code !== '23505') throw depInsertErr
+        }
+        autoAddedKeys = missing.map(p => p.key)
+      }
+    }
+  }
+
+  // Assign the requested permission
   const { error: insertError } = await supabaseAdmin
     .from('role_permissions')
     .insert({ role_id, permission_id })
@@ -85,6 +169,7 @@ Deno.serve(createHandler(async (req: Request) => {
       role_key: role.key,
       permission_id,
       permission_key: permission.key,
+      auto_added_dependencies: autoAddedKeys,
     },
     ipAddress: ctx.ipAddress,
     userAgent: ctx.userAgent,
@@ -92,12 +177,28 @@ Deno.serve(createHandler(async (req: Request) => {
   })
 
   if (!auditResult.success) {
-    // Rollback: remove the permission assignment
+    // Rollback: remove the permission assignment + auto-added deps
     await supabaseAdmin
       .from('role_permissions')
       .delete()
       .eq('role_id', role_id)
       .eq('permission_id', permission_id)
+
+    if (autoAddedKeys.length > 0) {
+      const { data: depPermsToRemove } = await supabaseAdmin
+        .from('permissions')
+        .select('id')
+        .in('key', autoAddedKeys)
+      if (depPermsToRemove) {
+        for (const dp of depPermsToRemove) {
+          await supabaseAdmin
+            .from('role_permissions')
+            .delete()
+            .eq('role_id', role_id)
+            .eq('permission_id', dp.id)
+        }
+      }
+    }
 
     const { apiError } = await import('../_shared/api-error.ts')
     console.error('[ASSIGN-PERM] Audit write failed — rolling back', auditResult)
@@ -111,5 +212,6 @@ Deno.serve(createHandler(async (req: Request) => {
     success: true,
     correlation_id: ctx.correlationId,
     message: `Permission ${permission.key} assigned to role ${role.key}`,
+    auto_added_dependencies: autoAddedKeys,
   })
 }))
