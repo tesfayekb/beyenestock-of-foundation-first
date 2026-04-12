@@ -342,8 +342,12 @@ At each phase boundary (before advancing to the next phase):
 | DW-025 | Role creation (create-role edge function + UI) | Phase 4 | Phase 6 | `implemented` |
 | DW-026 | Role deletion (delete-role edge function + UI) | Phase 4 | Phase 6 | `implemented` |
 | DW-027 | Admin Edit User Profile | Phase 4 | Phase 4 (Stage 4K) | `implemented` |
-| DW-028 | True fail-closed audit rollback (alert config) | Phase 5 | Phase 6 | `implemented` |
-| DW-029 | Batched audit cleanup DELETE | Phase 5 | Phase 6 | `implemented` |
+| DW-028 | True fail-closed audit rollback (alert config) | Phase 5 | Phase 6 | `deferred` |
+| DW-029 | Batched audit cleanup DELETE | Phase 5 | Phase 6 | `deferred` |
+| DW-030 | TypeScript strict mode | Phase 6 | `unassigned` (v2) | `deferred` |
+| DW-031 | Service worker (Workbox) | Phase 6 | `unassigned` (v2) | `deferred` |
+| DW-032 | CDN security headers (X-Frame-Options, early hints) | Phase 6 | `unassigned` (v2) | `deferred` |
+| DW-033 | Auth page label/input association | Phase 6 | Phase 7 | `deferred` |
 
 
 ### DW-011: Distributed Rate Limiting
@@ -790,6 +794,102 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | DEC-007 (90-day retention) |
 | **Related Actions** | ACT-060 |
 | **Required Tests for Closure** | (1) Batch delete removes correct records. (2) Multiple batches complete within timeout. (3) No records newer than cutoff are deleted. |
+| **Status** | `deferred` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-030: TypeScript Strict Mode
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-030 |
+| **Date Deferred** | 2026-04-12 |
+| **Source Plan Section** | Performance & Quality Audit Round 2 — Build & Configuration |
+| **Source Phase** | Phase 6 — Performance Optimization |
+| **Title** | Enable TypeScript strict mode (strict: true in tsconfig.app.json) |
+| **Reason Deferred** | Enabling strict mode surfaces ~50+ type errors requiring a dedicated refactoring pass. Current codebase compiles cleanly with strict: false. Worth +5 audit points but requires significant effort. |
+| **Blocking Dependencies** | None — purely a code quality improvement |
+| **Impact on Source Phase** | Build & Config score remains 97/100 instead of 100/100 |
+| **Future Owner Phase** | `unassigned` (v2) |
+| **Future Owner Module** | All modules |
+| **Required Plan Realignment** | Dedicated strict-mode migration sprint; fix all `as any` casts, add null checks, resolve implicit-any imports |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | `npx tsc --noEmit` passes with strict: true; zero `as any` casts remain; all 82+ tests still pass |
+| **Status** | `deferred` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-031: Service Worker (Workbox)
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-031 |
+| **Date Deferred** | 2026-04-12 |
+| **Source Plan Section** | Performance & Quality Audit Round 2 — Load Strategy |
+| **Source Phase** | Phase 6 — Performance Optimization |
+| **Title** | Add Workbox-based service worker for offline asset caching |
+| **Reason Deferred** | Architectural decision needed on caching strategy, cache invalidation, and offline behavior for an admin panel. Lower priority — admin panels rarely need offline support. Worth +3 audit points. |
+| **Blocking Dependencies** | Decision on cache-first vs network-first strategy; Workbox configuration design |
+| **Impact on Source Phase** | Load Strategy score remains 88/100 instead of 91/100 |
+| **Future Owner Phase** | `unassigned` (v2) |
+| **Future Owner Module** | Frontend infrastructure |
+| **Required Plan Realignment** | Add service worker registration to main.tsx; configure Workbox precache manifest; test cache invalidation on deploy |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Service worker registers successfully; vendor chunks served from cache on repeat visits; cache invalidates on new deploy; no stale content served |
+| **Status** | `deferred` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-032: CDN Security Headers
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-032 |
+| **Date Deferred** | 2026-04-12 |
+| **Source Plan Section** | Performance & Quality Audit Round 2 — Security Headers |
+| **Source Phase** | Phase 6 — Performance Optimization |
+| **Title** | HTTP response headers (X-Frame-Options, X-Content-Type-Options, HTTP/2 early hints) |
+| **Reason Deferred** | These headers must be configured at the CDN/hosting layer, not in application code. Meta tags are advisory only. Worth +4 audit points total. |
+| **Blocking Dependencies** | CDN/hosting access for response header configuration |
+| **Impact on Source Phase** | Security Headers score remains 96/100 instead of 100/100 |
+| **Future Owner Phase** | `unassigned` (v2) |
+| **Future Owner Module** | Infrastructure/DevOps |
+| **Required Plan Realignment** | Configure hosting provider to add X-Frame-Options: DENY, X-Content-Type-Options: nosniff, and Link preload headers |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | curl -I shows correct response headers; security scanner confirms headers present |
+| **Status** | `deferred` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-033: Auth Page Input/Label Association
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-033 |
+| **Date Deferred** | 2026-04-12 |
+| **Source Plan Section** | Performance & Quality Audit Round 2 — Accessibility |
+| **Source Phase** | Phase 6 — Performance Optimization |
+| **Title** | Add id attributes to SignIn/SignUp/ForgotPassword/ResetPassword inputs for label htmlFor association |
+| **Reason Deferred** | Minor accessibility gap — auth page inputs have visible labels but lack programmatic id/htmlFor binding. Worth +1 audit point. |
+| **Blocking Dependencies** | None |
+| **Impact on Source Phase** | Accessibility score remains 98/100 instead of 99/100 |
+| **Future Owner Phase** | Phase 7 (next minor release) |
+| **Future Owner Module** | Auth module UI |
+| **Required Plan Realignment** | Add matching id to each Input and htmlFor to each Label on auth pages |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Screen reader announces correct label for every auth form input; axe-core scan shows zero label-association violations |
 | **Status** | `deferred` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
