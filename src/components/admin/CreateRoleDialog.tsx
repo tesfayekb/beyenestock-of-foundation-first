@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2 } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, ApiError } from '@/lib/api-client';
 import { ROLES_QUERY_KEY } from '@/hooks/useRoles';
 import { ROUTES } from '@/config/routes';
 import { toast } from 'sonner';
@@ -95,10 +95,10 @@ export function CreateRoleDialog({ open, onOpenChange }: CreateRoleDialogProps) 
       // Navigate to the new role's detail page
       navigate(ROUTES.ADMIN_ROLE_DETAIL.replace(':id', result.id));
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to create role';
-      if (msg.includes('re-authenticate') || msg.includes('RECENT_AUTH_REQUIRED')) {
+      if (err instanceof ApiError && err.code === 'RECENT_AUTH_REQUIRED') {
         setError('Your session is too old for this action. Please sign out and sign back in, then try again.');
       } else {
+        const msg = err instanceof Error ? err.message : 'Failed to create role';
         setError(msg);
       }
     } finally {
