@@ -36,6 +36,11 @@ export function AdminLayout() {
       queryFn: () => apiClient.get('list-users', { limit: 50, offset: 0 }),
       staleTime: 30_000,
     });
+    queryClient.prefetchQuery({
+      queryKey: ['admin', 'audit-logs', { limit: 50 }],
+      queryFn: () => apiClient.get('query-audit-logs', { limit: 50 }),
+      staleTime: 30_000,
+    });
   }, [user, queryClient]);
 
   return (

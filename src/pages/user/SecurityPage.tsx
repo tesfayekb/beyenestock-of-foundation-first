@@ -3,36 +3,37 @@ import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMfaFactors, MfaFactor } from '@/hooks/useMfaFactors';
-import { ConfirmActionDialog } from '@/components/dashboard/ConfirmActionDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
 import { ShieldCheck, ShieldOff, Trash2, KeyRound, Clock, LogIn, AlertTriangle, Lock } from 'lucide-react';
 import { PasswordChangeCard } from '@/components/user/PasswordChangeCard';
+import { ReauthDialog } from '@/components/auth/ReauthDialog';
 
 export default function SecurityPage() {
   const { user, mfaStatus, checkMfaStatus } = useAuth();
   const { factors, loading, unenrolling, unenrollFactor } = useMfaFactors();
   const navigate = useNavigate();
   const [factorToRemove, setFactorToRemove] = useState<MfaFactor | null>(null);
+  const [showReauth, setShowReauth] = useState(false);
 
-  const handleUnenroll = async () => {
+  const handleRequestUnenroll = (factor: MfaFactor) => {
+    setFactorToRemove(factor);
+    setShowReauth(true);
+  };
+
+  const handleReauthVerified = async () => {
     if (!factorToRemove) return;
     const success = await unenrollFactor(factorToRemove.id);
     if (success) {
-      setFactorToRemove(null);
       await checkMfaStatus();
     }
+    setFactorToRemove(null);
   };
 
   const verifiedFactors = factors.filter((f) => f.status === 'verified');
   const hasMfa = mfaStatus === 'enrolled' || verifiedFactors.length > 0;
-
-  // SCENARIO-3: Build unenroll warning based on current MFA state
-  const unenrollDescription = hasMfa && verifiedFactors.length === 1
-    ? "This will remove the only authenticator app from your account. Your next sign-in will no longer require MFA, reducing your account security. You'll need to set up a new one to re-enable MFA."
-    : "This will remove the authenticator app from your account. You'll need to set up a new one to re-enable MFA.";
 
   return (
     <>
@@ -102,14 +103,13 @@ export default function SecurityPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => setFactorToRemove(factor)}
+                      onClick={() => handleRequestUnenroll(factor)}
                       disabled={unenrolling}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}
-
               </div>
             )}
           </CardContent>
@@ -185,16 +185,16 @@ export default function SecurityPage() {
         <PasswordChangeCard />
       </div>
 
-      {/* Unenroll confirmation dialog — SCENARIO-3: includes MFA downgrade warning */}
-      <ConfirmActionDialog
-        open={!!factorToRemove}
-        onOpenChange={(open) => { if (!open) setFactorToRemove(null); }}
-        title="Remove MFA Factor"
-        description={unenrollDescription}
-        confirmLabel="Remove"
-        destructive
-        loading={unenrolling}
-        onConfirm={handleUnenroll}
+      {/* Re-authentication dialog for MFA removal */}
+      <ReauthDialog
+        open={showReauth}
+        onOpenChange={(open) => {
+          setShowReauth(open);
+          if (!open) setFactorToRemove(null);
+        }}
+        title="Verify Identity to Remove MFA"
+        description="Removing MFA is a critical security action. Please verify your identity by entering the code sent to your email."
+        onVerified={handleReauthVerified}
       />
     </>
   );

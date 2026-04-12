@@ -27,7 +27,10 @@ interface UpdateProfilePayload {
   avatar_url?: string | null;
 }
 
-const PROFILE_KEY = ['profile', 'self'] as const;
+export const PROFILE_KEY = ['profile', 'self'] as const;
+
+export const profileQueryFn = () =>
+  apiClient.get<ProfileResponse>('get-profile').then((r) => r.profile);
 
 export function useProfile() {
   const queryClient = useQueryClient();
@@ -35,7 +38,7 @@ export function useProfile() {
 
   const query = useQuery({
     queryKey: PROFILE_KEY,
-    queryFn: () => apiClient.get<ProfileResponse>('get-profile').then((r) => r.profile),
+    queryFn: profileQueryFn,
     staleTime: 30_000,
     enabled: !!user,
   });

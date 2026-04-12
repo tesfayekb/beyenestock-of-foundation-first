@@ -1,23 +1,23 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { isRecentlyAuthenticated } from '@/lib/auth-guards';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { KeyRound, AlertTriangle, Loader2 } from 'lucide-react';
+import { KeyRound, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ReauthDialog } from '@/components/auth/ReauthDialog';
 
 const MIN_PASSWORD_LENGTH = 12;
 
 export function PasswordChangeCard() {
-  const { user, updatePassword } = useAuth();
+  const { updatePassword } = useAuth();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [showReauth, setShowReauth] = useState(false);
 
-  const needsReauth = !isRecentlyAuthenticated(user);
   const passwordsMatch = newPassword === confirmPassword;
   const meetsMinLength = newPassword.length >= MIN_PASSWORD_LENGTH;
   const canSubmit = newPassword && confirmPassword && passwordsMatch && meetsMinLength && !submitting;
@@ -36,6 +36,7 @@ export function PasswordChangeCard() {
       toast.success('Password updated successfully');
       setNewPassword('');
       setConfirmPassword('');
+      setVerified(false);
     }
   };
 
@@ -51,14 +52,15 @@ export function PasswordChangeCard() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {needsReauth ? (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              For security, you must sign in again before changing your password.
-              Please sign out and sign back in, then return here.
-            </AlertDescription>
-          </Alert>
+        {!verified ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              For security, you must verify your identity before changing your password.
+            </p>
+            <Button size="sm" onClick={() => setShowReauth(true)}>
+              Verify Identity
+            </Button>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 max-w-sm">
             <div className="space-y-2">
@@ -103,6 +105,14 @@ export function PasswordChangeCard() {
           </form>
         )}
       </CardContent>
+
+      <ReauthDialog
+        open={showReauth}
+        onOpenChange={setShowReauth}
+        title="Verify Identity"
+        description="Enter the verification code sent to your email to unlock password change."
+        onVerified={() => setVerified(true)}
+      />
     </Card>
   );
 }

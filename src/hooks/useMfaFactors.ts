@@ -17,7 +17,13 @@ export interface MfaFactor {
   updated_at: string;
 }
 
-const MFA_FACTORS_KEY = ['mfa', 'factors'] as const;
+export const MFA_FACTORS_KEY = ['mfa', 'factors'] as const;
+
+export const mfaFactorsQueryFn = async () => {
+  const { data, error } = await supabase.auth.mfa.listFactors();
+  if (error) throw error;
+  return (data?.totp ?? []) as MfaFactor[];
+};
 
 export function useMfaFactors() {
   const queryClient = useQueryClient();
@@ -25,11 +31,7 @@ export function useMfaFactors() {
 
   const query = useQuery({
     queryKey: MFA_FACTORS_KEY,
-    queryFn: async () => {
-      const { data, error } = await supabase.auth.mfa.listFactors();
-      if (error) throw error;
-      return (data?.totp ?? []) as MfaFactor[];
-    },
+    queryFn: mfaFactorsQueryFn,
     staleTime: 30_000,
     enabled: !!user,
   });

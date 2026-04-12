@@ -58,8 +58,8 @@ export function isEmailVerified(user: User | null): boolean {
 
 // ─── requireRecentAuth ──────────────────────────────────────────────
 
-/** Default threshold: 5 minutes */
-const RECENT_AUTH_THRESHOLD_MS = 5 * 60 * 1000;
+/** Default threshold: 30 minutes */
+const RECENT_AUTH_THRESHOLD_MS = 30 * 60 * 1000;
 
 /**
  * Checks if user authenticated recently enough for sensitive actions.
