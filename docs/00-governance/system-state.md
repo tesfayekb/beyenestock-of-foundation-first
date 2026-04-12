@@ -36,14 +36,14 @@ status: implementation in progress
 phase: development
 code_generation: allowed
 modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed + dependency enforcement + roles.edit + permissions.view separated + permissions.assign/revoke restricted to superadmin), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 hardened + RLS INSERT policy removed [ACT-053] + correlation_id top-level column [ACT-055]), api implemented (Stage 3A closed + Phase 3.5 hardened), admin-panel implemented (Phase 4 CLOSED + Phase 5 additions: AdminHealthPage [ACT-063], AdminJobsPage [ACT-063] + performance hardening [ACT-056]), user-panel implemented (Phase 4 CLOSED + session revocation [ACT-063]), health-monitoring implemented (Stage 5A + 5B + 5F complete [ACT-057, ACT-058, ACT-063]), jobs-and-scheduler implemented (Stage 5C + 5D + 5E complete [ACT-059, ACT-060, ACT-062])
-active_work: Phase 6 — Hardening & System Validation. Stage 6A COMPLETE (DW-008 implemented, DW-001/002 deferred to v2). Stages 6B–6E in progress.
+active_work: Phase 6 — Hardening & System Validation. Stages 6A–6E COMPLETE. DW-011 (distributed rate limiting) requires Upstash setup — deferred pending external dependency. Stage 6F (Release Gate) pending.
 current_plan_version: v11.0
 approved_plan_baseline: v11.0
 plan_status: approved
 artifact_governance: active (artifact-index.md, database-migration-ledger.md, phase-closures/)
-deferred_work_open: [DW-011, DW-012, DW-013, DW-021, DW-022, DW-023, DW-024, DW-028, DW-029]
+deferred_work_open: [DW-011]
 deferred_work_v2: [DW-001, DW-002, DW-007, DW-020]
-deferred_work_closed_this_phase: [DW-008, DW-016, DW-017, DW-018, DW-019, DW-025, DW-026, DW-027]
+deferred_work_closed_this_phase: [DW-008, DW-012, DW-013, DW-016, DW-017, DW-018, DW-019, DW-021, DW-022, DW-023, DW-024, DW-025, DW-026, DW-027, DW-028, DW-029]
 deployment_config_required:
   - leaked_password_protection: "Enable in Supabase Dashboard → Authentication → Settings → Leaked Password Protection. Cannot be set via SQL migration or edge function. Required for A+ security posture."
 last_updated: 2026-04-12
