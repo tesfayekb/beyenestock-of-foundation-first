@@ -9,7 +9,7 @@ CREATE POLICY "roles_select_policy"
 
 CREATE POLICY "permissions_select_policy"
   ON public.permissions FOR SELECT TO authenticated
-  USING (public.has_permission(auth.uid(), 'roles.view'));
+  USING (public.has_permission(auth.uid(), 'permissions.view'));
 
 CREATE POLICY "user_roles_select_own"
   ON public.user_roles FOR SELECT TO authenticated

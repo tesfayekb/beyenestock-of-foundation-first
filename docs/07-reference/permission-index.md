@@ -78,6 +78,7 @@ Every permission must include:
 | `related_tests` | Tests validating allow/deny paths | If applicable |
 | `related_risks` | Risk register items | If applicable |
 | `related_watchlist` | Regression watchlist items | If applicable |
+| `depends_on` | Permission keys required for this permission to function (from `PERMISSION_DEPS`) | Yes (empty array if none) |
 | `lifecycle` | `active`, `deprecated`, `pending-removal` | Yes |
 
 ---
