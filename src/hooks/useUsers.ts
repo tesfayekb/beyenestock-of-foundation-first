@@ -35,13 +35,13 @@ interface ListUsersResponse {
 export function useUsers(params: ListUsersParams = {}) {
   return useQuery({
     queryKey: ['admin', 'users', params],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiClient.get<ListUsersResponse>('list-users', {
         limit: params.limit,
         offset: params.offset,
         status: params.status,
         search: params.search,
-      }),
+      }, signal),
     staleTime: 2 * 60 * 1000,
   });
 }
@@ -49,8 +49,8 @@ export function useUsers(params: ListUsersParams = {}) {
 export function useUserDetail(userId: string | undefined) {
   return useQuery({
     queryKey: ['admin', 'user', userId],
-    queryFn: () =>
-      apiClient.get<{ profile: UserListItem }>('get-profile', { user_id: userId }).then((d) => d.profile),
+    queryFn: ({ signal }) =>
+      apiClient.get<{ profile: UserListItem }>('get-profile', { user_id: userId }, signal).then((d) => d.profile),
     enabled: !!userId,
     staleTime: 2 * 60 * 1000,
   });

@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import type { NavSection } from '@/config/navigation.types';
 
 interface DashboardLayoutProps {
@@ -22,16 +23,20 @@ const LayoutFallback = () => (
 
 export function DashboardLayout({ sections, title, children }: DashboardLayoutProps) {
   return (
-    <SidebarProvider>
-      <DashboardSidebar sections={sections} title={title} />
-      <SidebarInset className="flex flex-col min-w-0">
-        <DashboardHeader />
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <Suspense fallback={<LayoutFallback />}>
-            {children ?? <Outlet />}
-          </Suspense>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+    <ErrorBoundary>
+      <SidebarProvider>
+        <DashboardSidebar sections={sections} title={title} />
+        <SidebarInset className="flex flex-col min-w-0">
+          <DashboardHeader />
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <ErrorBoundary inline>
+              <Suspense fallback={<LayoutFallback />}>
+                {children ?? <Outlet />}
+              </Suspense>
+            </ErrorBoundary>
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </ErrorBoundary>
   );
 }

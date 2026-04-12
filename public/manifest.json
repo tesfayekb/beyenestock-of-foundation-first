@@ -1,0 +1,16 @@
+{
+  "name": "Admin Console",
+  "short_name": "Admin",
+  "description": "Institutional-grade admin console with RBAC, audit logging, and monitoring",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0F172A",
+  "background_color": "#0F172A",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

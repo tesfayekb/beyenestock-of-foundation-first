@@ -65,49 +65,89 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
         return { affectedRecords: 0, resourceUsage: { db_queries: 1, configs_evaluated: 0, alerts_triggered: 0 } }
       }
 
-      let alertsTriggered = 0
+      // Bulk-fetch: latest metric for every unique metric_key in one query
+      const uniqueKeys = [...new Set(configs.map(c => c.metric_key))]
+      const { data: allMetrics } = await supabaseAdmin
+        .from('system_metrics')
+        .select('metric_key, value, recorded_at')
+        .in('metric_key', uniqueKeys)
+        .order('recorded_at', { ascending: false })
+
+      // Build map: metric_key → latest value
+      const latestMetricMap = new Map<string, { value: number; recorded_at: string }>()
+      if (allMetrics) {
+        for (const m of allMetrics) {
+          if (!latestMetricMap.has(m.metric_key)) {
+            latestMetricMap.set(m.metric_key, { value: Number(m.value), recorded_at: m.recorded_at })
+          }
+        }
+      }
+
+      // Evaluate thresholds first pass — find breached configs
       const now = new Date()
+      const breachedConfigs: Array<{ config: typeof configs[0]; metricValue: number }> = []
 
       for (const config of configs) {
-        // Get the latest metric value for this config's metric_key
-        const { data: latestMetric, error: metricError } = await supabaseAdmin
-          .from('system_metrics')
-          .select('value, recorded_at')
-          .eq('metric_key', config.metric_key)
-          .order('recorded_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+        const latest = latestMetricMap.get(config.metric_key)
+        if (!latest) continue
 
-        if (metricError || !latestMetric) continue
-
-        // Check threshold
         const breached = evaluateThreshold(
-          Number(latestMetric.value),
+          latest.value,
           Number(config.threshold_value),
           config.comparison,
         )
+        if (breached) {
+          breachedConfigs.push({ config, metricValue: latest.value })
+        }
+      }
 
-        if (!breached) continue
+      if (breachedConfigs.length === 0) {
+        return {
+          affectedRecords: 0,
+          resourceUsage: { db_queries: 2, configs_evaluated: configs.length, alerts_triggered: 0 },
+        }
+      }
 
-        // Check cooldown: skip if an alert was fired within cooldown_seconds
-        const cooldownCutoff = new Date(now.getTime() - config.cooldown_seconds * 1000)
-        const { data: recentAlert } = await supabaseAdmin
-          .from('alert_history')
-          .select('id')
-          .eq('alert_config_id', config.id)
-          .gte('created_at', cooldownCutoff.toISOString())
-          .limit(1)
-          .maybeSingle()
+      // Bulk-fetch: recent alerts for all breached config IDs
+      const breachedIds = breachedConfigs.map(b => b.config.id)
+      const earliestCooldown = new Date(
+        now.getTime() - Math.max(...breachedConfigs.map(b => b.config.cooldown_seconds)) * 1000
+      )
 
-        if (recentAlert) continue // Still in cooldown
+      const { data: recentAlerts } = await supabaseAdmin
+        .from('alert_history')
+        .select('alert_config_id, created_at')
+        .in('alert_config_id', breachedIds)
+        .gte('created_at', earliestCooldown.toISOString())
 
-        // Fire alert — insert into alert_history
+      // Build cooldown map: config_id → latest alert time
+      const cooldownMap = new Map<string, string>()
+      if (recentAlerts) {
+        for (const a of recentAlerts) {
+          const existing = cooldownMap.get(a.alert_config_id)
+          if (!existing || a.created_at > existing) {
+            cooldownMap.set(a.alert_config_id, a.created_at)
+          }
+        }
+      }
+
+      let alertsTriggered = 0
+
+      for (const { config, metricValue } of breachedConfigs) {
+        // Per-config cooldown check
+        const lastAlertTime = cooldownMap.get(config.id)
+        if (lastAlertTime) {
+          const cooldownCutoff = new Date(now.getTime() - config.cooldown_seconds * 1000)
+          if (new Date(lastAlertTime) >= cooldownCutoff) continue // Still in cooldown
+        }
+
+        // Fire alert
         const { error: alertError } = await supabaseAdmin
           .from('alert_history')
           .insert({
             alert_config_id: config.id,
             metric_key: config.metric_key,
-            metric_value: Number(latestMetric.value),
+            metric_value: metricValue,
             threshold_value: Number(config.threshold_value),
             severity: config.severity,
           })
@@ -119,7 +159,6 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
 
         alertsTriggered++
 
-        // Emit health.alert_triggered audit event
         await logAuditEvent({
           actorId: null,
           action: 'health.alert_triggered',
@@ -127,7 +166,7 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
           targetId: config.id,
           metadata: {
             metric_key: config.metric_key,
-            metric_value: Number(latestMetric.value),
+            metric_value: metricValue,
             threshold_value: Number(config.threshold_value),
             comparison: config.comparison,
             severity: config.severity,
@@ -139,7 +178,7 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
       return {
         affectedRecords: alertsTriggered,
         resourceUsage: {
-          db_queries: 1 + configs.length * 3, // 1 config fetch + per-config: metric + cooldown + insert
+          db_queries: 3 + alertsTriggered, // configs + metrics + recent_alerts + inserts
           configs_evaluated: configs.length,
           alerts_triggered: alertsTriggered,
         },

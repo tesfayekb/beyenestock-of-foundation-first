@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from './DashboardLayout';
 import { adminNavigation } from '@/config/admin-navigation';
@@ -28,10 +28,12 @@ export function AdminLayout() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const returnTo = `${location.pathname}${location.search}${location.hash}`;
+  const prefetchedRef = useRef(false);
 
-  // Prefetch core admin data sets on layout mount so child pages render instantly
-  useEffect(() => {
-    if (!user) return;
+  // Prefetch core admin data sets synchronously on first render (before paint)
+  // Using a ref ensures this runs exactly once per mount, not in useEffect (post-paint)
+  if (user && !prefetchedRef.current) {
+    prefetchedRef.current = true;
     // Authorization context — eliminates cold-start skeleton in RequirePermission
     queryClient.prefetchQuery({
       queryKey: [...USER_ROLES_KEY],
@@ -45,7 +47,6 @@ export function AdminLayout() {
     });
     queryClient.prefetchQuery({ queryKey: [...ROLES_QUERY_KEY], queryFn: rolesQueryFn, staleTime: 5 * 60 * 1000 });
     queryClient.prefetchQuery({ queryKey: [...PERMISSIONS_QUERY_KEY], queryFn: permissionsQueryFn, staleTime: 5 * 60 * 1000 });
-    // User stats for dashboard — lightweight COUNT queries
     queryClient.prefetchQuery({ queryKey: [...USER_STATS_QUERY_KEY], queryFn: userStatsQueryFn, staleTime: 60_000 });
     queryClient.prefetchQuery({
       queryKey: ['admin', 'users', { limit: 50, offset: 0 }],
@@ -57,7 +58,12 @@ export function AdminLayout() {
       queryFn: () => apiClient.get('query-audit-logs', { limit: 50 }),
       staleTime: 30_000,
     });
-  }, [user, queryClient]);
+  }
+
+  // Reset prefetch ref if user changes
+  useEffect(() => {
+    prefetchedRef.current = false;
+  }, [user?.id]);
 
   return (
     <RequireAuth>
