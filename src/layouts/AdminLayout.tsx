@@ -9,6 +9,9 @@ import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { ROLES_QUERY_KEY, rolesQueryFn, PERMISSIONS_QUERY_KEY, permissionsQueryFn } from '@/hooks/useRoles';
+import { USER_STATS_QUERY_KEY, userStatsQueryFn } from '@/hooks/useUserStats';
+import { USER_ROLES_KEY } from '@/hooks/useUserRoles';
+import { supabase } from '@/integrations/supabase/client';
 import { apiClient } from '@/lib/api-client';
 
 /**
@@ -29,8 +32,21 @@ export function AdminLayout() {
   // Prefetch core admin data sets on layout mount so child pages render instantly
   useEffect(() => {
     if (!user) return;
+    // Authorization context — eliminates cold-start skeleton in RequirePermission
+    queryClient.prefetchQuery({
+      queryKey: [...USER_ROLES_KEY],
+      queryFn: async () => {
+        const { data, error } = await supabase.rpc('get_my_authorization_context');
+        if (error || !data) return { roles: [], permissions: [], is_superadmin: false };
+        const ctx = data as unknown as { roles: string[]; permissions: string[]; is_superadmin: boolean };
+        return { roles: ctx.roles ?? [], permissions: ctx.permissions ?? [], is_superadmin: ctx.is_superadmin ?? false };
+      },
+      staleTime: 5 * 60 * 1000,
+    });
     queryClient.prefetchQuery({ queryKey: [...ROLES_QUERY_KEY], queryFn: rolesQueryFn, staleTime: 5 * 60 * 1000 });
     queryClient.prefetchQuery({ queryKey: [...PERMISSIONS_QUERY_KEY], queryFn: permissionsQueryFn, staleTime: 5 * 60 * 1000 });
+    // User stats for dashboard — lightweight COUNT queries
+    queryClient.prefetchQuery({ queryKey: [...USER_STATS_QUERY_KEY], queryFn: userStatsQueryFn, staleTime: 60_000 });
     queryClient.prefetchQuery({
       queryKey: ['admin', 'users', { limit: 50, offset: 0 }],
       queryFn: () => apiClient.get('list-users', { limit: 50, offset: 0 }),
