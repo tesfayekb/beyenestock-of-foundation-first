@@ -4,9 +4,11 @@ import { apiClient } from '@/lib/api-client';
 export interface AuditLogEntry {
   id: string;
   actor_id: string | null;
+  actor_display_name?: string | null;
   action: string;
   target_type: string | null;
   target_id: string | null;
+  target_display_name?: string | null;
   metadata: Record<string, unknown> | null;
   ip_address: string | null;
   user_agent: string | null;

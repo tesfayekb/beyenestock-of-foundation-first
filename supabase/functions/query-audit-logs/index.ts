@@ -12,6 +12,8 @@
  *
  * DW-023 resolved: Actor display names are batch-resolved from profiles
  * table (no N+1). Each audit entry includes actor_display_name.
+ * Target display names are batch-resolved from profiles (user targets)
+ * and roles (role targets). Each entry includes target_display_name.
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
@@ -84,10 +86,45 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     }
   }
 
-  // Enrich rows with actor_display_name
+  // Batch-resolve target display names
+  const targetDisplayMap = new Map<string, string>()
+
+  // Collect target IDs by type
+  const userTargetIds = [...new Set(
+    rows.filter((r) => r.target_type === 'user' && r.target_id)
+      .map((r) => r.target_id as string)
+  )]
+  const roleTargetIds = [...new Set(
+    rows.filter((r) => r.target_type === 'role' && r.target_id)
+      .map((r) => r.target_id as string)
+  )]
+
+  // Parallel lookups
+  const [userLookup, roleLookup] = await Promise.all([
+    userTargetIds.length > 0
+      ? supabaseAdmin.from('profiles').select('id, display_name, email').in('id', userTargetIds)
+      : Promise.resolve({ data: null }),
+    roleTargetIds.length > 0
+      ? supabaseAdmin.from('roles').select('id, name').in('id', roleTargetIds)
+      : Promise.resolve({ data: null }),
+  ])
+
+  if (userLookup.data) {
+    for (const p of userLookup.data) {
+      targetDisplayMap.set(p.id, p.display_name || p.email || p.id)
+    }
+  }
+  if (roleLookup.data) {
+    for (const r of roleLookup.data) {
+      targetDisplayMap.set(r.id, r.name)
+    }
+  }
+
+  // Enrich rows with actor_display_name and target_display_name
   const enrichedRows = rows.map((r) => ({
     ...r,
     actor_display_name: r.actor_id ? (actorNameMap.get(r.actor_id) ?? r.actor_id) : null,
+    target_display_name: r.target_id ? (targetDisplayMap.get(r.target_id) ?? null) : null,
   }))
 
   const nextCursor = rows.length === params.limit ? rows[rows.length - 1].created_at : null

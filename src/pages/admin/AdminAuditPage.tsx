@@ -7,8 +7,10 @@ import { AuditActionBadge } from '@/components/admin/AuditActionBadge';
 import { AuditMetadataViewer } from '@/components/admin/AuditMetadataViewer';
 import { useAuditLogs, AuditLogEntry } from '@/hooks/useAuditLogs';
 import { useAuditExport } from '@/hooks/useAuditExport';
+import { useActorSearch } from '@/hooks/useActorSearch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -65,7 +67,7 @@ const columns: DataTableColumn<AuditLogEntry>[] = [
     header: 'Actor',
     className: 'w-40',
     cell: (row) => {
-      const displayName = (row as any).actor_display_name;
+      const displayName = row.actor_display_name;
       return (
         <span className="text-xs text-muted-foreground" title={row.actor_id ?? ''}>
           {displayName && displayName !== row.actor_id
@@ -84,8 +86,8 @@ const columns: DataTableColumn<AuditLogEntry>[] = [
           <span className="font-medium text-foreground">{row.target_type}</span>
         )}
         {row.target_id && (
-          <span className="ml-1 font-mono text-muted-foreground" title={row.target_id}>
-            {row.target_id.slice(0, 8)}…
+          <span className="ml-1 text-muted-foreground" title={row.target_id}>
+            {row.target_display_name ?? `${row.target_id.slice(0, 8)}…`}
           </span>
         )}
         {!row.target_type && !row.target_id && (
@@ -115,9 +117,12 @@ export default function AdminAuditPage() {
   // Filters
   const [actionFilter, setActionFilter] = useState('');
   const [targetTypeFilter, setTargetTypeFilter] = useState('');
-  const [actorIdFilter, setActorIdFilter] = useState('');
+  const [actorInput, setActorInput] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+
+  // Actor search: resolves name/email to UUID
+  const { resolvedId: actorId, resolvedName: actorResolvedName, isSearching: actorSearching } = useActorSearch(actorInput);
 
   // Cursor history for Prev/Next navigation
   const [cursorStack, setCursorStack] = useState<string[]>([]);
@@ -127,7 +132,7 @@ export default function AdminAuditPage() {
     limit: PAGE_SIZE,
     action: actionFilter || undefined,
     target_type: targetTypeFilter || undefined,
-    actor_id: actorIdFilter || undefined,
+    actor_id: actorId || undefined,
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
     before: currentCursor,
@@ -159,7 +164,7 @@ export default function AdminAuditPage() {
   const resetFilters = useCallback(() => {
     setActionFilter('');
     setTargetTypeFilter('');
-    setActorIdFilter('');
+    setActorInput('');
     setDateFrom('');
     setDateTo('');
     setCursorStack([]);
@@ -170,11 +175,11 @@ export default function AdminAuditPage() {
     exportCsv({
       action: actionFilter || undefined,
       target_type: targetTypeFilter || undefined,
-      actor_id: actorIdFilter || undefined,
+      actor_id: actorId || undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
     });
-  }, [exportCsv, actionFilter, targetTypeFilter, actorIdFilter, dateFrom, dateTo]);
+  }, [exportCsv, actionFilter, targetTypeFilter, actorId, dateFrom, dateTo]);
 
   return (
     <>
@@ -225,16 +230,20 @@ export default function AdminAuditPage() {
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Actor ID</label>
+          <label className="text-xs font-medium text-muted-foreground">Actor</label>
           <div className="relative">
             <Search className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
             <Input
               className="h-9 w-52 pl-8 text-xs"
-              placeholder="UUID prefix…"
-              value={actorIdFilter}
-              onChange={(e) => { setActorIdFilter(e.target.value); setCursorStack([]); setCurrentCursor(undefined); }}
+              placeholder="Name, email, or UUID…"
+              value={actorInput}
+              onChange={(e) => { setActorInput(e.target.value); setCursorStack([]); setCurrentCursor(undefined); }}
             />
           </div>
+          {actorSearching && <p className="text-xs text-muted-foreground">Searching…</p>}
+          {actorResolvedName && (
+            <Badge variant="secondary" className="text-xs mt-1">{actorResolvedName}</Badge>
+          )}
         </div>
 
         <div className="space-y-1">
