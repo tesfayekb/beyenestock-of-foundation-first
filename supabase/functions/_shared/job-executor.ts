@@ -289,6 +289,32 @@ export async function executeWithRetry(
     }
   }
 
+  // ── Global kill switch check ──
+  const killSwitchActive = await isGlobalKillSwitchActive()
+  if (killSwitchActive) {
+    return {
+      success: false,
+      executionId: '',
+      state: 'cancelled',
+      attempt: 0,
+      durationMs: 0,
+      error: { message: 'Global kill switch is active — all job execution halted', failureType: 'permanent' },
+    }
+  }
+
+  // ── Class-level pause check ──
+  const classPaused = await isClassPaused(jobConfig.class)
+  if (classPaused) {
+    return {
+      success: false,
+      executionId: '',
+      state: 'cancelled',
+      attempt: 0,
+      durationMs: 0,
+      error: { message: `Class-level pause active for ${jobConfig.class}`, failureType: 'permanent' },
+    }
+  }
+
   // Schedule window dedup check (for exactly_once / at_least_once with dedup)
   if (scheduleWindowId) {
     const { data: existing } = await supabaseAdmin
