@@ -133,6 +133,194 @@ export type Database = {
         }
         Relationships: []
       }
+      job_executions: {
+        Row: {
+          affected_records: number | null
+          attempt: number
+          completed_at: string | null
+          correlation_id: string | null
+          created_at: string
+          duration_ms: number | null
+          error: Json | null
+          execution_id: string
+          failure_type: string | null
+          id: string
+          job_id: string
+          job_version: string
+          metadata: Json | null
+          parent_execution_id: string | null
+          queue_delay_ms: number | null
+          resource_usage: Json | null
+          root_execution_id: string | null
+          schedule_window_id: string | null
+          scheduled_time: string | null
+          started_at: string | null
+          state: string
+        }
+        Insert: {
+          affected_records?: number | null
+          attempt?: number
+          completed_at?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: Json | null
+          execution_id?: string
+          failure_type?: string | null
+          id?: string
+          job_id: string
+          job_version?: string
+          metadata?: Json | null
+          parent_execution_id?: string | null
+          queue_delay_ms?: number | null
+          resource_usage?: Json | null
+          root_execution_id?: string | null
+          schedule_window_id?: string | null
+          scheduled_time?: string | null
+          started_at?: string | null
+          state?: string
+        }
+        Update: {
+          affected_records?: number | null
+          attempt?: number
+          completed_at?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: Json | null
+          execution_id?: string
+          failure_type?: string | null
+          id?: string
+          job_id?: string
+          job_version?: string
+          metadata?: Json | null
+          parent_execution_id?: string | null
+          queue_delay_ms?: number | null
+          resource_usage?: Json | null
+          root_execution_id?: string | null
+          schedule_window_id?: string | null
+          scheduled_time?: string | null
+          started_at?: string | null
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_executions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_idempotency_keys: {
+        Row: {
+          created_at: string
+          execution_id: string
+          expires_at: string
+          id: string
+          idempotency_key: string
+          job_id: string
+          result_hash: string | null
+        }
+        Insert: {
+          created_at?: string
+          execution_id: string
+          expires_at?: string
+          id?: string
+          idempotency_key: string
+          job_id: string
+          result_hash?: string | null
+        }
+        Update: {
+          created_at?: string
+          execution_id?: string
+          expires_at?: string
+          id?: string
+          idempotency_key?: string
+          job_id?: string
+          result_hash?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_idempotency_keys_execution_id_fkey"
+            columns: ["execution_id"]
+            isOneToOne: false
+            referencedRelation: "job_executions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_idempotency_keys_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_registry: {
+        Row: {
+          class: string
+          concurrency_policy: string
+          created_at: string
+          description: string | null
+          enabled: boolean
+          execution_guarantee: string
+          id: string
+          max_retries: number
+          owner_module: string
+          priority: string
+          replay_safe: boolean
+          retry_policy: string
+          schedule: string
+          status: string
+          timeout_seconds: number
+          trigger_type: string
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          class?: string
+          concurrency_policy?: string
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          execution_guarantee?: string
+          id: string
+          max_retries?: number
+          owner_module: string
+          priority?: string
+          replay_safe?: boolean
+          retry_policy?: string
+          schedule?: string
+          status?: string
+          timeout_seconds?: number
+          trigger_type?: string
+          updated_at?: string
+          version?: string
+        }
+        Update: {
+          class?: string
+          concurrency_policy?: string
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          execution_guarantee?: string
+          id?: string
+          max_retries?: number
+          owner_module?: string
+          priority?: string
+          replay_safe?: boolean
+          retry_policy?: string
+          schedule?: string
+          status?: string
+          timeout_seconds?: number
+          trigger_type?: string
+          updated_at?: string
+          version?: string
+        }
+        Relationships: []
+      }
       permissions: {
         Row: {
           created_at: string
