@@ -127,7 +127,7 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
       'X-Max-Rows': String(MAX_EXPORT_ROWS),
     },
   })
-}))
+}, { rateLimit: 'strict' }))
 
 /** Escape a value for CSV — wrap in quotes if it contains comma, quote, or newline */
 function escapeCsv(value: string): string {
