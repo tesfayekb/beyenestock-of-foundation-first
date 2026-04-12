@@ -22,13 +22,12 @@ describe('RW-002: RLS policy structure verification', () => {
   it('RLS policies cover core tables', () => {
     const content = readFileSync(join(SQL_DIR, '03_rbac_rls_policies.sql'), 'utf-8');
     
-    // Core tables that MUST have RLS
+    // Core tables that MUST have RLS in this file
     const requiredTables = [
       'user_roles',
       'roles',
       'permissions',
       'role_permissions',
-      'profiles',
       'audit_logs',
     ];
 

@@ -38,12 +38,13 @@ describe('RW-004: Job retry configuration', () => {
     });
   }
 
-  it('job-executor.ts exists and exports executeJob', () => {
+  it('job-executor.ts exists and exports retry/classification utilities', () => {
     const content = readFileSync(
       resolve(FUNCTIONS_DIR, '_shared/job-executor.ts'),
       'utf-8'
     );
-    expect(content).toContain('executeJob');
+    expect(content).toContain('executeWithRetry');
+    expect(content).toContain('classifyError');
   });
 
   it('handler.ts classifies errors properly', () => {
