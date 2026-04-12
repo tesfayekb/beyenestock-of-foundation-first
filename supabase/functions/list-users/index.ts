@@ -41,8 +41,11 @@ Deno.serve(createHandler(async (req: Request) => {
     search: params.get('search') ?? undefined,
   })
 
-  // Single auth.admin.listUsers call — reused for both search filtering and email enrichment
+  // Only call auth.admin.listUsers when search is active (email search) or
+  // when we need email enrichment. For list-without-search, skip the expensive
+  // auth call entirely — emails are fetched lazily on user detail page.
   let authUsersCache: { id: string; email?: string }[] | null = null
+  const needsEmailSearch = !!search
 
   async function getAuthUsers() {
     if (authUsersCache) return authUsersCache
@@ -105,12 +108,16 @@ Deno.serve(createHandler(async (req: Request) => {
   if (profiles.length > 0) {
     const userIds = profiles.map((p) => p.id)
 
-    // Email enrichment from cached auth users
-    const authUsers = await getAuthUsers()
+    // Email enrichment — only when search was active (auth users already cached)
+    // For non-search requests, skip the expensive auth call; emails are
+    // fetched lazily on the user detail page instead.
     const emailMap = new Map<string, string>()
-    for (const u of authUsers) {
-      if (userIds.includes(u.id) && u.email) {
-        emailMap.set(u.id, u.email)
+    if (needsEmailSearch) {
+      const authUsers = await getAuthUsers()
+      for (const u of authUsers) {
+        if (userIds.includes(u.id) && u.email) {
+          emailMap.set(u.id, u.email)
+        }
       }
     }
 

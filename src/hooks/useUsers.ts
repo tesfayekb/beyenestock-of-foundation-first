@@ -42,7 +42,7 @@ export function useUsers(params: ListUsersParams = {}) {
         status: params.status,
         search: params.search,
       }),
-    staleTime: 30_000,
+    staleTime: 2 * 60 * 1000,
   });
 }
 
@@ -52,6 +52,6 @@ export function useUserDetail(userId: string | undefined) {
     queryFn: () =>
       apiClient.get<{ profile: UserListItem }>('get-profile', { user_id: userId }).then((d) => d.profile),
     enabled: !!userId,
-    staleTime: 30_000,
+    staleTime: 2 * 60 * 1000,
   });
 }

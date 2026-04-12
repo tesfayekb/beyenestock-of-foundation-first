@@ -49,6 +49,6 @@ export function useUserRolesAdmin(userId: string | undefined) {
     queryKey: ['admin', 'user-roles', userId],
     queryFn: () => fetchUserRolesAdmin(userId!),
     enabled: !!userId,
-    staleTime: 30_000,
+    staleTime: 2 * 60 * 1000,
   });
 }

@@ -46,7 +46,8 @@ const SecurityPage = lazy(() => import("./pages/user/SecurityPage"));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
+      staleTime: 2 * 60 * 1000, // 2 minutes — admin data changes infrequently
+      gcTime: 10 * 60 * 1000,   // 10 minutes — keep cache across navigation
     },
   },
 });

@@ -5,6 +5,8 @@
  *
  * GET /list-permissions
  * Response: { data: PermissionListItem[] }
+ *
+ * Performance: Parallelizes independent DB queries with Promise.all.
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
@@ -20,28 +22,31 @@ Deno.serve(createHandler(async (req: Request) => {
   const ctx = await authenticateRequest(req)
   await checkPermissionOrThrow(ctx.user.id, 'permissions.view')
 
-  // Fetch all permissions
-  const { data: perms, error } = await supabaseAdmin
-    .from('permissions')
-    .select('id, key, description, created_at')
-    .order('key', { ascending: true })
+  // Parallel: fetch permissions and role_permissions at the same time
+  const [permsResult, rpResult] = await Promise.all([
+    supabaseAdmin
+      .from('permissions')
+      .select('id, key, description, created_at')
+      .order('key', { ascending: true }),
+    supabaseAdmin
+      .from('role_permissions')
+      .select('permission_id, role_id'),
+  ])
 
-  if (error) throw error
+  if (permsResult.error) throw permsResult.error
 
-  // Get role names per permission
-  const { data: rpData } = await supabaseAdmin
-    .from('role_permissions')
-    .select('permission_id, role_id')
+  const rpData = rpResult.data ?? []
 
+  // Build role ID → permission mapping
   const roleIdsByPerm = new Map<string, string[]>()
-  for (const rp of rpData ?? []) {
+  for (const rp of rpData) {
     const existing = roleIdsByPerm.get(rp.permission_id) ?? []
     existing.push(rp.role_id)
     roleIdsByPerm.set(rp.permission_id, existing)
   }
 
-  // Get all role names in one query
-  const allRoleIds = [...new Set((rpData ?? []).map((rp) => rp.role_id))]
+  // Fetch role names only if needed
+  const allRoleIds = [...new Set(rpData.map((rp) => rp.role_id))]
   let roleNameMap = new Map<string, string>()
   if (allRoleIds.length > 0) {
     const { data: rolesData } = await supabaseAdmin
@@ -52,7 +57,7 @@ Deno.serve(createHandler(async (req: Request) => {
     roleNameMap = new Map((rolesData ?? []).map((r) => [r.id, r.name]))
   }
 
-  const result = (perms ?? []).map((p) => {
+  const result = (permsResult.data ?? []).map((p) => {
     const roleIds = roleIdsByPerm.get(p.id) ?? []
     return {
       ...p,

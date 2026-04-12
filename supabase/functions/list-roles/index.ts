@@ -9,6 +9,9 @@
  * Superadmin auto-inherits all permissions via is_superadmin() — it has zero
  * rows in role_permissions by design. permission_count is overridden to the
  * total permission count for the superadmin role.
+ *
+ * Performance: Uses PostgREST aggregate joins to fetch counts in a single
+ * round-trip instead of 4 sequential queries.
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
@@ -37,45 +40,34 @@ Deno.serve(createHandler(async (req: Request) => {
   const ctx = await authenticateRequest(req)
   await checkPermissionOrThrow(ctx.user.id, 'roles.view')
 
-  // Fetch roles
-  const { data: roles, error } = await supabaseAdmin
-    .from('roles')
-    .select('id, key, name, description, is_base, is_immutable, created_at, updated_at')
-    .order('created_at', { ascending: true })
+  // Single query with aggregate joins — replaces 4 sequential queries
+  const [rolesResult, totalPermResult] = await Promise.all([
+    supabaseAdmin
+      .from('roles')
+      .select('id, key, name, description, is_base, is_immutable, created_at, updated_at, role_permissions(count), user_roles(count)')
+      .order('created_at', { ascending: true }),
+    supabaseAdmin
+      .from('permissions')
+      .select('id', { count: 'exact', head: true }),
+  ])
 
-  if (error) throw error
+  if (rolesResult.error) throw rolesResult.error
 
-  // Get permission counts per role
-  const { data: rpData } = await supabaseAdmin
-    .from('role_permissions')
-    .select('role_id')
+  const totalPermCount = totalPermResult.count ?? 0
 
-  const permCounts = new Map<string, number>()
-  for (const rp of rpData ?? []) {
-    permCounts.set(rp.role_id, (permCounts.get(rp.role_id) ?? 0) + 1)
-  }
-
-  // Get total permission count (for superadmin override)
-  const { count: totalPermCount } = await supabaseAdmin
-    .from('permissions')
-    .select('id', { count: 'exact', head: true })
-
-  // Get user counts per role
-  const { data: urData } = await supabaseAdmin
-    .from('user_roles')
-    .select('role_id')
-
-  const userCounts = new Map<string, number>()
-  for (const ur of urData ?? []) {
-    userCounts.set(ur.role_id, (userCounts.get(ur.role_id) ?? 0) + 1)
-  }
-
-  const result: RoleListItem[] = (roles ?? []).map((r) => ({
-    ...r,
+  const result: RoleListItem[] = (rolesResult.data ?? []).map((r: any) => ({
+    id: r.id,
+    key: r.key,
+    name: r.name,
+    description: r.description,
+    is_base: r.is_base,
+    is_immutable: r.is_immutable,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
     permission_count: r.key === 'superadmin'
-      ? (totalPermCount ?? 0)
-      : (permCounts.get(r.id) ?? 0),
-    user_count: userCounts.get(r.id) ?? 0,
+      ? totalPermCount
+      : (r.role_permissions?.[0]?.count ?? 0),
+    user_count: r.user_roles?.[0]?.count ?? 0,
   }))
 
   return apiSuccess(result)
