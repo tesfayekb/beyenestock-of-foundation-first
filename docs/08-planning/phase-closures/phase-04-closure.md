@@ -214,3 +214,46 @@ All Phase 4 gate items passed with evidence:
 - Performance optimization: **APPLIED** (6 optimizations, zero cold-load delays)
 
 **Phase 4 is CLOSED.**
+
+---
+
+## 12. Post-Closure Addendum
+
+The following work was completed after Phase 4 closure (ACT-048) as post-closure hardening and gap closure. All items address findings discovered during post-closure review.
+
+### ACT-049: Recent-Auth Window Alignment (2026-04-12)
+
+Aligned all 8 privileged edge functions to 30-minute recent-auth window for consistency with InactivityGuard.
+
+### ACT-050: Role CRUD + Recent-Auth Alignment (2026-04-12)
+
+Full role lifecycle: create-role + delete-role edge functions and UI. DW-025 and DW-026 closed.
+
+### ACT-051: Permission Dependency Enforcement + roles.edit (2026-04-12)
+
+- PERMISSION_DEPS map with transitive resolution (src/config/permission-deps.ts)
+- Server-side auto-insert of missing dependencies in assign-permission-to-role
+- Client-side dependency badge + revocation blocking on RoleDetailPage
+- update-role edge function + inline edit UI on RoleDetailPage
+- roles.edit permission seeded, rbac.role_updated event documented
+
+### ACT-052: permissions.view Separation + Superadmin Restriction (2026-04-12)
+
+- permissions.view separated from roles.view — distinct gate for permissions catalog
+- permissions.assign and permissions.revoke restricted to superadmin-only
+- Privilege escalation via custom roles eliminated
+- Explanatory message for admin users on disabled permission checkboxes
+
+### ACT-053: Audit Log RLS Security Fix (2026-04-12)
+
+- Removed INSERT WITH CHECK (true) policy from audit_logs
+- Prevented authenticated users from fabricating/polluting audit trail
+- Audit writes now exclusively via service-role client (edge functions)
+
+### Updated Component Count
+
+22 governed UI components (was 21 at closure — CreateRoleDialog added in ACT-050).
+
+### Updated Permission Count
+
+31 permissions (was 29 at closure — roles.edit and permissions.view added).
