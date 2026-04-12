@@ -4,13 +4,14 @@ import { ThemeProvider } from "next-themes";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { RequirePermission } from "@/components/auth/RequirePermission";
 import { AccessDenied } from "@/components/dashboard/AccessDenied";
 import { RequireVerifiedEmail } from "@/components/auth/RequireVerifiedEmail";
 import { DashboardNotFound } from "@/components/dashboard/DashboardNotFound";
-import { lazy } from "react";
+import { useInactivityTimeout } from "@/hooks/useInactivityTimeout";
+import { lazy, useCallback } from "react";
 
 // Public pages (eagerly loaded)
 import Index from "./pages/Index";
@@ -57,6 +58,21 @@ function PermissionGate({ permission, children }: { permission: string | string[
   );
 }
 
+/** Inactivity timeout wrapper — must be inside BrowserRouter + AuthProvider */
+function InactivityGuard({ children }: { children: React.ReactNode }) {
+  const { user, signOut } = useAuth();
+  const handleTimeout = useCallback(async () => {
+    await signOut();
+  }, [signOut]);
+
+  useInactivityTimeout({
+    onTimeout: handleTimeout,
+    enabled: !!user,
+  });
+
+  return <>{children}</>;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
@@ -65,6 +81,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
+            <InactivityGuard>
             <Routes>
               {/* Public auth routes */}
               <Route path="/sign-in" element={<SignIn />} />
@@ -147,6 +164,7 @@ const App = () => (
               {/* Catch-all */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </InactivityGuard>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
