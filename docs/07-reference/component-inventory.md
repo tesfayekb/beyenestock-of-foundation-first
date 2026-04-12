@@ -1,6 +1,6 @@
 # Component Inventory
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-10 | **Status:** Living Document
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-12 | **Status:** Living Document
 
 ## Purpose
 
@@ -54,7 +54,7 @@ Governed registry of all shared Phase 4 components. Pages must assemble from thi
 |-----------|------|---------|---------|
 | `ConfirmActionDialog` | `src/components/dashboard/ConfirmActionDialog.tsx` | Standard destructive confirmation: title + description + reason input + confirm/cancel | Deactivate, revoke, delete actions |
 | `AssignRoleDialog` | `src/components/admin/AssignRoleDialog.tsx` | Role selection dialog for user role assignment | User detail page |
-| `ManagePermissionsDialog` | `src/components/admin/ManagePermissionsDialog.tsx` | Permission add/remove dialog for roles | Role detail page |
+
 | `AdminEditProfileCard` | `src/components/admin/AdminEditProfileCard.tsx` | Inline admin edit form for user profile (display name, avatar) with permission gate | UserDetailPage |
 | `PasswordChangeCard` | `src/components/user/PasswordChangeCard.tsx` | In-panel password change form with recent-auth check, 12-char min, confirm match | SecurityPage |
 
