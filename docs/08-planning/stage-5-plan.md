@@ -1,6 +1,6 @@
 # Stage 5 Plan — Operations & Reliability
 
-> **Owner:** Project Lead | **Created:** 2026-04-12 | **Plan Version:** v10
+> **Owner:** Project Lead | **Created:** 2026-04-12 | **Plan Version:** v10.1
 > **Modules:** PLAN-HEALTH-001, PLAN-JOBS-001
 > **Depends On:** Phase 4 complete (all modules), Phase 3.5 hardening complete
 
@@ -12,7 +12,7 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 
 | ID | Decision | Rationale |
 |----|----------|-----------|
-| D5-001 | Include DW-019 in Phase 5 | Self-contained; only needs list-sessions + revoke-session edge functions using Supabase admin session API. No dependency on health/jobs. |
+| D5-001 | Include DW-019 in Phase 5 | Self-contained; only needs revoke-sessions edge function using Supabase admin signOut API. No dependency on health/jobs. |
 | D5-002 | Defer DW-020 to Phase 6 | No backend infrastructure or schema exists for notification preferences. |
 | D5-003 | Defer DW-023 to Phase 6 | Display formatting improvement with no operational impact. |
 | D5-004 | Include job_idempotency_keys table in Stage 5C | Infrastructure must exist before any job can declare `exactly_once` semantics, even if no Phase 5 jobs require it. |
@@ -108,8 +108,14 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 
 **RLS:** All tables SELECT-only for `monitoring.view`. Mutations via edge functions with service role.
 
+**Indexes:**
+- `idx_system_metrics_key_time` ON `system_metrics(metric_key, recorded_at)`
+- `idx_alert_history_config` ON `alert_history(alert_config_id)`
+- `idx_alert_history_created` ON `alert_history(created_at)`
+
 **Phase Gate 5B:**
 - [ ] `system_metrics`, `alert_configs`, `alert_history` tables created with RLS
+- [ ] All indexes created and verified
 - [ ] Alert thresholds configurable via `POST /health/alert-config`
 - [ ] Alert evaluation produces correct `alert_history` entries
 - [ ] `health.alert_triggered` event fires when threshold breached
@@ -169,6 +175,12 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 | attempt | integer | Current attempt number |
 | started_at | timestamptz | |
 | completed_at | timestamptz | |
+| scheduled_time | timestamptz | When the run was scheduled (UTC) — separate from started_at |
+| duration_ms | integer | Total execution time — SLO latency tracking |
+| queue_delay_ms | integer | Time between scheduled and actual start — scheduler health |
+| failure_type | text | transient / dependency / validation / authorization / permanent |
+| affected_records | integer | Count of records processed — SLO observability |
+| resource_usage | jsonb | DB ops, API calls consumed — resource budget enforcement |
 | error | jsonb | Error details on failure |
 | metadata | jsonb | Execution context |
 | parent_execution_id | uuid | For chained jobs |
@@ -190,6 +202,11 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 
 **RLS:** All tables SELECT-only for `jobs.view`. Mutations via edge functions with service role.
 
+**Indexes:**
+- `idx_job_executions_job_state` ON `job_executions(job_id, state)`
+- `idx_job_executions_state` ON `job_executions(state)` — dead-letter queries
+- `idx_job_executions_schedule_window` ON `job_executions(job_id, schedule_window_id)` — dedup checks
+
 **Shared Functions:**
 - `executeWithRetry(jobId, handler, options)` — retry wrapper with backoff, jitter, error classification
 - `classifyError(error)` — returns transient/dependency/validation/authorization/permanent
@@ -197,6 +214,7 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 
 **Phase Gate 5C:**
 - [ ] `job_registry`, `job_executions`, `job_idempotency_keys` tables created with RLS
+- [ ] All indexes created and verified
 - [ ] `executeWithRetry()` correctly implements backoff with jitter
 - [ ] Error classification routes errors to correct retry/fail-fast paths
 - [ ] `schedule_window_id` dedup prevents duplicate execution
@@ -231,6 +249,7 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 - Every execution has matching start + terminal audit event
 - All timestamps UTC
 - Resource budgets enforced per job registry
+- Every run populates all 6 telemetry columns: `scheduled_time`, `duration_ms`, `queue_delay_ms`, `failure_type`, `affected_records`, `resource_usage`
 
 **Phase Gate 5D:**
 - [ ] All 4 jobs registered in `job_registry`
@@ -239,7 +258,9 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 - [ ] `health_check` correctly detects DB/auth/audit subsystem status
 - [ ] `audit_cleanup` respects 90-day retention (DEC-007)
 - [ ] `alert_evaluation` fires `health.alert_triggered` on threshold breach
+- [ ] `job.slo_breach` fires when SLO threshold violated
 - [ ] All jobs use `executeWithRetry()` with correct retry policies
+- [ ] All 6 telemetry columns populated on every execution
 
 ---
 
@@ -252,17 +273,24 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 - `POST /jobs/kill-switch` edge function — requires `jobs.emergency`
 - `POST /jobs/pause` edge function — requires `jobs.pause`
 - `POST /jobs/resume` edge function — requires `jobs.pause`
+- `GET /jobs/dead-letters` edge function — requires `jobs.deadletter.manage`, returns `job_executions` WHERE `state = 'dead_lettered'`
+- `POST /jobs/replay-dead-letter` edge function — requires `jobs.deadletter.manage` + `requireRecentAuth()`, re-executes with original or current version, audits `job.replayed`
 - All emergency actions audited with actor, reason, timestamp
 - Circuit breaker: repeated dependency failures auto-pause affected jobs
 
-**Permissions (new):**
+**Permissions (already seeded in Phase 2 — no migration required):**
 
 | Permission | Description |
 |-----------|-------------|
 | `jobs.view` | View job registry and execution history |
 | `jobs.trigger` | Manually trigger job execution |
 | `jobs.pause` | Pause/resume individual jobs or job classes |
+| `jobs.resume` | Resume paused jobs |
+| `jobs.retry` | Retry failed job executions |
 | `jobs.emergency` | Activate global kill switch |
+| `jobs.deadletter.manage` | View and replay dead-lettered executions |
+
+> **Note:** All permissions listed above were seeded in `sql/04_rbac_seed.sql` during Phase 2. No seeding work is required in Phase 5.
 
 **Phase Gate 5E:**
 - [ ] Kill switch immediately stops all new executions
@@ -271,6 +299,8 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 - [ ] `system_critical` only pausable via global kill switch
 - [ ] All emergency actions produce audit entries
 - [ ] Circuit breaker auto-pauses on repeated dependency failures
+- [ ] `GET /jobs/dead-letters` returns dead-lettered executions
+- [ ] `POST /jobs/replay-dead-letter` creates new execution record and audits `job.replayed`
 
 ---
 
@@ -287,11 +317,11 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 
 **DW-019 Implementation:**
 - Location: `SecurityPage.tsx` (user panel), NOT admin panel
-- `POST /revoke-sessions` edge function — requires `session.self_manage` (self-scope: `requireSelfScope(ctx, targetUserId)`), accepts `{ scope: 'others' | 'global' }`, calls `supabaseAdmin.auth.admin.signOut(userId, scope)`, applies `requireRecentAuth()`, audits `user.sessions_revoked` with scope in metadata
+- `POST /revoke-sessions` edge function — accepts `{ scope: 'others' | 'global' }`, uses `ctx.user.id` directly as the target (no user_id body param, no `requireSelfScope` needed — self-scope enforced by function architecture), calls `supabaseAdmin.auth.admin.signOut(userId, scope)`, applies `requireRecentAuth()`, audits `user.sessions_revoked` with scope in metadata
 - No session listing in Phase 5 — Supabase admin SDK returns no useful session metadata; listing is only meaningful with per-session revocation (Phase 6)
 - UI: Two distinct actions on SecurityPage:
   - **"Sign out other devices"** — scope: `others`, standard action, keeps current session active
-  - **"Sign out everywhere"** — scope: `global`, destructive action with confirmation dialog, invalidates all sessions including current
+  - **"Sign out everywhere"** — scope: `global`, destructive action with confirmation dialog, invalidates all sessions including current. **Client must redirect to `/sign-in` after success** because the current session is now invalidated.
 - Phase 6 DW item: Per-session revocation with session list view — revisit when Supabase stabilizes auth.sessions API or adds individual session revocation to admin SDK
 - Audit event: `user.sessions_revoked` (with `{ scope }` in metadata)
 
@@ -302,9 +332,32 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 - [ ] Kill switch and pause controls accessible and functional
 - [ ] Alert configuration UI creates/updates alert_configs
 - [ ] DW-019: "Sign out other devices" revokes other sessions, user stays logged in
-- [ ] DW-019: "Sign out everywhere" terminates all sessions with confirmation dialog
+- [ ] DW-019: "Sign out everywhere" terminates all sessions with confirmation dialog and redirects to `/sign-in`
 - [ ] DW-019: Both actions require reauth and produce audit trail
 - [ ] All new pages use DashboardLayout shell and design system tokens
+
+---
+
+### Stage 5G — Gate Verification & Phase Closure
+
+**Scope:**
+- Verify all Phase Gate items across 5A–5F pass with evidence
+- Complete governance documentation
+
+**Phase Gate 5G (Master Plan Phase 5 Gate):**
+- [ ] All new routes added to `route-index.md` with `active` lifecycle
+- [ ] All new functions added to `function-index.md`
+- [ ] All new events added to `event-index.md`
+- [ ] All new permissions verified in `permission-index.md` (already seeded — confirm alignment)
+- [ ] Migration ledger updated with all Phase 5 migrations (MIG-023+)
+- [ ] DW-016 marked implemented in deferred-work-register.md
+- [ ] DW-017 marked implemented in deferred-work-register.md
+- [ ] DW-019 marked implemented in deferred-work-register.md
+- [ ] `phase-05-closure.md` created with full evidence
+- [ ] `system-state.md` updated: Phase 5 → complete, Phase 6 → planning
+- [ ] `action-tracker.md` entries logged for all Phase 5 work
+- [ ] Regression watchlist reviewed — no new open items
+- [ ] All Stage 5A–5F phase gate checkboxes checked with evidence references
 
 ---
 
@@ -318,6 +371,8 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 
 ## New Permissions Summary
 
+> **Note:** All permissions listed below were seeded in `sql/04_rbac_seed.sql` during Phase 2. No seeding work is required in Phase 5.
+
 | Permission | Stage | Description |
 |-----------|-------|-------------|
 | `monitoring.view` | 5A | View health dashboard and metrics |
@@ -325,7 +380,11 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 | `jobs.view` | 5C | View job registry and execution history |
 | `jobs.trigger` | 5E | Manually trigger job execution |
 | `jobs.pause` | 5E | Pause/resume jobs or job classes |
+| `jobs.resume` | 5E | Resume paused jobs |
+| `jobs.retry` | 5E | Retry failed job executions |
 | `jobs.emergency` | 5E | Global kill switch |
+| `jobs.deadletter.manage` | 5E | View and replay dead-lettered executions |
+| `session.self_manage` | 5F | Self-service session revocation (self-scope) |
 
 ## New Events Summary
 
@@ -337,22 +396,30 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 | `job.started` | 5D | Job execution begins |
 | `job.completed` | 5D | Job execution succeeds |
 | `job.failed` | 5D | Job execution fails (after retries) |
+| `job.queued` | 5D | Job enters queued state awaiting execution |
+| `job.retry_scheduled` | 5D | Retry scheduled after transient failure |
 | `job.dead_lettered` | 5D | Job enters dead-letter state |
 | `job.poison_detected` | 5D | Poison job auto-paused |
+| `job.slo_breach` | 5D | Job execution exceeds SLO latency threshold |
+| `job.schedule_missed` | 5D | Scheduled job did not start within expected window |
+| `job.resource_budget_exceeded` | 5D | Job exceeded configured resource budget |
 | `job.kill_switch_activated` | 5E | Global kill switch triggered |
 | `job.paused` | 5E | Job paused by operator or system |
 | `job.resumed` | 5E | Job resumed |
+| `job.cancelled` | 5E | Job execution cancelled by operator |
+| `job.replayed` | 5E | Dead-lettered job replayed |
 | `user.sessions_revoked` | 5F | User revokes own sessions (self-service, scope in metadata) |
 
 ## Execution Order
 
-Stages MUST execute sequentially: 5A → 5B → 5C → 5D → 5E → 5F
+Stages MUST execute sequentially: 5A → 5B → 5C → 5D → 5E → 5F → 5G
 
 - 5B depends on 5A (metrics reference health snapshots)
 - 5C is independent but sequenced for review cadence
 - 5D depends on 5C (jobs use job infrastructure)
 - 5E depends on 5C (emergency controls target job registry)
 - 5F depends on all prior stages (UI surfaces everything)
+- 5G depends on all prior stages (gate verification)
 - DW-019 in 5F has no dependency on 5A-5E but is sequenced to avoid context-switching
 
 ## Dependencies
