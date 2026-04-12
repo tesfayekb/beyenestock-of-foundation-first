@@ -565,6 +565,10 @@ export type Database = {
           }
         | { Args: { _role_key: string; _user_id: string }; Returns: boolean }
       is_superadmin: { Args: { _user_id: string }; Returns: boolean }
+      rpc_batch_delete_audit_logs: {
+        Args: { batch_size?: number; cutoff: string }
+        Returns: number
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
