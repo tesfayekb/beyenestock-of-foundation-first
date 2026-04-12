@@ -1583,6 +1583,27 @@ Each action must include:
 
 ---
 
+### ACT-061: Stage 5D Fixes — SLO Breach Detection + pg_cron Scheduling
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-061 |
+| **Date** | 2026-04-12 |
+| **Action** | (1) Added `job.slo_breach` event emission to `executeWithRetry()` in `job-executor.ts` — after successful execution, if `durationMs > timeout_seconds * 1000 * 0.8` (80% budget), emits `job.slo_breach` audit event with `budgetUsedPct`, `sloThresholdMs`, `timeoutSeconds`. (2) Enabled `pg_cron` and `pg_net` extensions (MIG-027). (3) Configured 4 pg_cron schedules (MIG-028): health_check (every minute), alert_evaluation (every minute), metrics_aggregate (every 5 minutes), audit_cleanup (weekly Sunday 3 AM UTC). All schedules verified active in `cron.job`. (4) Added DW-029 for batched audit-cleanup DELETE scalability concern. |
+| **Type** | Feature |
+| **Impact Classification** | High |
+| **Modules Affected** | jobs-and-scheduler |
+| **Files Changed** | supabase/functions/_shared/job-executor.ts (SLO breach logic), docs/08-planning/deferred-work-register.md (DW-029) |
+| **Migrations** | MIG-027 (pg_cron + pg_net extensions), MIG-028 (4 cron schedules) |
+| **Related Events** | job.slo_breach |
+| **Evidence** | All 4 cron jobs verified active: `SELECT jobid, jobname, schedule, active FROM cron.job` returns 4 rows, all active=true. SLO breach logic deployed — threshold is 80% of job timeout budget. Edge functions redeployed successfully. |
+| **Verified By** | AI Agent |
+| **Before State** | No SLO breach detection, no pg_cron scheduling |
+| **After State** | SLO breach emits audit event, all 4 jobs scheduled via pg_cron |
+| **Status** | Verified |
+
+---
+
 
 - Regression fix actions must reference the original regression
 - Repeated failures in same area → tracked via recurrence in watchlist, referenced here
