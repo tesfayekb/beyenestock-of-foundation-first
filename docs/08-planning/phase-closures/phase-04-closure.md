@@ -250,6 +250,14 @@ Full role lifecycle: create-role + delete-role edge functions and UI. DW-025 and
 - Prevented authenticated users from fabricating/polluting audit trail
 - Audit writes now exclusively via service-role client (edge functions)
 
+### ACT-054: RLS + Performance + Server-Side Dependency Enforcement (2026-04-12)
+
+- permissions_select_policy RLS updated: checks `permissions.view` instead of `roles.view` — closes bypass where `roles.view` holders could query permissions catalog directly
+- `idx_audit_logs_target_id` index added for UserDetailPage audit queries
+- `depends_on` field added to permission-index schema; all 31 entries populated from PERMISSION_DEPS
+- Server-side dependency enforcement in `revoke-permission-from-role`: refuses revocation if another assigned permission depends on the target permission (returns 409 with `DEPENDENCY_VIOLATION` code and blocker list)
+- `sql/03_rbac_rls_policies.sql` reference file updated to match live DB
+
 ### Updated Component Count
 
 22 governed UI components (was 21 at closure — CreateRoleDialog added in ACT-050).
