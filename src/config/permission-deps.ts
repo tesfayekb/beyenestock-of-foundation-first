@@ -19,8 +19,9 @@ export const PERMISSION_DEPS: Record<string, string[]> = {
   'roles.create':        ['roles.view', 'admin.access'],
   'roles.delete':        ['roles.view', 'admin.access'],
   'roles.edit':          ['roles.view', 'admin.access'],
-  'permissions.assign':  ['roles.view', 'admin.access'],
-  'permissions.revoke':  ['roles.view', 'admin.access'],
+  'permissions.assign':  ['roles.view', 'permissions.view', 'admin.access'],
+  'permissions.revoke':  ['roles.view', 'permissions.view', 'admin.access'],
+  'permissions.view':    ['admin.access'],
 
   // User management
   'users.edit_any':      ['users.view_all', 'admin.access'],
