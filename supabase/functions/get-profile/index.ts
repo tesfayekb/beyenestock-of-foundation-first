@@ -2,10 +2,13 @@
  * get-profile — Fetch a user profile.
  *
  * Self-access: requires users.view_self + requireSelfScope() enforcement.
- * Admin access: requires users.view_all (any user). Enriches with email from auth.users.
+ * Admin access: requires users.view_all (any user).
  *
  * GET /get-profile?user_id=<uuid>
  * If user_id omitted, returns the authenticated user's own profile.
+ *
+ * Performance: Email is now materialized on profiles (MIG-034).
+ * No auth.admin.getUserById() call needed.
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
@@ -44,7 +47,7 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
-    .select('id, display_name, avatar_url, email_verified, status, created_at, updated_at')
+    .select('id, display_name, avatar_url, email, email_verified, status, created_at, updated_at')
     .eq('id', targetUserId)
     .single()
 
@@ -53,15 +56,5 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(404, 'Profile not found', { correlationId: ctx.correlationId })
   }
 
-  // Enrich with email from auth.users for admin access
-  let email: string | null = null
-  if (!isSelf) {
-    const { data: authData } = await supabaseAdmin.auth.admin.getUserById(targetUserId)
-    email = authData?.user?.email ?? null
-  } else {
-    // For self-access, get email from the authenticated user's JWT
-    email = ctx.user.email ?? null
-  }
-
-  return apiSuccess({ profile: { ...data, email } })
+  return apiSuccess({ profile: data })
 }))

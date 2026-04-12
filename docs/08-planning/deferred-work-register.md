@@ -82,13 +82,13 @@ At each phase boundary (before advancing to the next phase):
 | **Reason Deferred** | External Google OAuth client credentials not yet configured |
 | **Blocking Dependencies** | Google Cloud Console OAuth client ID/secret configured; Supabase Auth Google provider enabled with redirect URIs |
 | **Impact on Source Phase** | Phase 1 closed as `approved-partial` — auth foundation complete but OAuth providers deferred |
-| **Future Owner Phase** | Phase 6 — Hardening & System Validation (or dedicated Auth Completion mini-phase before release) |
+| **Future Owner Phase** | `unassigned` — deferred to v2 (provider credentials not yet available) |
 | **Future Owner Module** | PLAN-AUTH-001 |
-| **Required Plan Realignment** | Phase 6 scope must include OAuth callback verification, provider config validation, OAuth E2E tests, and auth-security.md OAuth section validation |
+| **Required Plan Realignment** | v2 planning must include OAuth callback verification, provider config validation, OAuth E2E tests, and auth-security.md OAuth section validation |
 | **Related Decisions** | DEC-020 (v1 OAuth limited to Google + Apple) |
 | **Related Actions** | ACT-011 (Phase 1 auth verification) |
 | **Required Tests for Closure** | OAuth sign-in E2E flow, OAuth account linking, OAuth error handling (denied consent, expired token), OAuth + MFA combined flow |
-| **Status** | `assigned` |
+| **Status** | `deferred (v2)` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
 
@@ -106,13 +106,13 @@ At each phase boundary (before advancing to the next phase):
 | **Reason Deferred** | Apple Developer account configuration and Supabase provider setup not yet completed |
 | **Blocking Dependencies** | Apple Developer account with Sign-In with Apple capability; Services ID configured; Supabase Auth Apple provider enabled |
 | **Impact on Source Phase** | Phase 1 closed as `approved-partial` — auth foundation complete but OAuth providers deferred |
-| **Future Owner Phase** | Phase 6 — Hardening & System Validation (or dedicated Auth Completion mini-phase before release) |
+| **Future Owner Phase** | `unassigned` — deferred to v2 (provider credentials not yet available) |
 | **Future Owner Module** | PLAN-AUTH-001 |
 | **Required Plan Realignment** | Same as DW-001 — OAuth callback verification, provider validation, E2E tests |
 | **Related Decisions** | DEC-020 (v1 OAuth limited to Google + Apple) |
 | **Related Actions** | ACT-011 (Phase 1 auth verification) |
 | **Required Tests for Closure** | Apple Sign-In E2E flow, Apple account linking, Apple-specific email relay handling, Apple + MFA combined flow |
-| **Status** | `assigned` |
+| **Status** | `deferred (v2)` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
 
@@ -257,9 +257,9 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | DEC-017 (MFA recovery code format: 10 codes, 8 alphanumeric, single-use, hashed storage) |
 | **Related Actions** | ACT-010, ACT-011 |
 | **Required Tests for Closure** | Recovery code generation (10 codes returned), code display + copy UX, single-use consumption (code works once then invalidated), full set regeneration (old codes invalidated), hashed storage verification (no plaintext in DB), recovery code + re-enrollment flow |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | ACT-064 |
+| **Implemented in Plan Version** | v11.0 |
 
 ---
 
@@ -315,19 +315,19 @@ At each phase boundary (before advancing to the next phase):
 
 | ID | Title | Source Phase | Future Phase | Status |
 |----|-------|-------------|--------------|--------|
-| DW-001 | Google OAuth | Phase 1 | Phase 6 | `assigned` |
-| DW-002 | Apple Sign-In | Phase 1 | Phase 6 | `assigned` |
+| DW-001 | Google OAuth | Phase 1 | `unassigned` (v2) | `deferred (v2)` |
+| DW-002 | Apple Sign-In | Phase 1 | `unassigned` (v2) | `deferred (v2)` |
 | DW-003 | Permission Allow/Deny Tests | Phase 2 | Phase 3 | `implemented` |
 | DW-004 | DB-Level RLS Verification | Phase 2 | Phase 3 | `implemented` |
 | DW-005 | Cross-Tenant Isolation Scope | Phase 2 | N/A (DEC-022) | `cancelled` |
 | DW-006 | Cache Invalidation Verification | Phase 2 | Phase 3 | `implemented` |
 | DW-007 | Moderator Role | Phase 2 | `unassigned` (v2) | `deferred (v2)` |
-| DW-008 | MFA Recovery Codes | Phase 1 | Phase 4 | `assigned` |
+| DW-008 | MFA Recovery Codes | Phase 1 | Phase 6 | `implemented` |
 | DW-009 | requireRole() Shared Function | Phase 2 | Phase 3 | `implemented` |
 | DW-010 | requireSelfScope() Shared Function | Phase 2 | Phase 3 | `implemented` |
 | DW-011 | Distributed Rate Limiting | Phase 3 | Phase 6 | `assigned` |
-| DW-012 | Authenticated lifecycle test infrastructure | Phase 3 | Phase 6 | `assigned` |
-| DW-013 | Orphaned test-user cleanup automation | Phase 3 | Phase 6 | `assigned` |
+| DW-012 | Authenticated lifecycle test infrastructure | Phase 3 | Phase 6 | `implemented` |
+| DW-013 | Orphaned test-user cleanup automation | Phase 3 | Phase 6 | `implemented` |
 | DW-014 | Denial audit logging | Phase 3 | Phase 3.5 | `implemented` |
 | DW-015 | Superadmin guardrails | Phase 3 | Phase 3.5 | `implemented` |
 | DW-016 | Admin Monitoring/Health UI | Phase 4 | Phase 5 | `implemented` |
@@ -335,15 +335,15 @@ At each phase boundary (before advancing to the next phase):
 | DW-018 | User Password Change Flow | Phase 4 | Phase 4 (Stage 4J) | `implemented` |
 | DW-019 | User Session Revocation | Phase 4 | Phase 5 | `implemented` |
 | DW-020 | User Notification Preferences | Phase 4 | `unassigned` (v2) | `deferred (v2)` |
-| DW-021 | DB-level admin user search (replace auth.admin.listUsers) | Phase 4 | Phase 6 | `assigned` |
-| DW-022 | Server-shaped admin user DTO/view | Phase 4 | Phase 6 | `assigned` |
-| DW-023 | Audit actor-scope display shaping | Phase 4 | Phase 5+ | `assigned` |
-| DW-024 | Admin panel unbounded client-side aggregation queries | Phase 4 | Phase 6 | `assigned` |
+| DW-021 | DB-level admin user search (replace auth.admin.listUsers) | Phase 4 | Phase 6 | `implemented` |
+| DW-022 | Server-shaped admin user DTO/view | Phase 4 | Phase 6 | `implemented` |
+| DW-023 | Audit actor-scope display shaping | Phase 4 | Phase 6 | `implemented` |
+| DW-024 | Admin panel unbounded client-side aggregation queries | Phase 4 | Phase 6 | `implemented` |
 | DW-025 | Role creation (create-role edge function + UI) | Phase 4 | Phase 6 | `implemented` |
 | DW-026 | Role deletion (delete-role edge function + UI) | Phase 4 | Phase 6 | `implemented` |
 | DW-027 | Admin Edit User Profile | Phase 4 | Phase 4 (Stage 4K) | `implemented` |
-| DW-028 | True fail-closed audit rollback (alert config) | Phase 5 | Phase 6 | `deferred` |
-| DW-029 | Batched audit cleanup DELETE | Phase 5 | Phase 6 | `deferred` |
+| DW-028 | True fail-closed audit rollback (alert config) | Phase 5 | Phase 6 | `implemented` |
+| DW-029 | Batched audit cleanup DELETE | Phase 5 | Phase 6 | `implemented` |
 
 
 ### DW-011: Distributed Rate Limiting

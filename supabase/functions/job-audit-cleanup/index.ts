@@ -1,9 +1,13 @@
 /**
- * job-audit-cleanup — Scheduled job: archives audit records older than 90 days.
+ * job-audit-cleanup — Scheduled job: deletes audit records older than 90 days.
  *
  * Invoked by pg_cron weekly (Sunday 03:00 UTC) via pg_net HTTP POST.
  * Uses executeWithRetry() for retry, backoff, telemetry, and audit trail.
- * Deletes audit_logs records where created_at < now() - 90 days (DEC-007).
+ *
+ * DW-029 resolved: Uses rpc_batch_delete_audit_logs() to delete in batches
+ * of 1000, looping until zero remaining or 25s timeout budget consumed.
+ * This prevents unbounded DELETE statements that could exceed edge function
+ * timeout limits on large datasets.
  *
  * Owner: audit-logging module
  * Job ID: audit_cleanup
@@ -17,6 +21,8 @@ import { verifyCronSecret } from '../_shared/cron-auth.ts'
 
 const JOB_ID = 'audit_cleanup'
 const RETENTION_DAYS = 90
+const BATCH_SIZE = 1000
+const TIMEOUT_BUDGET_MS = 25_000 // Leave 5s headroom from 30s limit
 
 Deno.serve(createHandler(async (req: Request): Promise<Response> => {
   const authError = verifyCronSecret(req)
@@ -27,7 +33,6 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     const body = await req.json()
     if (body.time) {
       scheduledTime = body.time
-      // Weekly bucket dedup: ISO week
       const d = new Date(body.time)
       const weekStart = new Date(d)
       weekStart.setDate(d.getDate() - d.getDay())
@@ -45,43 +50,35 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
       cutoffDate.setDate(cutoffDate.getDate() - RETENTION_DAYS)
       const cutoffIso = cutoffDate.toISOString()
 
-      // Count records to be deleted (pre-condition validation)
-      const { count, error: countError } = await supabaseAdmin
-        .from('audit_logs')
-        .select('id', { count: 'exact', head: true })
-        .lt('created_at', cutoffIso)
+      let totalDeleted = 0
+      const startTime = Date.now()
 
-      if (countError) {
-        throw new Error(`Pre-count failed: ${countError.message}`)
-      }
+      // Batched delete loop
+      while (Date.now() - startTime < TIMEOUT_BUDGET_MS) {
+        const { data: deletedCount, error } = await supabaseAdmin.rpc(
+          'rpc_batch_delete_audit_logs',
+          { cutoff: cutoffIso, batch_size: BATCH_SIZE }
+        )
 
-      const recordsToDelete = count ?? 0
-
-      if (recordsToDelete === 0) {
-        return {
-          affectedRecords: 0,
-          resourceUsage: { db_queries: 1, records_deleted: 0 },
+        if (error) {
+          throw new Error(`Batch delete failed: ${error.message}`)
         }
-      }
 
-      // Delete in batches to avoid oversized transactions
-      // Supabase REST API doesn't support LIMIT on DELETE, so we delete all matching
-      const { error: deleteError } = await supabaseAdmin
-        .from('audit_logs')
-        .delete()
-        .lt('created_at', cutoffIso)
+        const count = deletedCount as number
+        totalDeleted += count
 
-      if (deleteError) {
-        throw new Error(`Audit cleanup delete failed: ${deleteError.message}`)
+        // No more records to delete
+        if (count < BATCH_SIZE) break
       }
 
       return {
-        affectedRecords: recordsToDelete,
+        affectedRecords: totalDeleted,
         resourceUsage: {
-          db_queries: 2, // 1 count + 1 delete
-          records_deleted: recordsToDelete,
+          records_deleted: totalDeleted,
           cutoff_date: cutoffIso,
           retention_days: RETENTION_DAYS,
+          batch_size: BATCH_SIZE,
+          elapsed_ms: Date.now() - startTime,
         },
       }
     },

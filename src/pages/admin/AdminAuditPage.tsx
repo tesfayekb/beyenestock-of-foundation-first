@@ -63,12 +63,17 @@ const columns: DataTableColumn<AuditLogEntry>[] = [
   {
     key: 'actor_id',
     header: 'Actor',
-    className: 'w-32',
-    cell: (row) => (
-      <span className="font-mono text-xs text-muted-foreground" title={row.actor_id ?? ''}>
-        {row.actor_id ? row.actor_id.slice(0, 8) + '…' : '—'}
-      </span>
-    ),
+    className: 'w-40',
+    cell: (row) => {
+      const displayName = (row as any).actor_display_name;
+      return (
+        <span className="text-xs text-muted-foreground" title={row.actor_id ?? ''}>
+          {displayName && displayName !== row.actor_id
+            ? displayName
+            : row.actor_id ? row.actor_id.slice(0, 8) + '…' : '—'}
+        </span>
+      );
+    },
   },
   {
     key: 'target',

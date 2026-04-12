@@ -5,8 +5,12 @@
  *
  * GET /list-users?limit=50&offset=0&status=active&search=...
  *
- * Search matches both display_name and email (server-side).
+ * Search matches display_name and email (both on profiles table).
  * Returns roles summary per user.
+ *
+ * Performance: No auth.admin.listUsers() call. Email is materialized
+ * on profiles via sync trigger (MIG-034). Single DB round-trip for
+ * search + pagination + roles enrichment.
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
@@ -21,8 +25,6 @@ const QuerySchema = z.object({
   status: z.enum(['active', 'deactivated']).optional(),
   search: z.string().trim().max(255).optional(),
 })
-
-const EMAIL_SEARCH_CAP = 500
 
 Deno.serve(createHandler(async (req: Request) => {
   if (req.method !== 'GET') {
@@ -41,38 +43,10 @@ Deno.serve(createHandler(async (req: Request) => {
     search: params.get('search') ?? undefined,
   })
 
-  // Only call auth.admin.listUsers when search is active (email search) or
-  // when we need email enrichment. For list-without-search, skip the expensive
-  // auth call entirely — emails are fetched lazily on user detail page.
-  let authUsersCache: { id: string; email?: string }[] | null = null
-  const needsEmailSearch = !!search
-
-  async function getAuthUsers() {
-    if (authUsersCache) return authUsersCache
-    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({
-      page: 1,
-      perPage: 1000,
-    })
-    authUsersCache = authData?.users ?? []
-    return authUsersCache
-  }
-
-  // Step 1: Build email search ID set if search is active
-  let emailSearchIds: string[] | null = null
-
-  if (search) {
-    const authUsers = await getAuthUsers()
-    const lowerSearch = search.toLowerCase()
-    emailSearchIds = authUsers
-      .filter((u) => u.email?.toLowerCase().includes(lowerSearch))
-      .map((u) => u.id)
-      .slice(0, EMAIL_SEARCH_CAP)
-  }
-
-  // Step 2: Query profiles
+  // Query profiles — email is now a materialized column (MIG-034)
   let query = supabaseAdmin
     .from('profiles')
-    .select('id, display_name, avatar_url, email_verified, status, created_at, updated_at', { count: 'exact' })
+    .select('id, display_name, avatar_url, email, email_verified, status, created_at, updated_at', { count: 'exact' })
     .order('created_at', { ascending: false })
 
   if (status) {
@@ -80,11 +54,7 @@ Deno.serve(createHandler(async (req: Request) => {
   }
 
   if (search) {
-    if (emailSearchIds && emailSearchIds.length > 0) {
-      query = query.or(`display_name.ilike.%${search}%,id.in.(${emailSearchIds.join(',')})`)
-    } else {
-      query = query.or(`display_name.ilike.%${search}%`)
-    }
+    query = query.or(`display_name.ilike.%${search}%,email.ilike.%${search}%`)
   }
 
   query = query.range(offset, offset + limit - 1)
@@ -98,30 +68,15 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const profiles = data ?? []
 
-  // Step 3: Enrich with email + roles — reuse cached auth users
+  // Roles enrichment — single batch query for this page
   let enrichedUsers = profiles.map((p) => ({
     ...p,
-    email: null as string | null,
     roles: [] as { role_key: string; role_name: string }[],
   }))
 
   if (profiles.length > 0) {
     const userIds = profiles.map((p) => p.id)
 
-    // Email enrichment — only when search was active (auth users already cached)
-    // For non-search requests, skip the expensive auth call; emails are
-    // fetched lazily on the user detail page instead.
-    const emailMap = new Map<string, string>()
-    if (needsEmailSearch) {
-      const authUsers = await getAuthUsers()
-      for (const u of authUsers) {
-        if (userIds.includes(u.id) && u.email) {
-          emailMap.set(u.id, u.email)
-        }
-      }
-    }
-
-    // Roles enrichment — single batch query for this page
     const { data: userRoles } = await supabaseAdmin
       .from('user_roles')
       .select('user_id, roles(key, name)')
@@ -141,7 +96,6 @@ Deno.serve(createHandler(async (req: Request) => {
 
     enrichedUsers = profiles.map((p) => ({
       ...p,
-      email: emailMap.get(p.id) ?? null,
       roles: rolesMap.get(p.id) ?? [],
     }))
   }
