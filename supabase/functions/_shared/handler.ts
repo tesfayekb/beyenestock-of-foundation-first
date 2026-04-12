@@ -77,6 +77,14 @@ export function createHandler(
         // Fire-and-forget: audit failure must NOT block the 403 response
         logDenialAudit(actorId, err.permissionKey, err.reason, endpoint, cid)
 
+        // Distinguish re-auth requirement from permission denial
+        if (err.reason === 'recent_auth_required') {
+          return apiError(403, 'Session too old for this action — please re-authenticate', {
+            code: 'RECENT_AUTH_REQUIRED',
+            correlationId: cid,
+          })
+        }
+
         return apiError(403, 'Permission denied', { correlationId: cid })
       }
 
