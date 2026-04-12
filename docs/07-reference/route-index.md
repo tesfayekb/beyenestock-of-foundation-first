@@ -623,21 +623,14 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 
 ### System Endpoints
 
-#### `GET /health` — Health Check
+#### `GET /health` — Health Check *(superseded)*
 
 | Field | Value |
 |-------|-------|
 | **Module** | health-monitoring |
-| **Classification** | internal |
-| **Auth required** | No |
-| **Purpose** | System health check for monitoring and load balancers |
-| **Response contract** | `200: { status: "healthy" | "degraded" | "down", checks: {...} }` |
-| **Rate limit class** | relaxed |
-| **Audit required** | No |
-| **Idempotent** | Yes |
-| **Related functions** | `getSystemHealth()` |
-| **Related tests** | Health endpoint tests |
-| **Lifecycle** | planned |
+| **Lifecycle** | superseded |
+| **Superseded By** | `GET /health-check` (Stage 5A, ACT-057) |
+| **Notes** | Original planned entry. Replaced by `/health-check` with implementation. |
 
 #### `GET /query-audit-logs` — Audit Log Query
 
@@ -1075,11 +1068,11 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Auth Model** | None — unauthenticated |
 | **Permission** | None |
 | **Response (200)** | `{ status: 'healthy' \| 'degraded' \| 'unhealthy', timestamp: string }` |
-| **Rate Limit** | standard |
+| **Rate Limit** | relaxed |
 | **Audit Required** | Only on status transition (`health.status_changed`) |
 | **Idempotent** | Yes |
-| **Related functions** | `logAuditEvent()` |
-| **Notes** | Public endpoint for monitoring/load balancers. No sensitive internals. Stores snapshot in `system_health_snapshots`. |
+| **Related functions** | `logAuditEvent()`, `checkDatabase()`, `checkAuth()`, `checkAuditPipeline()`, `deriveOverallStatus()` |
+| **Notes** | Public endpoint for monitoring/load balancers. No sensitive internals. Stores snapshot in `system_health_snapshots`. Queries previous snapshot before insert to avoid race condition on status transition detection. |
 | **Lifecycle** | active |
 
 #### `GET /health-detailed`
