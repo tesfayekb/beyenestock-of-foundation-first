@@ -1543,7 +1543,7 @@ Each action must include:
 | **Docs Updated** | database-migration-ledger.md, action-tracker.md, function-index.md, deferred-work-register.md, system-state.md |
 | **Related Routes** | — (no new routes in 5C) |
 | **Related Functions** | executeWithRetry, classifyError, detectPoisonJob, isRetryable |
-| **Related Events** | job.execution_started, job.execution_completed, job.execution_failed |
+| **Related Events** | job.started, job.completed, job.failed |
 | **Evidence** | Migration MIG-025 applied. 3 tables + 3 indexes created. TypeScript zero errors. Shared utility created with full retry/backoff/jitter/poison detection. |
 | **Verified By** | AI Agent |
 | **Before State** | No job scheduling infrastructure |
