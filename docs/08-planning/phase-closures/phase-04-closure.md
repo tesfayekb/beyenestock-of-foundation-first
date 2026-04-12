@@ -258,9 +258,29 @@ Full role lifecycle: create-role + delete-role edge functions and UI. DW-025 and
 - Server-side dependency enforcement in `revoke-permission-from-role`: refuses revocation if another assigned permission depends on the target permission (returns 409 with `DEPENDENCY_VIOLATION` code and blocker list)
 - `sql/03_rbac_rls_policies.sql` reference file updated to match live DB
 
+### ACT-055: Final A+ Hardening — correlation_id, Strict Rate Limits, Reauth on Export (2026-04-12)
+
+- Added `correlation_id` as top-level indexed column on `audit_logs` (backfilled from metadata JSONB)
+- Added `requireRecentAuth(30min)` to `export-audit-logs` — bulk PII export now session-gated
+- Changed 7 privileged RBAC mutation endpoints from `standard` (60/min) to `strict` (10/min) rate limit
+- Added RW-008 to regression watchlist for PERMISSION_DEPS 3-copy drift detection
+
+### ACT-056: Performance Hardening — get-user-stats, AdminDashboard, Prefetch (2026-04-12)
+
+- Created `get-user-stats` edge function — 3 parallel COUNT(*) queries replacing 3× full `list-users` calls
+- Refactored AdminDashboard to single `useUserStats()` hook with partial render
+- Added authorization context prefetch to AdminLayout — eliminates RequirePermission cold-start skeleton
+- Updated `sql/01_rbac_schema.sql` seed to include `correlation_id` column and all indexes
+- Added version/sync comments to PERMISSION_DEPS inline copies (RW-008 drift mitigation)
+- Documented `deployment_config_required` in system-state.md for leaked password protection
+
 ### Updated Component Count
 
 22 governed UI components (was 21 at closure — CreateRoleDialog added in ACT-050).
+
+### Updated Hook Count
+
+12 hooks (was 11 at closure — useUserStats added in ACT-056).
 
 ### Updated Permission Count
 

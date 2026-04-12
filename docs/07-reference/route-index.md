@@ -957,6 +957,27 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Effects** | (1) Clears auth ban via `updateUserById(ban_duration: 'none')`, (2) Sets profile.status to `active`, (3) Compensating re-ban if profile update fails |
 | **Lifecycle** | active |
 
+#### `GET /get-user-stats`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/get-user-stats` |
+| **Method** | `GET` |
+| **Classification** | privileged |
+| **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
+| **Permission** | `users.view_all` |
+| **Query Params** | None |
+| **Response (200)** | `{ total: number, active: number, deactivated: number }` |
+| **Error (401)** | Missing/invalid token |
+| **Error (403)** | Permission denied |
+| **Rate Limit** | standard |
+| **Audit Required** | No (read-only, lightweight counts) |
+| **Idempotent** | Yes |
+| **Related functions** | `authenticateRequest()`, `checkPermissionOrThrow()` |
+| **Related permissions** | `users.view_all` |
+| **Notes** | Returns COUNT(*) aggregates only — no email enrichment, no auth.admin.listUsers calls. Designed for dashboard stat cards. |
+| **Lifecycle** | active |
+
 ---
 
 ## Critical Route Summary

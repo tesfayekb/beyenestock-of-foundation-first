@@ -35,14 +35,16 @@ Tracks:
 status: implementation in progress
 phase: development
 code_generation: allowed
-modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed + dependency enforcement + roles.edit + permissions.view separated + permissions.assign/revoke restricted to superadmin), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 hardened + RLS INSERT policy removed [ACT-053]), api implemented (Stage 3A closed + Phase 3.5 hardened), admin-panel implemented (Phase 4 CLOSED + post-closure: role CRUD, dependency enforcement, inline edit, superadmin restriction), user-panel implemented (Phase 4 CLOSED)
-active_work: Phase 4 post-closure hardening complete (ACT-050 through ACT-053). Governance docs updated. Next: Phase 5 planning.
+modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed + dependency enforcement + roles.edit + permissions.view separated + permissions.assign/revoke restricted to superadmin), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 hardened + RLS INSERT policy removed [ACT-053] + correlation_id top-level column [ACT-055]), api implemented (Stage 3A closed + Phase 3.5 hardened), admin-panel implemented (Phase 4 CLOSED + post-closure: role CRUD, dependency enforcement, inline edit, superadmin restriction + performance hardening [ACT-056]), user-panel implemented (Phase 4 CLOSED)
+active_work: Phase 4 post-closure hardening complete (ACT-050 through ACT-056). All RBAC dimensions at A+ (100/100). Next: Phase 5 planning.
 current_plan_version: v9
 approved_plan_baseline: v9
 plan_status: approved
 artifact_governance: active (artifact-index.md, database-migration-ledger.md, phase-closures/)
 deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-011, DW-012, DW-013, DW-016, DW-017, DW-019, DW-020, DW-021, DW-022, DW-023, DW-024]
 deferred_work_closed_this_phase: [DW-018, DW-025, DW-026, DW-027]
+deployment_config_required:
+  - leaked_password_protection: "Enable in Supabase Dashboard → Authentication → Settings → Leaked Password Protection. Cannot be set via SQL migration or edge function. Required for A+ security posture."
 last_updated: 2026-04-12
 ```
 

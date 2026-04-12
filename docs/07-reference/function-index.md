@@ -1040,6 +1040,56 @@ When changing any indexed function:
 
 ---
 
+### Data Access Functions
+
+#### `useUserStats()`
+
+| Field | Value |
+|-------|-------|
+| **Type** | hook |
+| **Classification** | data-access |
+| **Owner module** | admin-panel |
+| **Signature** | `() → UseQueryResult<{ total: number, active: number, deactivated: number }>` |
+| **Returns** | User count aggregates from `get-user-stats` edge function |
+| **Purity** | impure |
+| **Side effects** | API call to `get-user-stats` |
+| **Transactional** | No |
+| **Fail behavior** | fail-fast — React Query error state |
+| **Used by** | admin-panel (AdminDashboard) |
+| **Blast radius** | small |
+| **Criticality** | LOW |
+| **Approval required** | No |
+| **Callable from** | ui-only |
+| **Related routes** | GET /get-user-stats |
+| **Related permissions** | `users.view_all` |
+| **Lifecycle** | active |
+
+#### `get-user-stats` (Edge Function)
+
+| Field | Value |
+|-------|-------|
+| **Type** | function |
+| **Classification** | data-access |
+| **Owner module** | admin-panel |
+| **Signature** | `(req: Request) → Response` |
+| **Returns** | `{ total, active, deactivated }` — three COUNT(*) queries |
+| **Purity** | impure |
+| **Side effects** | DB read (profiles COUNT) |
+| **Transactional** | No |
+| **Fail behavior** | fail-fast — 500 |
+| **Used by** | admin-panel (useUserStats hook) |
+| **Blast radius** | small |
+| **Criticality** | LOW |
+| **Approval required** | No |
+| **Callable from** | request-path |
+| **Upstream deps** | `authenticateRequest()`, `checkPermissionOrThrow()` |
+| **Related routes** | GET /get-user-stats |
+| **Related permissions** | `users.view_all` |
+| **Notes** | Lightweight alternative to list-users — no auth.admin.listUsers enrichment, no email lookup. Designed for dashboard stat cards. |
+| **Lifecycle** | active |
+
+---
+
 ## Critical Shared Functions Summary
 
 ### Top Critical Functions (Require Strongest Governance)
