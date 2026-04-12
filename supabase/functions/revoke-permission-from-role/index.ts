@@ -26,40 +26,13 @@ const BodySchema = z.object({
 })
 
 /**
- * Permission dependency map — server-side copy.
- * Mirrors src/config/permission-deps.ts (canonical source).
- * Kept inline to avoid import-path issues in the Deno edge function runtime.
- *
- * ⚠️  SYNC: Must match src/config/permission-deps.ts and
- *    supabase/functions/assign-permission-to-role/index.ts.
+ * Permission dependency map — loaded from SSOT JSON.
+ * ⚠️  SYNC: /permission-deps.json is the single source of truth.
  *    See RW-008 in regression-watchlist.md for drift detection protocol.
- *    Last synced: 2026-04-12 — 23 entries.
  */
-const PERMISSION_DEPS: Record<string, string[]> = {
-  'roles.assign':        ['roles.view', 'users.view_all', 'admin.access'],
-  'roles.revoke':        ['roles.view', 'users.view_all', 'admin.access'],
-  'roles.create':        ['roles.view', 'admin.access'],
-  'roles.delete':        ['roles.view', 'admin.access'],
-  'roles.edit':          ['roles.view', 'admin.access'],
-  'permissions.assign':  ['roles.view', 'permissions.view', 'admin.access'],
-  'permissions.revoke':  ['roles.view', 'permissions.view', 'admin.access'],
-  'permissions.view':    ['admin.access'],
-  'users.edit_any':      ['users.view_all', 'admin.access'],
-  'users.deactivate':    ['users.view_all', 'admin.access'],
-  'users.reactivate':    ['users.view_all', 'admin.access'],
-  'audit.export':        ['audit.view', 'admin.access'],
-  'audit.view':          ['admin.access'],
-  'monitoring.configure': ['monitoring.view', 'admin.access'],
-  'monitoring.view':      ['admin.access'],
-  'jobs.trigger':            ['jobs.view', 'admin.access'],
-  'jobs.pause':              ['jobs.view', 'admin.access'],
-  'jobs.resume':             ['jobs.view', 'admin.access'],
-  'jobs.retry':              ['jobs.view', 'admin.access'],
-  'jobs.deadletter.manage':  ['jobs.view', 'admin.access'],
-  'jobs.emergency':          ['admin.access'],
-  'jobs.view':               ['admin.access'],
-  'admin.config':            ['admin.access'],
-}
+const PERMISSION_DEPS: Record<string, string[]> = JSON.parse(
+  await Deno.readTextFile(new URL('../../permission-deps.json', import.meta.url))
+)
 
 /**
  * Find all permission keys that directly depend on the given key.
@@ -88,9 +61,15 @@ Deno.serve(createHandler(async (req: Request) => {
   const body = await req.json()
   const { role_id, permission_id } = validateRequest(BodySchema, body)
 
-  // Validate role exists
-  const { data: role } = await supabaseAdmin
-    .from('roles').select('id, key, is_immutable').eq('id', role_id).single()
+  // Validate role and permission in parallel
+  const [roleResult, permResult] = await Promise.all([
+    supabaseAdmin.from('roles').select('id, key, is_immutable').eq('id', role_id).single(),
+    supabaseAdmin.from('permissions').select('id, key').eq('id', permission_id).single(),
+  ])
+
+  const role = roleResult.data
+  const permission = permResult.data
+
   if (!role) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(404, 'Role not found', { correlationId: ctx.correlationId })
@@ -103,9 +82,6 @@ Deno.serve(createHandler(async (req: Request) => {
     })
   }
 
-  // Validate permission exists
-  const { data: permission } = await supabaseAdmin
-    .from('permissions').select('id, key').eq('id', permission_id).single()
   if (!permission) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(404, 'Permission not found', { correlationId: ctx.correlationId })
@@ -127,12 +103,9 @@ Deno.serve(createHandler(async (req: Request) => {
   }
 
   // --- Dependency enforcement ---
-  // Check if any other permission currently assigned to this role
-  // lists the target permission as a dependency. If so, block revocation.
   const dependentKeys = findDependents(permission.key)
 
   if (dependentKeys.length > 0) {
-    // Fetch which of these dependent permissions are currently assigned to this role
     const { data: depPerms } = await supabaseAdmin
       .from('permissions')
       .select('id, key')
@@ -190,7 +163,6 @@ Deno.serve(createHandler(async (req: Request) => {
   })
 
   if (!auditResult.success) {
-    // Rollback: re-assign the permission
     await supabaseAdmin
       .from('role_permissions')
       .insert({ role_id, permission_id })

@@ -27,38 +27,13 @@ const BodySchema = z.object({
 })
 
 /**
- * Permission dependency map — server-side copy.
- * Mirrors src/config/permission-deps.ts (canonical source).
- * ⚠️  SYNC: Must match src/config/permission-deps.ts and
- *    supabase/functions/revoke-permission-from-role/index.ts.
+ * Permission dependency map — loaded from SSOT JSON.
+ * ⚠️  SYNC: /permission-deps.json is the single source of truth.
  *    See RW-008 in regression-watchlist.md for drift detection protocol.
- *    Last synced: 2026-04-12 — 23 entries.
  */
-const PERMISSION_DEPS: Record<string, string[]> = {
-  'roles.assign':        ['roles.view', 'users.view_all', 'admin.access'],
-  'roles.revoke':        ['roles.view', 'users.view_all', 'admin.access'],
-  'roles.create':        ['roles.view', 'admin.access'],
-  'roles.delete':        ['roles.view', 'admin.access'],
-  'roles.edit':          ['roles.view', 'admin.access'],
-  'permissions.assign':  ['roles.view', 'permissions.view', 'admin.access'],
-  'permissions.revoke':  ['roles.view', 'permissions.view', 'admin.access'],
-  'permissions.view':    ['admin.access'],
-  'users.edit_any':      ['users.view_all', 'admin.access'],
-  'users.deactivate':    ['users.view_all', 'admin.access'],
-  'users.reactivate':    ['users.view_all', 'admin.access'],
-  'audit.export':        ['audit.view', 'admin.access'],
-  'audit.view':          ['admin.access'],
-  'monitoring.configure': ['monitoring.view', 'admin.access'],
-  'monitoring.view':      ['admin.access'],
-  'jobs.trigger':            ['jobs.view', 'admin.access'],
-  'jobs.pause':              ['jobs.view', 'admin.access'],
-  'jobs.resume':             ['jobs.view', 'admin.access'],
-  'jobs.retry':              ['jobs.view', 'admin.access'],
-  'jobs.deadletter.manage':  ['jobs.view', 'admin.access'],
-  'jobs.emergency':          ['admin.access'],
-  'jobs.view':               ['admin.access'],
-  'admin.config':            ['admin.access'],
-}
+const PERMISSION_DEPS: Record<string, string[]> = JSON.parse(
+  await Deno.readTextFile(new URL('../../permission-deps.json', import.meta.url))
+)
 
 function resolveAllDeps(key: string): string[] {
   const visited = new Set<string>()
@@ -125,6 +100,7 @@ Deno.serve(createHandler(async (req: Request) => {
       .in('key', depKeys)
 
     if (depPerms && depPerms.length > 0) {
+      // Parallel: fetch existing mappings while we already have depPerms
       const { data: existingMappings } = await supabaseAdmin
         .from('role_permissions')
         .select('permission_id')

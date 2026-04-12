@@ -31,7 +31,36 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-async function getMfaStatus(): Promise<MfaStatus> {
+/**
+ * Derive MFA status from the session's AAL claim — zero network calls.
+ * Falls back to the SDK call only when needed for challenge detection.
+ */
+function deriveMfaStatusFromSession(session: Session | null): MfaStatus {
+  if (!session) return 'none';
+
+  // The Supabase JWT includes aal (authenticator assurance level)
+  const factors = session.user?.factors;
+  const hasVerifiedTotpFactor = factors?.some(
+    f => f.factor_type === 'totp' && f.status === 'verified'
+  );
+
+  if (!hasVerifiedTotpFactor) return 'none';
+
+  // User has MFA enrolled — check if current session is aal2
+  const aal = (session as unknown as { aal?: string }).aal
+    ?? session.user?.app_metadata?.aal;
+
+  if (aal === 'aal2') return 'enrolled';
+
+  // Has factor but session is aal1 → needs challenge
+  return 'challenge_required';
+}
+
+/**
+ * Full SDK MFA check — used only for sign-in verification where
+ * we need the authoritative server state.
+ */
+async function getMfaStatusFromSdk(): Promise<MfaStatus> {
   const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   if (error || !data) return 'none';
 
@@ -54,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const updateMfaStatus = useCallback(async () => {
-    const status = await getMfaStatus();
+    const status = await getMfaStatusFromSdk();
     setState(prev => ({ ...prev, mfaStatus: status }));
     return status;
   }, []);
@@ -62,30 +91,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    const syncAuthState = async (session: Session | null) => {
-      const base = {
-        user: session?.user ?? null,
-        session,
-        loading: false,
-      };
-
-      if (!session) {
-        if (isMounted) {
-          setState({ ...base, mfaStatus: 'none' });
-        }
-        return;
-      }
-
-      const status = await getMfaStatus();
+    const syncAuthState = (session: Session | null) => {
+      const mfaStatus = deriveMfaStatusFromSession(session);
 
       if (isMounted) {
-        setState({ ...base, mfaStatus: status });
+        setState({
+          user: session?.user ?? null,
+          session,
+          loading: false,
+          mfaStatus,
+        });
       }
     };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       window.setTimeout(() => {
-        void syncAuthState(session);
+        syncAuthState(session);
       }, 0);
     });
 
@@ -124,7 +145,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      // Determine failure reason for event emission
       const reason = error.message?.toLowerCase().includes('invalid')
         ? 'invalid_password'
         : 'unknown_user';
@@ -136,14 +156,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       emitSignedIn(data.user.id, 'password');
     }
 
-    const status = await getMfaStatus();
+    // After sign-in, use SDK for authoritative MFA state
+    const status = await getMfaStatusFromSdk();
     setState(prev => ({ ...prev, mfaStatus: status }));
     return { error: null, mfaChallengeRequired: status === 'challenge_required' };
   }, []);
 
   const signOut = useCallback(async () => {
     const userId = state.user?.id;
-    queryClient.clear(); // Prevent cross-user data flash on shared devices
+    queryClient.clear();
     await supabase.auth.signOut();
     if (userId) {
       emitSignedOut(userId);

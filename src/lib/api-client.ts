@@ -54,28 +54,30 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export const apiClient = {
-  async get<T>(path: string, params?: Record<string, string | number | undefined | null>): Promise<T> {
+  async get<T>(path: string, params?: Record<string, string | number | undefined | null>, signal?: AbortSignal): Promise<T> {
     const headers = await getAuthHeaders();
-    const res = await fetch(buildUrl(path, params), { method: 'GET', headers });
+    const res = await fetch(buildUrl(path, params), { method: 'GET', headers, signal });
     return handleResponse<T>(res);
   },
 
-  async post<T>(path: string, body?: object): Promise<T> {
+  async post<T>(path: string, body?: object, signal?: AbortSignal): Promise<T> {
     const headers = await getAuthHeaders();
     const res = await fetch(buildUrl(path), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
+      signal,
     });
     return handleResponse<T>(res);
   },
 
-  async patch<T>(path: string, body?: object): Promise<T> {
+  async patch<T>(path: string, body?: object, signal?: AbortSignal): Promise<T> {
     const headers = await getAuthHeaders();
     const res = await fetch(buildUrl(path), {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
+      signal,
     });
     return handleResponse<T>(res);
   },
