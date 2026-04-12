@@ -348,6 +348,7 @@ Each risk must define early warning (leading) and post-occurrence (lagging) indi
 | RISK-007 | AI generating unindexed permissions/routes | Code contradicting SSOT, security logic errors |
 | RISK-008 | Rising retry rates, DLQ depth increasing | Job cascade failure, audit gaps, health degradation |
 | RISK-009 | p99 trending upward, connection pool > 60% | SLO breach, query timeouts, user-facing degradation |
+| RISK-011 | New base role migration without guard review | Base role revoked, user left in undefined permission state |
 
 **Rules:**
 - Leading indicators must be monitored continuously for CRITICAL/HIGH risks
@@ -399,6 +400,7 @@ Each risk must track directional trend:
 | RISK-007 | Stable | SSOT traceability improving |
 | RISK-008 | Stable | Job governance hardened |
 | RISK-009 | Stable | Capacity planning defined |
+| RISK-011 | Stable | No new base roles planned; accepted with documented hardening path |
 
 **Rule:** Degrading trend for > 2 review cycles → mandatory architectural review.
 
