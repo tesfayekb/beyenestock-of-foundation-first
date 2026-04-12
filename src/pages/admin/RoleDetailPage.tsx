@@ -142,6 +142,13 @@ export default function RoleDetailPage() {
   const handleToggle = useCallback(
     (permissionId: string, currentlyAssigned: boolean) => {
       if (!id || role?.is_immutable || isSuperadmin) return;
+
+      // Block revocation of dependency permissions
+      if (currentlyAssigned) {
+        const permKey = allPermissions?.find(p => p.id === permissionId)?.key;
+        if (permKey && requiredByDeps.has(permKey)) return; // blocked by UI (disabled)
+      }
+
       setPendingToggles((prev) => new Set(prev).add(permissionId));
 
       const mutation = currentlyAssigned ? revokePermission : assignPermission;
@@ -306,7 +313,9 @@ export default function RoleDetailPage() {
                       {group.permissions.map((perm) => {
                         const isPending = pendingToggles.has(perm.id);
                         const isDep = requiredByDeps.has(perm.key);
+                        const isDepBlocked = isDep && perm.assigned;
                         const isDisabled = role.is_immutable || isSuperadmin || isPending || !canModifyPerms ||
+                          isDepBlocked ||
                           (perm.assigned && !canRevokePerms) || (!perm.assigned && !canAssignPerms);
                         return (
                           <label

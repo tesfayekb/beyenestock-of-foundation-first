@@ -272,7 +272,7 @@ Key event chains showing upstream triggers and downstream effects:
 | **MFA recovery** | `auth.mfa_recovered` → `audit.logged` → admin notification (security review) | Strict |
 | **Session revoke** | `auth.session_revoked` → `audit.logged` → session cleanup | Strict |
 | **Role change** | `rbac.role_assigned` / `rbac.role_revoked` → `audit.logged` → admin notification | Best-effort |
-| **Role lifecycle** | `rbac.role_created` / `rbac.role_deleted` → `audit.logged` → admin notification | Strict |
+| **Role lifecycle** | `rbac.role_created` / `rbac.role_updated` / `rbac.role_deleted` → `audit.logged` → admin notification | Strict |
 | **Permission change** | `rbac.permission_assigned` / `rbac.permission_revoked` → `audit.logged` | Best-effort |
 | **Job failure** | `job.failed` → `job.retry_scheduled` → `job.dead_lettered` (if exhausted) → `health.alert_triggered` | Strict |
 | **Kill switch** | `job.kill_switch_activated` → `audit.logged` → `health.alert_triggered` → admin notification | Strict |
@@ -519,6 +519,27 @@ Key event chains showing upstream triggers and downstream effects:
 | **Related permissions** | `roles.create` |
 | **Related risks** | RISK-002 (privilege escalation via new role) |
 | **Related tests** | Role creation event emission test |
+| **Lifecycle** | active |
+
+#### `rbac.role_updated` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | rbac |
+| **Consumers** | audit-logging |
+| **Description** | Role name or description updated. Key is immutable and cannot be changed. |
+| **Payload schema** | `{ role_key: string, changes: { name?: string, description?: string }, previous: { name?: string, description?: string }, updated_by: uuid, timestamp: datetime }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure |
+| **Observability** | Logged, traced |
+| **Related permissions** | `roles.edit` |
+| **Related risks** | RISK-002 |
+| **Related tests** | Role update event emission test |
 | **Lifecycle** | active |
 
 #### `rbac.role_deleted` — v1
