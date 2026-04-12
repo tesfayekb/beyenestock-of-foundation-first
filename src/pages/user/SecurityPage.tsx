@@ -7,9 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ROUTES } from '@/config/routes';
-import { ShieldCheck, ShieldOff, Trash2, KeyRound, Clock, LogIn, AlertTriangle, Lock } from 'lucide-react';
+import { ShieldCheck, ShieldOff, Trash2, KeyRound, Clock, LogIn, AlertTriangle, Lock, Monitor, LogOut } from 'lucide-react';
 import { PasswordChangeCard } from '@/components/user/PasswordChangeCard';
 import { ReauthDialog } from '@/components/auth/ReauthDialog';
+import { ConfirmActionDialog } from '@/components/dashboard/ConfirmActionDialog';
+import { apiClient } from '@/lib/api-client';
+import { toast } from 'sonner';
 
 export default function SecurityPage() {
   const { user, mfaStatus, checkMfaStatus } = useAuth();
@@ -17,6 +20,9 @@ export default function SecurityPage() {
   const navigate = useNavigate();
   const [factorToRemove, setFactorToRemove] = useState<MfaFactor | null>(null);
   const [showReauth, setShowReauth] = useState(false);
+  const [showRevokeOthers, setShowRevokeOthers] = useState(false);
+  const [showRevokeAll, setShowRevokeAll] = useState(false);
+  const [revoking, setRevoking] = useState(false);
 
   const handleRequestUnenroll = (factor: MfaFactor) => {
     setFactorToRemove(factor);
@@ -34,6 +40,26 @@ export default function SecurityPage() {
 
   const verifiedFactors = factors.filter((f) => f.status === 'verified');
   const hasMfa = mfaStatus === 'enrolled' || verifiedFactors.length > 0;
+
+  const handleRevokeSessions = async (scope: 'others' | 'global') => {
+    setRevoking(true);
+    try {
+      await apiClient.post('revoke-sessions', { scope });
+      if (scope === 'global') {
+        toast.success('All sessions revoked. Redirecting to sign-in…');
+        setTimeout(() => navigate(ROUTES.SIGN_IN), 1500);
+      } else {
+        toast.success('Other sessions have been revoked.');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to revoke sessions';
+      toast.error(msg);
+    } finally {
+      setRevoking(false);
+      setShowRevokeOthers(false);
+      setShowRevokeAll(false);
+    }
+  };
 
   return (
     <>
@@ -181,9 +207,69 @@ export default function SecurityPage() {
           </CardContent>
         </Card>
 
+        {/* Session Management (DW-019) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Monitor className="h-4 w-4" />
+              Active Sessions
+            </CardTitle>
+            <CardDescription>
+              Manage your active sessions across devices
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowRevokeOthers(true)}
+                disabled={revoking}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out other devices
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowRevokeAll(true)}
+                disabled={revoking}
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out everywhere
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              "Sign out other devices" keeps your current session. "Sign out everywhere" terminates all sessions including this one.
+            </p>
+          </CardContent>
+        </Card>
+
         {/* Password change */}
         <PasswordChangeCard />
       </div>
+
+      {/* Session revocation confirmations */}
+      <ConfirmActionDialog
+        open={showRevokeOthers}
+        onOpenChange={setShowRevokeOthers}
+        title="Sign Out Other Devices"
+        description="This will terminate all your other active sessions. Your current session will remain active."
+        confirmLabel="Sign Out Others"
+        destructive={false}
+        onConfirm={() => handleRevokeSessions('others')}
+        loading={revoking}
+      />
+      <ConfirmActionDialog
+        open={showRevokeAll}
+        onOpenChange={setShowRevokeAll}
+        title="Sign Out Everywhere"
+        description="This will terminate ALL your active sessions, including this one. You will be redirected to the sign-in page."
+        confirmLabel="Sign Out Everywhere"
+        destructive
+        onConfirm={() => handleRevokeSessions('global')}
+        loading={revoking}
+      />
 
       {/* Re-authentication dialog for MFA removal */}
       <ReauthDialog

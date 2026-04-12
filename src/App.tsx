@@ -33,6 +33,8 @@ const AdminUsersPage = lazy(() => import("./pages/admin/AdminUsersPage"));
 const AdminRolesPage = lazy(() => import("./pages/admin/AdminRolesPage"));
 const AdminPermissionsPage = lazy(() => import("./pages/admin/AdminPermissionsPage"));
 const AdminAuditPage = lazy(() => import("./pages/admin/AdminAuditPage"));
+const AdminHealthPage = lazy(() => import("./pages/admin/AdminHealthPage"));
+const AdminJobsPage = lazy(() => import("./pages/admin/AdminJobsPage"));
 const UserDetailPage = lazy(() => import("./pages/admin/UserDetailPage"));
 const RoleDetailPage = lazy(() => import("./pages/admin/RoleDetailPage"));
 
@@ -137,6 +139,16 @@ const App = () => (
                 <Route path="audit" element={
                   <PermissionGate permission="audit.view">
                     <AdminAuditPage />
+                  </PermissionGate>
+                } />
+                <Route path="health" element={
+                  <PermissionGate permission="monitoring.view">
+                    <AdminHealthPage />
+                  </PermissionGate>
+                } />
+                <Route path="jobs" element={
+                  <PermissionGate permission="jobs.view">
+                    <AdminJobsPage />
                   </PermissionGate>
                 } />
                 <Route path="*" element={<DashboardNotFound />} />

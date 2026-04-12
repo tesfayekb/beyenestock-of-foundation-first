@@ -1339,6 +1339,48 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 
 ---
 
+### POST /revoke-sessions — User Session Revocation (DW-019)
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /revoke-sessions` |
+| **Classification** | privileged |
+| **Owner Module** | auth |
+| **Auth** | Bearer JWT required |
+| **Permission** | Self-scope (actor = target) + `requireRecentAuth()` |
+| **Rate Limit** | strict (10/min) |
+| **Request Body** | `{ scope: 'others' \| 'global' }` |
+| **Response** | `{ success, scope, message }` |
+| **Audit** | `user.sessions_revoked` |
+| **Lifecycle** | active |
+| **Added By** | Stage 5F (DW-019) |
+
+### GET /admin/health — Health Monitoring Dashboard
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/admin/health` |
+| **Classification** | admin |
+| **Owner Module** | admin-panel |
+| **Auth** | Bearer JWT + `admin.access` + `monitoring.view` |
+| **Type** | Frontend route |
+| **Lifecycle** | active |
+| **Added By** | Stage 5F |
+
+### GET /admin/jobs — Job Management Dashboard
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/admin/jobs` |
+| **Classification** | admin |
+| **Owner Module** | admin-panel |
+| **Auth** | Bearer JWT + `admin.access` + `jobs.view` |
+| **Type** | Frontend route |
+| **Lifecycle** | active |
+| **Added By** | Stage 5F |
+
+---
+
 ## Related Documents
 
 - [Auth Module](../04-modules/auth.md)

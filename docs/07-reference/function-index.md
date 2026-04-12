@@ -1177,6 +1177,22 @@ When changing any indexed function:
 | **Security** | Compares `X-Cron-Secret` header against `CRON_SECRET` env var. Constant-time not enforced (acceptable for server-to-server with high-entropy secret). |
 | **Added** | ACT-062 |
 
+### `revoke-sessions` — Edge Function
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/revoke-sessions/index.ts` |
+| **Classification** | security-critical |
+| **Owner module** | auth |
+| **Consumers** | SecurityPage (user panel) |
+| **Signature** | `POST { scope: 'others' \| 'global' }` |
+| **Description** | Revokes user sessions via `supabaseAdmin.auth.admin.signOut(userId, scope)`. Self-scope enforced by function architecture (uses `ctx.user.id`). Requires recent auth. |
+| **Side effects** | Terminates user sessions, emits `user.sessions_revoked` audit event |
+| **Error behavior** | Throws on Supabase signOut failure |
+| **Security** | Bearer JWT + requireRecentAuth(). No user_id body param — prevents scope escalation. |
+| **Lifecycle** | active |
+| **Added by** | Stage 5F (DW-019) |
+
 ---
 
 ## Dependencies
