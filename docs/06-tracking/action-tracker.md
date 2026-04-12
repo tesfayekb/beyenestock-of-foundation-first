@@ -1251,6 +1251,25 @@ Each action must include:
 
 ---
 
+### ACT-048: Phase 4 Closure — Admin & User Interfaces
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-048 |
+| **Date** | 2026-04-12 |
+| **Action** | Closed Phase 4 (Admin & User Interfaces). All 14 gate items passed. Security hardening: MFA removal re-auth gate (email OTP via ReauthDialog), password change re-auth gate (replaces client-only isRecentlyAuthenticated), 30-minute session inactivity timeout (useInactivityTimeout with visibilitychange). Performance: admin prefetch (roles, permissions, users, audit), user prefetch (profile, MFA factors), staleTime optimization (5min for static data), AdminDashboard cache warming via useRoles(), QueryClient defaults. Component inventory reconciled at 21 entries. |
+| **Type** | Feature / Security / Performance |
+| **Impact Classification** | High |
+| **Modules Affected** | admin-panel, user-panel, auth |
+| **Files Changed** | ReauthDialog.tsx, useInactivityTimeout.ts, SecurityPage.tsx, PasswordChangeCard.tsx, UserLayout.tsx, AdminLayout.tsx, App.tsx, useProfile.ts, useMfaFactors.ts, useRoles.ts, AdminDashboard.tsx, auth-guards.ts, RequirePermission.tsx, component-inventory.md |
+| **Docs Updated** | phase-04-closure.md, system-state.md, master-plan.md, component-inventory.md, action-tracker.md |
+| **Related Watchlist** | — |
+| **Evidence** | TypeScript: zero errors. All 14 gate items verified with evidence (see phase-04-closure.md). Security: re-auth flows verified via code review — unenroll/password gated behind verifyOtp. Performance: prefetch keys verified to match consumer query keys. |
+| **Verified By** | AI Agent + User Review |
+| **Status** | Verified |
+
+---
+
 - If action introduces regression → must link watchlist item in `related_watchlist`
 - Regression fix actions must reference the original regression
 - Repeated failures in same area → tracked via recurrence in watchlist, referenced here
