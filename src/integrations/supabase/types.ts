@@ -324,6 +324,27 @@ export type Database = {
         }
         Relationships: []
       }
+      mfa_recovery_attempts: {
+        Row: {
+          failed_count: number
+          last_attempt_at: string
+          locked_until: string | null
+          user_id: string
+        }
+        Insert: {
+          failed_count?: number
+          last_attempt_at?: string
+          locked_until?: string | null
+          user_id: string
+        }
+        Update: {
+          failed_count?: number
+          last_attempt_at?: string
+          locked_until?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       mfa_recovery_codes: {
         Row: {
           code_hash: string
