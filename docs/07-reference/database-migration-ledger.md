@@ -547,6 +547,23 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 
 ---
 
+### MIG-031: Secure Cron Schedule with X-Cron-Secret
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-031 |
+| **Migration File** | `05_secure_cron_schedule.sql` |
+| **Source Dir** | `sql/` |
+| **Applied Date** | 2026-04-12 |
+| **Sequence Order** | 31 |
+| **Purpose** | Version-controlled reference for the 4 pg_cron schedules with X-Cron-Secret header. Contains placeholders for environment-specific values (project ref, anon key, cron secret). Apply via SQL Editor after replacing placeholders. |
+| **Objects Affected** | Data: 4 rows in `cron.job` |
+| **Status** | `active` |
+| **Linked Actions** | ACT-062 |
+| **Notes** | In `sql/` (not `supabase/migrations/`) because it contains environment-specific secrets. MIG-029 (superseded) → MIG-030 (unschedule) → MIG-031 (secure reschedule). |
+
+---
+
 ### Tables (12)
 
 | Table | Created By | Status |
