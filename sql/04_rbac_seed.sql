@@ -47,11 +47,12 @@ INSERT INTO public.permissions (key, description) VALUES
 
 -- ===================== ROLE-PERMISSION MAPPINGS =====================
 
--- admin: all permissions EXCEPT jobs.emergency
+-- admin: all permissions EXCEPT jobs.emergency, permissions.assign, permissions.revoke
 INSERT INTO public.role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM public.roles r, public.permissions p
-WHERE r.key = 'admin' AND p.key != 'jobs.emergency';
+WHERE r.key = 'admin'
+  AND p.key NOT IN ('jobs.emergency', 'permissions.assign', 'permissions.revoke');
 
 -- user: self-scope permissions only
 INSERT INTO public.role_permissions (role_id, permission_id)
