@@ -73,9 +73,10 @@ export function PasswordChangeCard() {
                 minLength={MIN_PASSWORD_LENGTH}
                 placeholder="Minimum 12 characters"
                 autoComplete="new-password"
+                aria-describedby={newPassword && !meetsMinLength ? 'new-password-error' : undefined}
               />
               {newPassword && !meetsMinLength && (
-                <p className="text-xs text-destructive">
+                <p id="new-password-error" className="text-xs text-destructive" role="alert">
                   Password must be at least {MIN_PASSWORD_LENGTH} characters
                 </p>
               )}
@@ -90,9 +91,10 @@ export function PasswordChangeCard() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Re-enter new password"
                 autoComplete="new-password"
+                aria-describedby={confirmPassword && !passwordsMatch ? 'confirm-password-error' : undefined}
               />
               {confirmPassword && !passwordsMatch && (
-                <p className="text-xs text-destructive">
+                <p id="confirm-password-error" className="text-xs text-destructive" role="alert">
                   Passwords do not match
                 </p>
               )}

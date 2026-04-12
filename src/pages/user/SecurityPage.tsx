@@ -196,6 +196,7 @@ export default function SecurityPage() {
                       className="h-8 w-8 text-destructive hover:text-destructive"
                       onClick={() => handleRequestUnenroll(factor)}
                       disabled={unenrolling}
+                      aria-label={`Remove MFA factor ${factor.friendly_name ?? factor.id}`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

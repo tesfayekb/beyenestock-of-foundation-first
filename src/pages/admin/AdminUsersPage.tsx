@@ -149,6 +149,7 @@ export default function AdminUsersPage() {
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9"
+            aria-label="Search users by name or email"
           />
         </div>
         <Select value={statusFilter} onValueChange={handleStatusChange}>

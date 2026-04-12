@@ -104,6 +104,7 @@ export default function AdminRolesPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9 max-w-sm"
+          aria-label="Search roles"
         />
       </div>
 
