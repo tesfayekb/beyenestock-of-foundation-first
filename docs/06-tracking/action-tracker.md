@@ -1295,6 +1295,32 @@ Each action must include:
 
 ---
 
+### ACT-050: Role CRUD + Recent-Auth Alignment
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-050 |
+| **Date** | 2026-04-12 |
+| **Action** | Implemented full role CRUD lifecycle and aligned all privileged edge functions to 30-minute recent-auth window. (1) Aligned assign-role, revoke-role, deactivate-user, reactivate-user, assign-permission-to-role, revoke-permission-from-role, create-role from the stale 5-minute default to 30 minutes. (2) Built delete-role edge function: roles.delete permission, requireRecentAuth 30min, defense-in-depth immutable/base guards, cascade metadata capture, fail-closed audit with rollback. (3) Added Delete Role button to RoleDetailPage with ConfirmActionDialog (requireReason=true), gated by roles.delete permission, hidden for base/immutable roles. (4) Fixed CreateRoleDialog error detection to use ApiError.code instead of message string. (5) Updated DW-025 and DW-026 to implemented. |
+| **Type** | Feature / Fix |
+| **Impact Classification** | High |
+| **Modules Affected** | rbac, admin-panel, api |
+| **Files Changed** | assign-role/index.ts, revoke-role/index.ts, deactivate-user/index.ts, reactivate-user/index.ts, assign-permission-to-role/index.ts, revoke-permission-from-role/index.ts, create-role/index.ts, delete-role/index.ts (new), RoleDetailPage.tsx, CreateRoleDialog.tsx, useRoleActions.ts, handler.ts |
+| **Docs Updated** | system-state.md, master-plan.md, deferred-work-register.md, action-tracker.md |
+| **Related Permissions** | roles.create, roles.delete |
+| **Related Events** | rbac.role_created, rbac.role_deleted |
+| **Evidence** | TypeScript: zero errors. All 8 privileged edge functions deployed with 30-minute recent-auth. delete-role edge function deployed. |
+| **Verified By** | AI Agent |
+| **Before State** | 6 of 8 privileged endpoints used stale 5-minute recent-auth. No delete-role endpoint or UI. DW-025/DW-026 open. CreateRoleDialog used fragile message string detection. |
+| **After State** | All 8 privileged endpoints use 30-minute window. Full role CRUD (create/delete) operational. DW-025/DW-026 closed. Error detection uses ApiError.code. |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Revert recent-auth arguments; delete delete-role/index.ts; revert RoleDetailPage/useRoleActions changes. |
+| **Blast Radius** | Medium |
+| **Health Impact** | Improved |
+| **Status** | Verified |
+
+---
+
 - If action introduces regression → must link watchlist item in `related_watchlist`
 - Regression fix actions must reference the original regression
 - Repeated failures in same area → tracked via recurrence in watchlist, referenced here
@@ -1321,7 +1347,7 @@ Each action must include:
 
 | Type | Count | High Impact |
 |------|-------|-------------|
-| Feature | 11 | 11 |
+| Feature | 12 | 12 |
 | Documentation | 14 | 13 |
 | Fix | 6 | 4 |
 | Security | 11 | 11 |
@@ -1332,7 +1358,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 41 |
+| Verified | 42 |
 | Superseded | 2 (ACT-027, ACT-028) |
 | In Progress | 0 |
 | Rolled Back | 0 |

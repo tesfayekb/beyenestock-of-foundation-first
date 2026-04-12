@@ -22,6 +22,11 @@ interface RevokePermissionParams {
   permission_id: string;
 }
 
+interface DeleteRoleParams {
+  role_id: string;
+  reason: string;
+}
+
 export function useAssignRole() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -84,6 +89,21 @@ export function useRevokePermission() {
     },
     onError: (error: Error) => {
       toast.error(error.message || 'Failed to revoke permission');
+    },
+  });
+}
+
+export function useDeleteRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: DeleteRoleParams) => apiClient.post('delete-role', params),
+    onSuccess: () => {
+      toast.success('Role deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to delete role');
     },
   });
 }

@@ -339,8 +339,8 @@ At each phase boundary (before advancing to the next phase):
 | DW-022 | Server-shaped admin user DTO/view | Phase 4 | Phase 6 | `assigned` |
 | DW-023 | Audit actor-scope display shaping | Phase 4 | Phase 5+ | `assigned` |
 | DW-024 | Admin panel unbounded client-side aggregation queries | Phase 4 | Phase 6 | `assigned` |
-| DW-025 | Role creation (create-role edge function + UI) | Phase 4 | Phase 6 | `assigned` |
-| DW-026 | Role deletion (delete-role edge function + UI) | Phase 4 | Phase 6 | `assigned` |
+| DW-025 | Role creation (create-role edge function + UI) | Phase 4 | Phase 6 | `implemented` |
+| DW-026 | Role deletion (delete-role edge function + UI) | Phase 4 | Phase 6 | `implemented` |
 
 ## Registry (continued)
 
@@ -699,7 +699,9 @@ At each phase boundary (before advancing to the next phase):
 | **Blocking Dependencies** | None — `roles.create` permission already seeded. Requires new `create-role` edge function + UI form. |
 | **Target Phase** | Phase 6 (hardening) |
 | **Risk If Forgotten** | Medium — admins cannot create custom roles, limiting RBAC flexibility. All roles must be seeded via SQL. |
-| **Status** | `assigned` |
+| **Status** | `implemented` |
+| **Implemented by Action** | ACT-050 |
+| **Implemented in Plan Version** | v9 |
 
 ---
 
@@ -715,7 +717,9 @@ At each phase boundary (before advancing to the next phase):
 | **Blocking Dependencies** | DW-025 (role creation should land first so there are deletable roles). Must handle cascade: reassign or block if users are assigned to the role. |
 | **Target Phase** | Phase 6 (hardening) |
 | **Risk If Forgotten** | Low — immutable roles cannot be deleted anyway; custom roles (once DW-025 lands) would accumulate without cleanup. |
-| **Status** | `assigned` |
+| **Status** | `implemented` |
+| **Implemented by Action** | ACT-050 |
+| **Implemented in Plan Version** | v9 |
 
 ---
 

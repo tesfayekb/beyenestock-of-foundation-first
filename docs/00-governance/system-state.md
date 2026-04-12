@@ -41,8 +41,8 @@ current_plan_version: v9
 approved_plan_baseline: v9
 plan_status: approved
 artifact_governance: active (artifact-index.md, database-migration-ledger.md, phase-closures/)
-deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-011, DW-012, DW-013, DW-021, DW-022, DW-023, DW-024, DW-025, DW-026]
-deferred_work_closed_this_phase: [DW-018, DW-027]
+deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-011, DW-012, DW-013, DW-021, DW-022, DW-023, DW-024]
+deferred_work_closed_this_phase: [DW-018, DW-025, DW-026, DW-027]
 last_updated: 2026-04-12
 ```
 
