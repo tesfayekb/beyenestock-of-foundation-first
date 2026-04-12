@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from './DashboardLayout';
 import { adminNavigation } from '@/config/admin-navigation';
 import { RequireAuth } from '@/components/auth/RequireAuth';
@@ -6,6 +8,8 @@ import { AccessDenied } from '@/components/dashboard/AccessDenied';
 import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
+import { ROLES_QUERY_KEY, rolesQueryFn, PERMISSIONS_QUERY_KEY, permissionsQueryFn } from '@/hooks/useRoles';
+import { apiClient } from '@/lib/api-client';
 
 /**
  * AdminLayout renders the shell unconditionally (sidebar + header),
@@ -17,9 +21,22 @@ import { ROUTES } from '@/config/routes';
  * the case where MFA has never been set up at all.
  */
 export function AdminLayout() {
-  const { mfaStatus } = useAuth();
+  const { mfaStatus, user } = useAuth();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const returnTo = `${location.pathname}${location.search}${location.hash}`;
+
+  // Prefetch core admin data sets on layout mount so child pages render instantly
+  useEffect(() => {
+    if (!user) return;
+    queryClient.prefetchQuery({ queryKey: [...ROLES_QUERY_KEY], queryFn: rolesQueryFn, staleTime: 5 * 60 * 1000 });
+    queryClient.prefetchQuery({ queryKey: [...PERMISSIONS_QUERY_KEY], queryFn: permissionsQueryFn, staleTime: 5 * 60 * 1000 });
+    queryClient.prefetchQuery({
+      queryKey: ['admin', 'users', { limit: 25, offset: 0 }],
+      queryFn: () => apiClient.get('list-users', { limit: 25, offset: 0 }),
+      staleTime: 30_000,
+    });
+  }, [user, queryClient]);
 
   return (
     <RequireAuth>

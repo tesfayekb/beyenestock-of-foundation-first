@@ -27,11 +27,17 @@ export interface RoleDetail extends RoleListItem {
   users: { id: string; display_name: string | null; assigned_at: string }[];
 }
 
+/** Shared query key for role list — used by hooks and prefetch. */
+export const ROLES_QUERY_KEY = ['admin', 'roles'] as const;
+
+/** Shared query fn for role list — used by hooks and prefetch. */
+export const rolesQueryFn = () => apiClient.get<RoleListItem[]>('list-roles');
+
 export function useRoles(options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: ['admin', 'roles'],
-    queryFn: () => apiClient.get<RoleListItem[]>('list-roles'),
-    staleTime: 30_000,
+    queryKey: ROLES_QUERY_KEY,
+    queryFn: rolesQueryFn,
+    staleTime: 5 * 60 * 1000,
     enabled: options?.enabled ?? true,
   });
 }
@@ -41,14 +47,20 @@ export function useRoleDetail(roleId: string | undefined) {
     queryKey: ['admin', 'role', roleId],
     queryFn: () => apiClient.get<RoleDetail>('get-role-detail', { role_id: roleId }),
     enabled: !!roleId,
-    staleTime: 30_000,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
+/** Shared query key for permissions list — used by hooks and prefetch. */
+export const PERMISSIONS_QUERY_KEY = ['admin', 'permissions'] as const;
+
+/** Shared query fn for permissions list — used by hooks and prefetch. */
+export const permissionsQueryFn = () => apiClient.get<PermissionListItem[]>('list-permissions');
+
 export function usePermissions() {
   return useQuery({
-    queryKey: ['admin', 'permissions'],
-    queryFn: () => apiClient.get<PermissionListItem[]>('list-permissions'),
-    staleTime: 30_000,
+    queryKey: PERMISSIONS_QUERY_KEY,
+    queryFn: permissionsQueryFn,
+    staleTime: 5 * 60 * 1000,
   });
 }

@@ -40,7 +40,13 @@ const UserDashboard = lazy(() => import("./pages/user/UserDashboard"));
 const ProfilePage = lazy(() => import("./pages/user/ProfilePage"));
 const SecurityPage = lazy(() => import("./pages/user/SecurityPage"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+    },
+  },
+});
 
 /** Wraps a page with route-level permission enforcement */
 function PermissionGate({ permission, children }: { permission: string | string[]; children: React.ReactNode }) {
