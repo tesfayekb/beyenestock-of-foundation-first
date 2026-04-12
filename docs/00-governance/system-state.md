@@ -36,7 +36,7 @@ status: implementation in progress
 phase: development
 code_generation: allowed
 modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 denial logging hardened), api implemented (Stage 3A closed + Phase 3.5 superadmin guardrails hardened), admin-panel implemented (Phase 4 CLOSED), user-panel implemented (Phase 4 CLOSED)
-active_work: Phase 4 CLOSED (ACT-048). All 14 gate items passed. Security hardening complete (re-auth gates, inactivity timeout). Performance optimization complete (prefetching, cache tuning). Next: Phase 5 planning.
+active_work: Phase 4 CLOSED (ACT-048). Post-closure hardening patch applied: ACT-049 aligned role-permission mutation recent-auth window to 30 minutes for permission-management consistency. Next: Phase 5 planning.
 current_plan_version: v9
 approved_plan_baseline: v9
 plan_status: approved
@@ -79,9 +79,9 @@ If inconsistency is detected → execution must **STOP** and be corrected.
 | Module | Status | Last Updated |
 |--------|--------|-------------|
 | auth | in progress (A+D implemented + hardened: shared functions, events, email gate; duplicate MFA enroll prevention + existing-factor/pending-factor MFA route recovery [ACT-047]; B+C deferred [DW-001/002], MFA recovery codes deferred [DW-008]) | 2026-04-11 |
-| rbac | implemented (Phase 2 gate 12/12 closed + Phase 3.5 hardened: requireRecentAuth on 4 RBAC endpoints, self-superadmin-revocation prevention [DW-015]) | 2026-04-10 |
+| rbac | implemented (Phase 2 gate 12/12 closed + Phase 3.5 hardened: requireRecentAuth on 4 RBAC endpoints, self-superadmin-revocation prevention [DW-015]; ACT-049 aligned permission mutation endpoints to 30-minute recent-auth window) | 2026-04-12 |
 | user-management | implemented (Phase 3C closed [ACT-032]: lifecycle, deactivate/reactivate, auth ban/unban; Phase 3D Gate 1 runtime-verified [ACT-035]) | 2026-04-10 |
-| admin-panel | implemented (Phase 4 CLOSED [ACT-048]: all 12 stages complete, security hardened with re-auth gates + inactivity timeout, performance optimized with prefetching) | 2026-04-12 |
+| admin-panel | implemented (Phase 4 CLOSED [ACT-048] + ACT-049 post-closure hardening: role-permission assignment/revocation recent-auth threshold aligned to 30 minutes) | 2026-04-12 |
 | user-panel | implemented (Phase 4 CLOSED [ACT-048]: ProfilePage, SecurityPage, UserDashboard, useProfile, useMfaFactors, ReauthDialog, useInactivityTimeout) | 2026-04-12 |
 | audit-logging | implemented (Phase 3B closed + Phase 3.5 hardened: centralized denial audit logging via auth.permission_denied event, nullable actor_id, correlation_id in metadata [DW-014]) | 2026-04-10 |
 | health-monitoring | not started | — |

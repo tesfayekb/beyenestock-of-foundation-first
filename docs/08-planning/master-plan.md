@@ -356,6 +356,7 @@ Implement role-based access control.
 - [x] MFA removal requires email OTP re-authentication — *ReauthDialog + supabase.auth.reauthenticate()*
 - [x] Password change requires email OTP re-authentication — *ReauthDialog replaces client-only isRecentlyAuthenticated gate*
 - [x] Session inactivity timeout active (30 min) — *useInactivityTimeout with visibilitychange awareness*
+- [x] Role permission assignment/revocation honors the 30-minute recent-auth window — *ACT-049: assign-permission-to-role + revoke-permission-from-role aligned from the stale 5-minute default to the approved 30-minute window*
 
 **Phase 4 Closure:** [phase-04-closure.md](phase-closures/phase-04-closure.md) — ACT-048
 
