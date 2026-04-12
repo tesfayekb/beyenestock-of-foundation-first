@@ -14,7 +14,7 @@ import { useUserRoles } from '@/hooks/useUserRoles';
 import { checkPermission } from '@/lib/rbac';
 import { ROUTES } from '@/config/routes';
 import { ArrowLeft, Shield, Users, Key, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+
 
 interface PermissionGroup {
   resource: string;
@@ -75,13 +75,15 @@ export default function RoleDetailPage() {
       mutation.mutate(
         { role_id: id, permission_id: permissionId },
         {
+          onError: () => {
+            refetch();
+          },
           onSettled: () => {
             setPendingToggles((prev) => {
               const next = new Set(prev);
               next.delete(permissionId);
               return next;
             });
-            refetch();
           },
         },
       );
