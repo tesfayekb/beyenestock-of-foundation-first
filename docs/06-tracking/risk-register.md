@@ -312,9 +312,28 @@ Each risk must include:
 | **Status** | Mitigated → Monitored |
 | **Last Reviewed** | 2026-04-10 |
 
----
+### RISK-011: Narrow Base Role Revocation Guard
 
-## Leading vs Lagging Risk Indicators
+| Field | Value |
+|-------|-------|
+| **Type** | Authorization / RLS |
+| **Likelihood** | 1 |
+| **Impact** | 4 |
+| **Risk Score** | 4 |
+| **Priority** | LOW |
+| **Owner** | Project Lead |
+| **Affected Modules** | rbac, admin-panel |
+| **Trigger Conditions** | A new base role (is_base=true) is added with a key other than `user`, `admin`, or `superadmin`. The revoke-role edge function guard (`role.is_base && role.key === 'user'`) would not protect it. |
+| **Detection** | Code review when adding new base roles; migration review checklist |
+| **Prevention** | Current mitigation: privilege hierarchy prevents non-superadmin from revoking admin/superadmin. Only the `user` key lacks hierarchy protection — and it is explicitly guarded. Future hardening: broaden guard to `if (role.is_base)` to protect all base roles unconditionally. |
+| **Response** | Broaden the revoke-role guard condition before deploying the new base role |
+| **Residual Risk** | Low (no unprotected base roles exist today) |
+| **Related Risks** | RISK-001 |
+| **Status** | Accepted |
+| **Accepted By** | Project Lead |
+| **Last Reviewed** | 2026-04-12 |
+
+---
 
 Each risk must define early warning (leading) and post-occurrence (lagging) indicators:
 
