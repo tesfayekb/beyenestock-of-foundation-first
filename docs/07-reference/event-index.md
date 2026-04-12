@@ -898,6 +898,42 @@ Key event chains showing upstream triggers and downstream effects:
 | **Related tests** | Monitor failure emission, independent alert channel test |
 | **Lifecycle** | active |
 
+#### `health.alert_config_created` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | audit |
+| **Severity** | LOW |
+| **Owner module** | health-monitoring |
+| **Consumers** | audit-logging |
+| **Description** | Alert configuration created |
+| **Payload schema** | `{ actor_id: uuid, config: { metric_key: string, severity: enum, threshold_value: number, comparison: enum }, target_id: uuid }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Fail-closed — creation rolled back if audit write fails |
+| **Observability** | Logged |
+| **Lifecycle** | active |
+
+#### `health.alert_config_updated` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | audit |
+| **Severity** | LOW |
+| **Owner module** | health-monitoring |
+| **Consumers** | audit-logging |
+| **Description** | Alert configuration updated |
+| **Payload schema** | `{ actor_id: uuid, updates: Record<string, unknown>, target_id: uuid }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Fail-closed — update aborted if audit write fails |
+| **Observability** | Logged |
+| **Lifecycle** | active |
+
 ### API Events
 
 #### `api.error` — v1
