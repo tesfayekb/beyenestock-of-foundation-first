@@ -76,9 +76,10 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     })
 
     if (!auditResult.success) {
-      // Roll back: restore previous state by re-applying original values
-      // Since we can't easily get pre-update state, delete is safer for config changes
-      console.error('[ALERT-CONFIG] Audit write failed, rolling back update', {
+      // NOTE: The update has already persisted in the DB. True rollback requires
+      // pre-fetching old values before the update (deferred: DW-028).
+      // The caller receives a 500, surfacing the failure even though the change took effect.
+      console.error('[ALERT-CONFIG] Audit write failed; update persists without audit record', {
         configId: id,
         correlationId: ctx.correlationId,
       })
