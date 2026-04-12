@@ -1164,6 +1164,21 @@ When changing any indexed function:
 
 ---
 
+### `verifyCronSecret()` — Edge Function Shared Utility
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/_shared/cron-auth.ts` |
+| **Classification** | Critical — Security gate for all scheduled jobs |
+| **Signature** | `verifyCronSecret(req: Request): Response \| null` |
+| **Returns** | `null` if valid, `Response(401)` if invalid, `Response(500)` if CRON_SECRET not configured |
+| **Side Effects** | None |
+| **Consumers** | job-health-check, job-metrics-aggregate, job-alert-evaluation, job-audit-cleanup |
+| **Security** | Compares `X-Cron-Secret` header against `CRON_SECRET` env var. Constant-time not enforced (acceptable for server-to-server with high-entropy secret). |
+| **Added** | ACT-062 |
+
+---
+
 ## Dependencies
 
 - [Constitution](../00-governance/constitution.md) — Rule 6
