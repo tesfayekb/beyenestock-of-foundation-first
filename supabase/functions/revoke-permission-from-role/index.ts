@@ -37,10 +37,18 @@ Deno.serve(createHandler(async (req: Request) => {
 
   // Validate role exists
   const { data: role } = await supabaseAdmin
-    .from('roles').select('id, key').eq('id', role_id).single()
+    .from('roles').select('id, key, is_immutable').eq('id', role_id).single()
   if (!role) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(404, 'Role not found', { correlationId: ctx.correlationId })
+  }
+
+  // Gap 3 fix: Immutable role check
+  if (role.is_immutable) {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(409, `Cannot modify permissions of immutable role: ${role.key}`, {
+      correlationId: ctx.correlationId,
+    })
   }
 
   // Validate permission exists

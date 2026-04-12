@@ -6,6 +6,8 @@ export interface UserRoleAssignment {
   role_id: string;
   role_key: string;
   role_name: string;
+  is_base: boolean;
+  is_immutable: boolean;
   assigned_at: string;
 }
 
@@ -22,7 +24,9 @@ async function fetchUserRolesAdmin(userId: string): Promise<UserRoleAssignment[]
       assigned_at,
       roles (
         key,
-        name
+        name,
+        is_base,
+        is_immutable
       )
     `)
     .eq('user_id', userId);
@@ -34,6 +38,8 @@ async function fetchUserRolesAdmin(userId: string): Promise<UserRoleAssignment[]
     role_id: ur.role_id,
     role_key: ur.roles?.key ?? '',
     role_name: ur.roles?.name ?? '',
+    is_base: ur.roles?.is_base ?? false,
+    is_immutable: ur.roles?.is_immutable ?? false,
     assigned_at: ur.assigned_at,
   }));
 }

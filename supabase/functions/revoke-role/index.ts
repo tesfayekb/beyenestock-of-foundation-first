@@ -37,10 +37,18 @@ Deno.serve(createHandler(async (req: Request) => {
 
   // Get role info
   const { data: role, error: roleError } = await supabaseAdmin
-    .from('roles').select('id, key').eq('id', role_id).single()
+    .from('roles').select('id, key, is_base').eq('id', role_id).single()
   if (roleError || !role) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(404, 'Role not found', { correlationId: ctx.correlationId })
+  }
+
+  // Gap 1 fix: Base role is irrevocable
+  if (role.is_base && role.key === 'user') {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(409, 'Cannot revoke the base user role', {
+      correlationId: ctx.correlationId,
+    })
   }
 
   // Self-superadmin-revocation guard
@@ -49,6 +57,24 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(409, 'Cannot revoke your own superadmin role', {
       correlationId: ctx.correlationId,
     })
+  }
+
+  // Gap 2 fix: Privilege hierarchy enforcement
+  // Weight: superadmin=3, admin=2, everything else=1
+  const ROLE_WEIGHTS: Record<string, number> = { superadmin: 3, admin: 2 }
+  const targetWeight = ROLE_WEIGHTS[role.key] ?? 1
+
+  if (targetWeight >= 2) {
+    // Only superadmin can revoke admin or superadmin roles
+    const { data: actorIsSuperadmin } = await supabaseAdmin.rpc('is_superadmin', {
+      _user_id: ctx.user.id,
+    })
+    if (!actorIsSuperadmin) {
+      const { apiError } = await import('../_shared/api-error.ts')
+      return apiError(403, `Only superadmin can revoke the ${role.key} role`, {
+        correlationId: ctx.correlationId,
+      })
+    }
   }
 
   // Last-superadmin guard (DB trigger also enforces this)

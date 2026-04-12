@@ -23,7 +23,8 @@ import { checkPermission } from '@/lib/rbac';
 import { useAuth } from '@/contexts/AuthContext';
 import { ROUTES } from '@/config/routes';
 import { format } from 'date-fns';
-import { ArrowLeft, ShieldAlert, ShieldCheck, Mail, Calendar, Clock, FileText, Plus, X } from 'lucide-react';
+import { ArrowLeft, ShieldAlert, ShieldCheck, Mail, Calendar, Clock, FileText, Plus, X, Lock } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -182,21 +183,35 @@ export default function UserDetailPage() {
                 <LoadingSkeleton variant="card" rows={2} />
               ) : userRoles && userRoles.length > 0 ? (
                 <div className="space-y-2">
-                  {userRoles.map((role) => (
-                    <div key={role.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                      <Badge variant="secondary" className="text-sm">{role.role_name}</Badge>
-                      {canRevokeRoles && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => setRevokeRoleTarget({ role_id: role.role_id, role_name: role.role_name })}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+                  {userRoles.map((role) => {
+                    const isBaseRole = role.is_base || role.role_key === 'user';
+                    return (
+                      <div key={role.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                        <Badge variant="secondary" className="text-sm">{role.role_name}</Badge>
+                        {canRevokeRoles && (
+                          isBaseRole ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex h-7 w-7 items-center justify-center text-muted-foreground">
+                                  <Lock className="h-3 w-3" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>Base role — cannot be revoked</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={() => setRevokeRoleTarget({ role_id: role.role_id, role_name: role.role_name })}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No roles assigned</p>
