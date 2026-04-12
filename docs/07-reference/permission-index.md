@@ -197,6 +197,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related risks** | RISK-002 (privilege escalation) |
 | **Related watchlist** | RW-001 |
 | **Related tests** | Role assignment allow/deny suite |
+| **Depends on** | `roles.view`, `users.view_all`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `roles.revoke`
@@ -219,6 +220,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `rbac.role_revoked` |
 | **Related risks** | RISK-002 |
 | **Related tests** | Role revocation allow/deny suite |
+| **Depends on** | `roles.view`, `users.view_all`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `roles.view`
@@ -238,6 +240,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Reauth required** | No |
 | **Related routes** | `/admin/roles` |
 | **Related tests** | Role view allow/deny tests |
+| **Depends on** | — (no dependencies) |
 | **Lifecycle** | active |
 
 #### `roles.create`
@@ -260,6 +263,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `rbac.role_created` |
 | **Related risks** | RISK-002 (privilege escalation via new role) |
 | **Related tests** | Role creation allow/deny suite |
+| **Depends on** | `roles.view`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `roles.delete`
@@ -282,6 +286,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `rbac.role_deleted` |
 | **Related risks** | RISK-002 (orphaned users after role deletion) |
 | **Related tests** | Role deletion allow/deny suite, base role protection tests |
+| **Depends on** | `roles.view`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `roles.edit`
@@ -304,6 +309,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `rbac.role_updated` |
 | **Related risks** | RISK-002 |
 | **Related tests** | Role edit allow/deny suite, immutable role protection tests |
+| **Depends on** | `roles.view`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `permissions.assign`
@@ -326,6 +332,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `rbac.permission_assigned` |
 | **Related risks** | RISK-002 (privilege escalation via permission grant) |
 | **Related tests** | Permission assignment allow/deny suite |
+| **Depends on** | `roles.view`, `permissions.view`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `permissions.revoke`
@@ -348,6 +355,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `rbac.permission_revoked` |
 | **Related risks** | RISK-002 (privilege escalation — access removal) |
 | **Related tests** | Permission revocation allow/deny suite |
+| **Depends on** | `roles.view`, `permissions.view`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `permissions.view`
@@ -368,6 +376,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related routes** | `/admin/permissions` |
 | **Related functions** | `checkPermission()` |
 | **Related tests** | Permissions view allow/deny tests |
+| **Depends on** | `admin.access` |
 | **Lifecycle** | active |
 
 ### User Management Permissions
@@ -390,6 +399,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related routes** | `/admin/users` |
 | **Related functions** | `listUsers()` |
 | **Related tests** | User listing allow/deny tests |
+| **Depends on** | — (no dependencies) |
 | **Lifecycle** | active |
 
 #### `users.edit_any`
@@ -411,6 +421,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related functions** | `updateUserProfile()` |
 | **Related events** | `user.profile_updated` |
 | **Related tests** | User edit allow/deny suite |
+| **Depends on** | `users.view_all`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `users.deactivate`
@@ -432,6 +443,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `user.account_deactivated` |
 | **Related risks** | User access disruption |
 | **Related tests** | Deactivation allow/deny suite, reactivation tests |
+| **Depends on** | `users.view_all`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `users.reactivate`
@@ -453,6 +465,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `user.account_reactivated` |
 | **Related risks** | Premature access restoration |
 | **Related tests** | Reactivation allow/deny suite, post-reactivation access tests |
+| **Depends on** | `users.view_all`, `admin.access` |
 | **Lifecycle** | active |
 
 ### Self-Scope Permissions
@@ -475,6 +488,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related routes** | `/settings`, `/dashboard` |
 | **Related functions** | `requireSelfScope()`, `getUserProfile()` |
 | **Related tests** | Self-view allow test, cross-user deny test |
+| **Depends on** | — (no dependencies) |
 | **Lifecycle** | active |
 
 #### `users.edit_self`
@@ -496,6 +510,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related functions** | `requireSelfScope()`, `updateUserProfile()` |
 | **Related events** | `user.profile_updated` |
 | **Related tests** | Self-edit allow test, cross-user deny test |
+| **Depends on** | — (no dependencies) |
 | **Lifecycle** | active |
 
 #### `profile.self_manage`
@@ -517,6 +532,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related functions** | `requireSelfScope()`, `checkPermission()` |
 | **Related events** | `user_panel.settings_changed` |
 | **Related tests** | Self-manage allow test, cross-user deny test |
+| **Depends on** | — (no dependencies) |
 | **Lifecycle** | active |
 
 #### `mfa.self_manage`
@@ -539,6 +555,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `user_panel.mfa_updated`, `auth.mfa_enrolled` |
 | **Related risks** | RISK-001 (credential compromise — MFA downgrade) |
 | **Related tests** | MFA self-manage allow test, re-auth enforcement test, cross-user deny test |
+| **Depends on** | — (no dependencies) |
 | **Lifecycle** | active |
 
 #### `session.self_manage`
@@ -560,6 +577,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related functions** | `requireSelfScope()`, `requireRecentAuth()`, `checkPermission()` |
 | **Related events** | `auth.session_revoked` |
 | **Related tests** | Session self-manage allow test, re-auth enforcement test, cross-user deny test |
+| **Depends on** | — (no dependencies) |
 | **Lifecycle** | active |
 
 ### Admin Permissions
@@ -583,6 +601,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related functions** | `requireRole()`, `checkPermission()` |
 | **Related risks** | RISK-002 (privilege escalation) |
 | **Related tests** | Admin access allow/deny suite |
+| **Depends on** | — (no dependencies; this is a root permission) |
 | **Lifecycle** | active |
 
 #### `admin.config`
@@ -603,6 +622,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related routes** | `/admin/config` |
 | **Related events** | `admin.config_changed` |
 | **Related tests** | Config change allow/deny suite |
+| **Depends on** | `admin.access` |
 | **Lifecycle** | active |
 
 ### Audit Permissions
@@ -625,6 +645,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related routes** | `/admin/audit` |
 | **Related functions** | `queryAuditLogs()` |
 | **Related tests** | Audit view allow/deny tests |
+| **Depends on** | `admin.access` |
 | **Lifecycle** | active |
 
 #### `audit.export`
@@ -644,6 +665,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Reauth required** | No |
 | **Related routes** | `/admin/audit/export` |
 | **Related tests** | Audit export allow/deny suite |
+| **Depends on** | `audit.view`, `admin.access` |
 | **Lifecycle** | active |
 
 ### Monitoring Permissions
@@ -666,6 +688,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related routes** | `/admin/monitoring` |
 | **Related functions** | `getSystemHealth()` |
 | **Related tests** | Monitoring view allow/deny tests |
+| **Depends on** | `admin.access` |
 | **Lifecycle** | active |
 
 #### `monitoring.configure`
@@ -685,6 +708,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Reauth required** | No |
 | **Related routes** | `/admin/monitoring/config` |
 | **Related tests** | Monitoring config allow/deny tests |
+| **Depends on** | `monitoring.view`, `admin.access` |
 | **Lifecycle** | active |
 
 ### Job Permissions
@@ -706,6 +730,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Reauth required** | No |
 | **Related routes** | `/admin/jobs` |
 | **Related tests** | Jobs view allow/deny tests |
+| **Depends on** | `admin.access` |
 | **Lifecycle** | active |
 
 #### `jobs.trigger`
@@ -726,6 +751,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related routes** | `/admin/jobs/:id/trigger` |
 | **Related events** | `job.started` |
 | **Related tests** | Job trigger allow/deny suite |
+| **Depends on** | `jobs.view`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `jobs.pause`
@@ -746,6 +772,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related routes** | `/admin/jobs/:id/pause` |
 | **Related events** | `job.paused` |
 | **Related tests** | Job pause allow/deny suite |
+| **Depends on** | `jobs.view`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `jobs.resume`
@@ -765,6 +792,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Reauth required** | No |
 | **Related routes** | `/admin/jobs/:id/resume` |
 | **Related tests** | Job resume allow/deny suite |
+| **Depends on** | `jobs.view`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `jobs.retry`
@@ -785,6 +813,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related routes** | `/admin/jobs/:id/retry` |
 | **Related events** | `job.retry_scheduled` |
 | **Related tests** | Job retry allow/deny suite |
+| **Depends on** | `jobs.view`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `jobs.deadletter.manage`
@@ -806,6 +835,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `job.replayed`, `job.dead_lettered` |
 | **Related risks** | RISK-007 (job failure cascade) |
 | **Related tests** | Dead-letter management allow/deny suite |
+| **Depends on** | `jobs.view`, `admin.access` |
 | **Lifecycle** | active |
 
 #### `jobs.emergency`
@@ -828,6 +858,7 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related events** | `job.kill_switch_activated` |
 | **Related risks** | RISK-007 (job failure cascade) |
 | **Related tests** | Kill switch allow/deny suite, emergency flow tests |
+| **Depends on** | `admin.access` |
 | **Lifecycle** | active |
 
 ---
