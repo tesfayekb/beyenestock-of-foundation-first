@@ -283,13 +283,17 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 - Dead-letter management: inspect, replay, cancel, mark resolved
 - Emergency controls UI: kill switch, pause/resume
 - Alert configuration UI (requires `monitoring.configure`)
-- **DW-019: User Session Revocation** — list-sessions + revoke-session edge functions, admin UI for session management
+- **DW-019: User Self-Service Session Revocation** — revoke-sessions edge function, user panel SecurityPage UI
 
 **DW-019 Implementation:**
-- `GET /list-sessions` edge function — requires `users.view_all`, returns active sessions for a user via `supabase.auth.admin.listUserSessions()`
-- `POST /revoke-session` edge function — requires `users.edit_any` + `requireRecentAuth()`, revokes a specific session via `supabase.auth.admin.signOut(userId, scope)`
-- Admin UI: session list on UserDetailPage with revoke action
-- Audit event: `user.session_revoked`
+- Location: `SecurityPage.tsx` (user panel), NOT admin panel
+- `POST /revoke-sessions` edge function — requires `session.self_manage` (self-scope: `requireSelfScope(ctx, targetUserId)`), accepts `{ scope: 'others' | 'global' }`, calls `supabaseAdmin.auth.admin.signOut(userId, scope)`, applies `requireRecentAuth()`, audits `user.sessions_revoked` with scope in metadata
+- No session listing in Phase 5 — Supabase admin SDK returns no useful session metadata; listing is only meaningful with per-session revocation (Phase 6)
+- UI: Two distinct actions on SecurityPage:
+  - **"Sign out other devices"** — scope: `others`, standard action, keeps current session active
+  - **"Sign out everywhere"** — scope: `global`, destructive action with confirmation dialog, invalidates all sessions including current
+- Phase 6 DW item: Per-session revocation with session list view — revisit when Supabase stabilizes auth.sessions API or adds individual session revocation to admin SDK
+- Audit event: `user.sessions_revoked` (with `{ scope }` in metadata)
 
 **Phase Gate 5F:**
 - [ ] Health dashboard reflects real system state
@@ -297,8 +301,9 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 - [ ] Dead-letter actions (replay, cancel, resolve) function correctly
 - [ ] Kill switch and pause controls accessible and functional
 - [ ] Alert configuration UI creates/updates alert_configs
-- [ ] DW-019: Session list displays for target user
-- [ ] DW-019: Session revocation works with reauth and audit trail
+- [ ] DW-019: "Sign out other devices" revokes other sessions, user stays logged in
+- [ ] DW-019: "Sign out everywhere" terminates all sessions with confirmation dialog
+- [ ] DW-019: Both actions require reauth and produce audit trail
 - [ ] All new pages use DashboardLayout shell and design system tokens
 
 ---
@@ -309,6 +314,7 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 |----|------|--------|
 | DW-020 | User Notification Preferences | No schema or backend infrastructure exists |
 | DW-023 | Audit actor-scope display shaping | Display-only improvement, no operational impact |
+| DW-024 | Per-session revocation with list view | Requires stable auth.sessions API or individual session revocation in Supabase admin SDK |
 
 ## New Permissions Summary
 
@@ -336,7 +342,7 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 | `job.kill_switch_activated` | 5E | Global kill switch triggered |
 | `job.paused` | 5E | Job paused by operator or system |
 | `job.resumed` | 5E | Job resumed |
-| `user.session_revoked` | 5F | Admin revokes user session |
+| `user.sessions_revoked` | 5F | User revokes own sessions (self-service, scope in metadata) |
 
 ## Execution Order
 
