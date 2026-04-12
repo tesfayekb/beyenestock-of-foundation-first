@@ -241,7 +241,7 @@ export default function UserDetailPage() {
                       <p className="text-sm font-medium text-foreground">{entry.action}</p>
                       {entry.target_type && (
                         <p className="text-xs text-muted-foreground">
-                          {entry.target_type}{entry.target_id ? ` · ${entry.target_id.slice(0, 8)}…` : ''}
+                          {entry.target_type}{entry.target_id ? ` · ${entry.target_display_name ?? entry.target_id.slice(0, 8) + '…'}` : ''}
                         </p>
                       )}
                     </div>
