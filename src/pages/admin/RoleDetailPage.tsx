@@ -9,13 +9,16 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { useRoleDetail } from '@/hooks/useRoles';
 import { usePermissions } from '@/hooks/useRoles';
-import { useAssignPermission, useRevokePermission, useDeleteRole } from '@/hooks/useRoleActions';
+import { useAssignPermission, useRevokePermission, useDeleteRole, useUpdateRole } from '@/hooks/useRoleActions';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { checkPermission } from '@/lib/rbac';
 import { ROUTES } from '@/config/routes';
-import { ArrowLeft, Shield, Users, Key, Loader2, Info, Trash2 } from 'lucide-react';
+import { PERMISSION_DEPS } from '@/config/permission-deps';
+import { ArrowLeft, Shield, Users, Key, Loader2, Info, Trash2, Pencil, Check, X } from 'lucide-react';
 
 
 interface PermissionGroup {
@@ -33,19 +36,49 @@ export default function RoleDetailPage() {
   const canRevokePerms = checkPermission(context, 'permissions.revoke');
   const canModifyPerms = (canAssignPerms || canRevokePerms);
   const canDeleteRole = checkPermission(context, 'roles.delete');
+  const canEditRole = checkPermission(context, 'roles.edit');
 
   const { data: role, isLoading, error, refetch } = useRoleDetail(id);
   const { data: allPermissions } = usePermissions();
   const assignPermission = useAssignPermission();
   const revokePermission = useRevokePermission();
   const deleteRole = useDeleteRole();
+  const updateRole = useUpdateRole();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
 
   const isSuperadmin = role?.key === 'superadmin';
 
   // Track in-flight toggles to show spinners per-permission
   const [pendingToggles, setPendingToggles] = useState<Set<string>>(new Set());
+
+  const startEditing = useCallback(() => {
+    if (!role) return;
+    setEditName(role.name);
+    setEditDescription(role.description ?? '');
+    setIsEditing(true);
+  }, [role]);
+
+  const cancelEditing = useCallback(() => {
+    setIsEditing(false);
+  }, []);
+
+  const saveEditing = useCallback(() => {
+    if (!id || !role) return;
+    const changes: { role_id: string; name?: string; description?: string } = { role_id: id };
+    if (editName.trim() !== role.name) changes.name = editName.trim();
+    if (editDescription.trim() !== (role.description ?? '')) changes.description = editDescription.trim();
+    if (!changes.name && changes.description === undefined) {
+      setIsEditing(false);
+      return;
+    }
+    updateRole.mutate(changes, {
+      onSuccess: () => setIsEditing(false),
+    });
+  }, [id, role, editName, editDescription, updateRole]);
 
   const handleDeleteRole = useCallback(
     (reason?: string) => {
@@ -89,6 +122,22 @@ export default function RoleDetailPage() {
         permissions: perms.sort((a, b) => a.key.localeCompare(b.key)),
       }));
   }, [allPermissions, role]);
+
+  // Compute which permissions are required as dependencies of other assigned permissions
+  const requiredByDeps = useMemo<Set<string>>(() => {
+    if (!role) return new Set();
+    const assignedKeys = new Set(role.permissions.map(p => p.key));
+    const required = new Set<string>();
+    for (const key of assignedKeys) {
+      const deps = PERMISSION_DEPS[key];
+      if (deps) {
+        for (const dep of deps) {
+          if (assignedKeys.has(dep)) required.add(dep);
+        }
+      }
+    }
+    return required;
+  }, [role]);
 
   const handleToggle = useCallback(
     (permissionId: string, currentlyAssigned: boolean) => {
@@ -138,27 +187,68 @@ export default function RoleDetailPage() {
           <CardTitle className="flex items-center gap-2 text-base">
             <Shield className="h-4 w-4" />
             Role Details
+            {canEditRole && !role.is_immutable && !isEditing && (
+              <Button variant="ghost" size="icon" className="ml-auto h-7 w-7" onClick={startEditing}>
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {role.description && (
-            <p className="text-sm text-muted-foreground">{role.description}</p>
+          {isEditing ? (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Name</label>
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="mt-1"
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Description</label>
+                <Textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="mt-1"
+                  maxLength={500}
+                  rows={2}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={saveEditing} disabled={updateRole.isPending}>
+                  {updateRole.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+                  Save
+                </Button>
+                <Button size="sm" variant="ghost" onClick={cancelEditing} disabled={updateRole.isPending}>
+                  <X className="h-3.5 w-3.5 mr-1" />
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {role.description && (
+                <p className="text-sm text-muted-foreground">{role.description}</p>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {role.is_base && <Badge variant="secondary">Base Role</Badge>}
+                {role.is_immutable && <Badge variant="outline">Immutable</Badge>}
+                {!role.is_base && !role.is_immutable && canDeleteRole && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => setShowDeleteConfirm(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete Role
+                  </Button>
+                )}
+              </div>
+            </>
           )}
-          <div className="flex flex-wrap items-center gap-2">
-            {role.is_base && <Badge variant="secondary">Base Role</Badge>}
-            {role.is_immutable && <Badge variant="outline">Immutable</Badge>}
-            {!role.is_base && !role.is_immutable && canDeleteRole && (
-              <Button
-                variant="destructive"
-                size="sm"
-                className="ml-auto"
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                <Trash2 className="h-4 w-4 mr-1" />
-                Delete Role
-              </Button>
-            )}
-          </div>
         </CardContent>
       </Card>
 
@@ -215,6 +305,7 @@ export default function RoleDetailPage() {
                     <div className="grid gap-1.5">
                       {group.permissions.map((perm) => {
                         const isPending = pendingToggles.has(perm.id);
+                        const isDep = requiredByDeps.has(perm.key);
                         const isDisabled = role.is_immutable || isSuperadmin || isPending || !canModifyPerms ||
                           (perm.assigned && !canRevokePerms) || (!perm.assigned && !canAssignPerms);
                         return (
@@ -236,7 +327,12 @@ export default function RoleDetailPage() {
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-mono text-foreground leading-tight">{perm.key}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-mono text-foreground leading-tight">{perm.key}</p>
+                                {isDep && perm.assigned && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">dependency</Badge>
+                                )}
+                              </div>
                               {perm.description && (
                                 <p className="text-xs text-muted-foreground mt-0.5">{perm.description}</p>
                               )}
