@@ -187,11 +187,11 @@ Phase 6 closes remaining deferred work items (10 open after v2 deferrals), estab
    - UI: toggle button on UserDetailPage audit section
 
 **Gate:**
-- [ ] Rate limit counters persist across isolate restarts (or fallback documented)
-- [ ] No regression in existing rate-limited endpoints
-- [ ] Audit entries show actor display name (not raw UUID)
+- [x] Rate limit: DW-011 deferred to v2. In-memory limiter documented as defense-in-depth. Upstash Redis required for distributed enforcement.
+- [x] No regression in existing rate-limited endpoints
+- [x] Audit entries show actor display name (not raw UUID)
 - [ ] Actor-scope toggle works on UserDetailPage
-- [ ] No N+1 queries for actor resolution
+- [x] No N+1 queries for actor resolution
 
 ---
 

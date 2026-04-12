@@ -325,7 +325,7 @@ At each phase boundary (before advancing to the next phase):
 | DW-008 | MFA Recovery Codes | Phase 1 | Phase 6 | `implemented` |
 | DW-009 | requireRole() Shared Function | Phase 2 | Phase 3 | `implemented` |
 | DW-010 | requireSelfScope() Shared Function | Phase 2 | Phase 3 | `implemented` |
-| DW-011 | Distributed Rate Limiting | Phase 3 | Phase 6 | `assigned` |
+| DW-011 | Distributed Rate Limiting | Phase 3 | Phase 6 | `deferred (v2)` |
 | DW-012 | Authenticated lifecycle test infrastructure | Phase 3 | Phase 6 | `implemented` |
 | DW-013 | Orphaned test-user cleanup automation | Phase 3 | Phase 6 | `implemented` |
 | DW-014 | Denial audit logging | Phase 3 | Phase 3.5 | `implemented` |
@@ -364,9 +364,9 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | ACT-027 (rate limiting introduced), ACT-028 (rate limiter hardened) |
 | **Required Tests for Closure** | Cross-isolate rate limit enforcement, cold-start counter persistence, abuse pattern detection, admin dashboard rate limit visibility |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `deferred (v2)` |
+| **Implemented by Action** | N/A — deferred to v2. In-memory per-isolate limiter retained as defense-in-depth. Requires Upstash Redis for institutional-grade enforcement. |
+| **Implemented in Plan Version** | v11.0 (closure decision) |
 
 ---
 
