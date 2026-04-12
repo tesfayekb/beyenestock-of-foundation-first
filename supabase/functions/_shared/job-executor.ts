@@ -280,7 +280,7 @@ export async function executeWithRetry(
 
   // Emit job start audit event
   await logAuditEvent({
-    actorId: actorId ?? '00000000-0000-0000-0000-000000000000',
+    actorId: actorId ?? null,
     action: 'job.started',
     targetType: 'job',
     metadata: { jobId, executionId, attempt: 1, scheduleWindowId },
@@ -314,7 +314,7 @@ export async function executeWithRetry(
 
       // Emit job completed audit event
       await logAuditEvent({
-        actorId: actorId ?? '00000000-0000-0000-0000-000000000000',
+        actorId: actorId ?? null,
         action: 'job.completed',
         targetType: 'job',
         metadata: { jobId, executionId, attempt, durationMs, affectedRecords: result.affectedRecords },
@@ -374,7 +374,7 @@ export async function executeWithRetry(
 
   // Emit job failed audit event
   await logAuditEvent({
-    actorId: actorId ?? '00000000-0000-0000-0000-000000000000',
+    actorId: actorId ?? null,
     action: 'job.failed',
     targetType: 'job',
     metadata: { jobId, executionId, attempt, durationMs, failureType: lastFailureType, terminalState },
