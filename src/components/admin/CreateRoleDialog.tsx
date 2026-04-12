@@ -96,7 +96,11 @@ export function CreateRoleDialog({ open, onOpenChange }: CreateRoleDialogProps) 
       navigate(ROUTES.ADMIN_ROLE_DETAIL.replace(':id', result.id));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create role';
-      setError(msg);
+      if (msg.includes('re-authenticate') || msg.includes('RECENT_AUTH_REQUIRED')) {
+        setError('Your session is too old for this action. Please sign out and sign back in, then try again.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setSubmitting(false);
     }
