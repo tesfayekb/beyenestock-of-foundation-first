@@ -125,12 +125,13 @@ export function CreateRoleDialog({ open, onOpenChange }: CreateRoleDialogProps) 
         return;
       }
 
+      const created = result as CreateRoleSuccessResponse;
       await queryClient.invalidateQueries({ queryKey: ROLES_QUERY_KEY });
-      toast.success(`Role "${result.name}" created`);
+      toast.success(`Role "${created.name}" created`);
       handleOpenChange(false);
 
       // Navigate to the new role's detail page
-      navigate(ROUTES.ADMIN_ROLE_DETAIL.replace(':id', result.id));
+      navigate(ROUTES.ADMIN_ROLE_DETAIL.replace(':id', created.id));
     } catch (err: unknown) {
       if (err instanceof ApiError && err.code === 'RECENT_AUTH_REQUIRED') {
         setPendingPayload(payload);
