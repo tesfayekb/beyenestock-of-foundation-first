@@ -521,6 +521,27 @@ Key event chains showing upstream triggers and downstream effects:
 | **Related tests** | Role creation event emission test |
 | **Lifecycle** | active |
 
+#### `rbac.role_updated` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | rbac |
+| **Consumers** | audit-logging |
+| **Description** | Role name or description updated. Key is immutable and cannot be changed. |
+| **Payload schema** | `{ role_key: string, changes: { name?: string, description?: string }, previous: { name?: string, description?: string }, updated_by: uuid, timestamp: datetime }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure |
+| **Observability** | Logged, traced |
+| **Related permissions** | `roles.edit` |
+| **Related risks** | RISK-002 |
+| **Related tests** | Role update event emission test |
+| **Lifecycle** | active |
+
 #### `rbac.role_deleted` — v1
 
 | Field | Value |
