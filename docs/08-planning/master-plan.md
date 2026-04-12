@@ -1,6 +1,6 @@
 # Master Plan
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-10
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-12
 
 ## Purpose
 
@@ -345,12 +345,19 @@ Implement role-based access control.
 - [x] Sticky sidebar and sticky top nav verified in desktop and mobile — *SidebarProvider + sticky header*
 - [x] All async states use standardized LoadingSkeleton/ErrorState/EmptyState — *confirmed across all pages*
 - [x] All destructive flows use governed ConfirmActionDialog — *deactivate/reactivate/MFA unenroll*
-- [x] Component inventory doc matches actual implemented components — *14 dashboard + 4 admin + 3 layouts*
+- [x] Component inventory doc matches actual implemented components — *21 total: 15 dashboard + 4 admin + 1 user + 1 auth*
 
 *Contract gates:*
 - [x] Route index lifecycle updated to `active` for all implemented routes — *10 routes confirmed active*
 - [x] Permission index and implementation reconciled — no ungoverned permission keys — *10 keys verified*
 - [x] `text-gradient`, `glass` utilities do NOT exist in codebase — *confirmed absent*
+
+*Security gates (added during Phase 4 hardening):*
+- [x] MFA removal requires email OTP re-authentication — *ReauthDialog + supabase.auth.reauthenticate()*
+- [x] Password change requires email OTP re-authentication — *ReauthDialog replaces client-only isRecentlyAuthenticated gate*
+- [x] Session inactivity timeout active (30 min) — *useInactivityTimeout with visibilitychange awareness*
+
+**Phase 4 Closure:** [phase-04-closure.md](phase-closures/phase-04-closure.md) — ACT-048
 
 ---
 
