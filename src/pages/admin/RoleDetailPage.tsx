@@ -295,6 +295,11 @@ export default function RoleDetailPage() {
               This role is immutable — permissions cannot be changed.
             </p>
           )}
+          {!canModifyPerms && !role.is_immutable && !isSuperadmin && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Permission assignment requires superadmin access.
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           {groups.length > 0 ? (
