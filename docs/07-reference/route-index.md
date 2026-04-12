@@ -1400,6 +1400,38 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Lifecycle** | active |
 | **Added By** | Stage 5F |
 
+### POST /mfa-recovery-generate — Generate MFA Recovery Codes
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /mfa-recovery-generate` |
+| **Classification** | privileged |
+| **Owner Module** | auth |
+| **Auth** | Bearer JWT required |
+| **Permission** | Self-scope (actor = target) + `requireRecentAuth(30min)` |
+| **Rate Limit** | strict (10/min) |
+| **Request Body** | None |
+| **Response** | `{ codes: string[], message: string }` |
+| **Audit** | `auth.mfa_recovery_generated` |
+| **Lifecycle** | active |
+| **Added By** | Stage 6A (DW-008) |
+
+### POST /mfa-recovery-verify — Verify MFA Recovery Code
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /mfa-recovery-verify` |
+| **Classification** | privileged |
+| **Owner Module** | auth |
+| **Auth** | Bearer JWT required (AAL1 — user locked out of MFA) |
+| **Permission** | Self-scope (actor = target) |
+| **Rate Limit** | strict (10/min) |
+| **Request Body** | `{ code: string }` (8-char alphanumeric) |
+| **Response** | `{ success: boolean, remaining_codes: number, message: string }` |
+| **Audit** | `auth.mfa_recovery_used` (success), `auth.mfa_recovery_failed` (failure) |
+| **Lifecycle** | active |
+| **Added By** | Stage 6A (DW-008) |
+
 ---
 
 ## Related Documents

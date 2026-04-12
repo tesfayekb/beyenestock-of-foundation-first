@@ -1245,6 +1245,38 @@ When changing any indexed function:
 | **Lifecycle** | active |
 | **Added by** | Stage 5F (DW-019) |
 
+### `mfa-recovery-generate` — Edge Function
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/mfa-recovery-generate/index.ts` |
+| **Classification** | security-critical |
+| **Owner module** | auth |
+| **Consumers** | SecurityPage (user panel) |
+| **Signature** | `POST` (no body) |
+| **Description** | Generates 10 single-use MFA recovery codes, bcrypt-hashes them, stores hashes in `mfa_recovery_codes` table, returns plaintext codes once. Deletes any existing codes for the user before inserting. |
+| **Side effects** | Deletes existing recovery codes, inserts new hashed codes, emits `auth.mfa_recovery_generated` audit event |
+| **Error behavior** | Throws on insert failure |
+| **Security** | Bearer JWT + `requireRecentAuth(30min)`. Self-scope only (uses `ctx.user.id`). Strict rate limit. |
+| **Lifecycle** | active |
+| **Added by** | Stage 6A (DW-008) |
+
+### `mfa-recovery-verify` — Edge Function
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/mfa-recovery-verify/index.ts` |
+| **Classification** | security-critical |
+| **Owner module** | auth |
+| **Consumers** | MfaChallenge page |
+| **Signature** | `POST { code: string }` (8-char alphanumeric, validated via Zod) |
+| **Description** | Verifies a recovery code against stored bcrypt hashes. On match, marks code as used (`used_at` timestamp). Returns remaining code count. Does NOT require MFA (AAL1 only — user is locked out of primary MFA factor). |
+| **Side effects** | Marks matched code as used, emits `auth.mfa_recovery_used` (success) or `auth.mfa_recovery_failed` (failure) audit events |
+| **Error behavior** | Returns 400 if no codes available, 401 if code invalid. Throws on fetch failure. |
+| **Security** | Bearer JWT (AAL1). Self-scope only. Strict rate limit. Bcrypt comparison is intentionally slow (brute-force resistance). |
+| **Lifecycle** | active |
+| **Added by** | Stage 6A (DW-008) |
+
 ---
 
 ## Dependencies

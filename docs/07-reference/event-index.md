@@ -420,7 +420,7 @@ Key event chains showing upstream triggers and downstream effects:
 | **Related tests** | Denial audit emission test, payload validation test |
 | **Lifecycle** | active |
 
-#### `auth.mfa_recovered` — v1
+#### `auth.mfa_recovered` — v1 (GENERIC — superseded by specific events below)
 
 | Field | Value |
 |-------|-------|
@@ -439,6 +439,69 @@ Key event chains showing upstream triggers and downstream effects:
 | **Related risks** | RISK-001 (credential compromise) |
 | **Related tests** | MFA recovery emission test, payload validation test |
 | **Lifecycle** | active |
+
+#### `auth.mfa_recovery_generated` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | auth |
+| **Consumers** | audit-logging |
+| **Description** | User generated new MFA recovery codes (10 single-use codes). Previous codes deleted. |
+| **Payload schema** | `{ code_count: number }` + standard audit fields (actor_id, ip_address, user_agent, correlation_id) |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id (UUID) |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure — security event must not be lost |
+| **Observability** | Logged, traced |
+| **Related tests** | Recovery code generation audit test |
+| **Lifecycle** | active |
+| **Added by** | Stage 6A (DW-008) |
+
+#### `auth.mfa_recovery_used` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | CRITICAL |
+| **Owner module** | auth |
+| **Consumers** | audit-logging, health-monitoring |
+| **Description** | User consumed a single-use MFA recovery code to bypass MFA challenge. Code marked used and cannot be reused. |
+| **Payload schema** | `{ remaining_codes: number }` + standard audit fields |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id (UUID) |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure — CRITICAL security event must not be lost |
+| **Observability** | Logged, traced, rate-monitored, anomaly detection |
+| **Related risks** | RISK-001 (credential compromise) |
+| **Related tests** | Recovery code verification audit test |
+| **Lifecycle** | active |
+| **Notes** | Single-use: each code can only be verified once. When remaining_codes = 0, user should regenerate immediately. |
+| **Added by** | Stage 6A (DW-008) |
+
+#### `auth.mfa_recovery_failed` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | auth |
+| **Consumers** | audit-logging, health-monitoring |
+| **Description** | User submitted an invalid recovery code. Potential brute-force attempt. |
+| **Payload schema** | `{ reason: 'invalid_code' }` + standard audit fields |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id (UUID) |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure — security event must not be lost |
+| **Observability** | Logged, traced, rate-monitored |
+| **Related risks** | RISK-001 (credential compromise) |
+| **Related tests** | Failed recovery audit test |
+| **Lifecycle** | active |
+| **Added by** | Stage 6A (DW-008) |
 
 #### `auth.session_revoked` — v1
 
