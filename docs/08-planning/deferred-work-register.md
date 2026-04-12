@@ -257,9 +257,9 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | DEC-017 (MFA recovery code format: 10 codes, 8 alphanumeric, single-use, hashed storage) |
 | **Related Actions** | ACT-010, ACT-011 |
 | **Required Tests for Closure** | Recovery code generation (10 codes returned), code display + copy UX, single-use consumption (code works once then invalidated), full set regeneration (old codes invalidated), hashed storage verification (no plaintext in DB), recovery code + re-enrollment flow |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | ACT-064 |
+| **Implemented in Plan Version** | v11.0 |
 
 ---
 
