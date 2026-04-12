@@ -307,7 +307,7 @@ export async function executeWithRetry(
           attempt,
           completed_at: new Date().toISOString(),
           duration_ms: durationMs,
-          queue_delay_ms: scheduledTime ? Math.max(0, new Date(execRecord.started_at ?? startTime).getTime() - new Date(scheduledTime).getTime()) : 0,
+          queue_delay_ms: scheduledTime ? Math.max(0, startTime - new Date(scheduledTime).getTime()) : 0,
           affected_records: result.affectedRecords ?? 0,
           resource_usage: result.resourceUsage ?? {},
         })
