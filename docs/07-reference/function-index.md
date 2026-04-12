@@ -1177,6 +1177,58 @@ When changing any indexed function:
 | **Security** | Compares `X-Cron-Secret` header against `CRON_SECRET` env var. Constant-time not enforced (acceptable for server-to-server with high-entropy secret). |
 | **Added** | ACT-062 |
 
+### `checkDatabase()` — Health Probe
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/_shared/health-checks.ts` |
+| **Classification** | job-critical |
+| **Signature** | `checkDatabase(): Promise<SubsystemCheck>` |
+| **Returns** | `{ status: 'healthy' \| 'degraded' \| 'unhealthy', latency_ms: number, error?: string }` |
+| **Side Effects** | Reads `profiles` table (1 row) to measure DB latency |
+| **Consumers** | health-check, health-detailed, job-health-check |
+| **Thresholds** | >2000ms → degraded; query error → unhealthy |
+| **Lifecycle** | active |
+
+### `checkAuth()` — Health Probe
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/_shared/health-checks.ts` |
+| **Classification** | job-critical |
+| **Signature** | `checkAuth(): Promise<SubsystemCheck>` |
+| **Returns** | `{ status: 'healthy' \| 'degraded' \| 'unhealthy', latency_ms: number, error?: string }` |
+| **Side Effects** | Calls `auth.admin.listUsers(page:1, perPage:1)` to measure auth latency |
+| **Consumers** | health-check, health-detailed, job-health-check |
+| **Thresholds** | >3000ms → degraded; API error → unhealthy |
+| **Lifecycle** | active |
+
+### `checkAuditPipeline()` — Health Probe
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/_shared/health-checks.ts` |
+| **Classification** | job-critical |
+| **Signature** | `checkAuditPipeline(): Promise<SubsystemCheck>` |
+| **Returns** | `{ status: 'healthy' \| 'degraded' \| 'unhealthy', latency_ms: number, error?: string }` |
+| **Side Effects** | Reads `audit_logs` table (1 row) to measure pipeline latency |
+| **Consumers** | health-check, health-detailed, job-health-check |
+| **Thresholds** | >2000ms → degraded; query error → unhealthy |
+| **Lifecycle** | active |
+
+### `deriveOverallStatus()` — Health Status Aggregator
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/_shared/health-checks.ts` |
+| **Classification** | job-critical |
+| **Signature** | `deriveOverallStatus(checks: Record<string, SubsystemCheck>): 'healthy' \| 'degraded' \| 'unhealthy'` |
+| **Returns** | Worst-case aggregated status across all subsystem checks |
+| **Side Effects** | None (pure function) |
+| **Consumers** | health-check, health-detailed, job-health-check |
+| **Logic** | Any unhealthy → unhealthy; any degraded → degraded; else healthy |
+| **Lifecycle** | active |
+
 ### `revoke-sessions` — Edge Function
 
 | Field | Value |

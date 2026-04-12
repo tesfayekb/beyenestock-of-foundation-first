@@ -1605,6 +1605,41 @@ Each action must include:
 ---
 
 
+### ACT-062: Stage 5E — Emergency Controls & Operational Governance
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-062 |
+| **Date** | 2026-04-12 |
+| **Action** | (1) Added `circuit_breaker_threshold` column to `job_registry` (MIG-032, default 3). (2) Inserted kill-switch and 5 class-pause reserved rows in `job_registry`. (3) Created 5 edge functions: `jobs-kill-switch` (global + class scope with activate toggle), `jobs-pause` (per-job + per-class with system_critical protection), `jobs-resume` (refuses poison jobs), `jobs-dead-letters` (paginated dead-letter query), `jobs-replay-dead-letter` (creates new execution with parent/root lineage). (4) Circuit breaker in job-executor.ts: 3 consecutive dependency failures → auto-pause + audit event. (5) All functions enforce Bearer JWT + jobs.emergency / jobs.manage / jobs.view + requireRecentAuth(30min). |
+| **Type** | Feature |
+| **Impact Classification** | High |
+| **Modules Affected** | jobs-and-scheduler |
+| **Files Changed** | supabase/functions/jobs-kill-switch/index.ts (new), supabase/functions/jobs-pause/index.ts (new), supabase/functions/jobs-resume/index.ts (new), supabase/functions/jobs-dead-letters/index.ts (new), supabase/functions/jobs-replay-dead-letter/index.ts (new), supabase/functions/_shared/job-executor.ts (circuit breaker) |
+| **Migrations** | MIG-032 (circuit_breaker_threshold + reserved rows) |
+| **Related Events** | job.kill_switch_activated, job.kill_switch_deactivated, job.paused, job.resumed, job.replayed, job.circuit_breaker_tripped |
+| **Evidence** | All 5 functions deployed. Kill switch, pause/resume, dead-letter query, replay all verified via curl. Circuit breaker logic code-reviewed. MIG-032 applied. |
+| **Status** | Verified |
+
+---
+
+### ACT-063: Stage 5F — Admin UI & DW-019 Session Revocation
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-063 |
+| **Date** | 2026-04-12 |
+| **Action** | (1) Created `revoke-sessions` edge function (POST, Bearer JWT + requireRecentAuth, scope: others/global, audit: user.sessions_revoked). (2) Updated SecurityPage with session revocation UI (revoke other sessions / revoke all sessions). (3) Created AdminHealthPage (system snapshots, metrics, alert history, permission-gated). (4) Created AdminJobsPage (job registry, execution logs, dead-letter queue, kill switch + pause/resume controls). (5) Registered /admin/health and /admin/jobs routes in App.tsx with PermissionGate. (6) Updated admin-navigation.ts with Operations section. Closes DW-016, DW-017, DW-019. |
+| **Type** | Feature |
+| **Impact Classification** | High |
+| **Modules Affected** | admin-panel, user-panel, auth |
+| **Files Changed** | supabase/functions/revoke-sessions/index.ts (new), src/pages/admin/AdminHealthPage.tsx (new), src/pages/admin/AdminJobsPage.tsx (new), src/pages/user/SecurityPage.tsx, src/App.tsx, src/config/admin-navigation.ts, src/config/routes.ts |
+| **Related Events** | user.sessions_revoked |
+| **Evidence** | All 3 new pages created. revoke-sessions edge function deployed. Route-index and function-index updated. |
+| **Status** | Verified |
+
+---
+
 - Regression fix actions must reference the original regression
 - Repeated failures in same area → tracked via recurrence in watchlist, referenced here
 

@@ -1075,6 +1075,26 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Notes** | Public endpoint for monitoring/load balancers. No sensitive internals. Stores snapshot in `system_health_snapshots`. Queries previous snapshot before insert to avoid race condition on status transition detection. |
 | **Lifecycle** | active |
 
+#### `GET /health-detailed`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/health-detailed` |
+| **Method** | `GET` |
+| **Classification** | privileged |
+| **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
+| **Permission** | `monitoring.view` |
+| **Response (200)** | `{ status, timestamp, subsystems: { database, auth, audit_pipeline }, summary: { total, healthy, degraded, unhealthy } }` |
+| **Error (401)** | Missing/invalid token |
+| **Error (403)** | Permission denied |
+| **Rate Limit** | standard |
+| **Audit Required** | No (read-only) |
+| **Idempotent** | Yes |
+| **Related functions** | `authenticateRequest()`, `checkPermissionOrThrow()`, `checkDatabase()`, `checkAuth()`, `checkAuditPipeline()`, `deriveOverallStatus()` |
+| **Related permissions** | `monitoring.view` |
+| **Notes** | Authenticated endpoint returning per-subsystem latency and error details. Does not store snapshots. |
+| **Lifecycle** | active |
+
 #### `GET /health-metrics`
 
 | Field | Value |
@@ -1166,6 +1186,7 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | Route | Purpose | Lifecycle |
 |-------|---------|-----------|
 | `GET /health-check` | System health check for monitoring / load balancers | active |
+| `GET /health-detailed` | Authenticated detailed health check with per-subsystem results | active |
 
 ### Destructive Routes (Require Re-Auth)
 

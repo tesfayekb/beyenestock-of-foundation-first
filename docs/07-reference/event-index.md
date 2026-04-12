@@ -697,6 +697,25 @@ Key event chains showing upstream triggers and downstream effects:
 | **Related risks** | RISK-004 (infrastructure failure) |
 | **Lifecycle** | active |
 
+#### `user.sessions_revoked` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | security |
+| **Severity** | HIGH |
+| **Owner module** | auth |
+| **Consumers** | audit-logging, user-panel |
+| **Description** | User revoked their own sessions (other sessions or all sessions including current) |
+| **Payload schema** | `{ scope: 'others' \| 'global' }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure |
+| **Observability** | Logged, traced |
+| **Lifecycle** | active |
+| **Added by** | Stage 5F (DW-019) |
+
 ### Admin Events
 
 #### `admin.config_changed` — v1

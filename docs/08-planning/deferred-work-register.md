@@ -489,9 +489,10 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | — |
 | **Required Tests for Closure** | Health dashboard renders, alert config CRUD, monitoring permission enforcement |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | ACT-063 |
+| **Implemented in Plan Version** | v10.1 |
+| **Resolution Note** | AdminHealthPage created with system snapshots, metrics, alert history. Permission-gated by monitoring.view. |
 
 ---
 
@@ -513,9 +514,10 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | — |
 | **Required Tests for Closure** | Jobs dashboard renders, trigger/deadletter/kill-switch flows, config CRUD, permission enforcement |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | ACT-063 |
+| **Implemented in Plan Version** | v10.1 |
+| **Resolution Note** | AdminJobsPage created with job registry, execution logs, dead-letter management, kill switch + pause/resume controls. Permission-gated by jobs.view / jobs.manage / jobs.emergency. |
 
 ---
 
@@ -561,9 +563,10 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | — |
 | **Required Tests for Closure** | Session list renders, revoke session E2E, audit logging, self-scope enforcement |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | ACT-063 |
+| **Implemented in Plan Version** | v10.1 |
+| **Resolution Note** | revoke-sessions edge function + SecurityPage UI. Self-scope enforced (ctx.user.id). Supports 'others' and 'global' scopes. Requires requireRecentAuth(30min). Audit: user.sessions_revoked. |
 
 ---
 

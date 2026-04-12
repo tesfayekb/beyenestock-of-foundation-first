@@ -35,14 +35,14 @@ Tracks:
 status: implementation in progress
 phase: development
 code_generation: allowed
-modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed + dependency enforcement + roles.edit + permissions.view separated + permissions.assign/revoke restricted to superadmin), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 hardened + RLS INSERT policy removed [ACT-053] + correlation_id top-level column [ACT-055]), api implemented (Stage 3A closed + Phase 3.5 hardened), admin-panel implemented (Phase 4 CLOSED + post-closure: role CRUD, dependency enforcement, inline edit, superadmin restriction + performance hardening [ACT-056]), user-panel implemented (Phase 4 CLOSED), health-monitoring partial (Stage 5A + 5B implemented [ACT-057, ACT-058]), jobs-and-scheduler partial (Stage 5C + 5D implemented [ACT-059, ACT-060])
-active_work: Phase 5 — Operations & Reliability. Stage 5A COMPLETE. Stage 5B COMPLETE. Stage 5C COMPLETE. Stage 5D COMPLETE (4 jobs registered + 4 edge functions deployed + tested). Stage 5E (Emergency Controls & Operational Governance) next. DW-019 included in Phase 5 scope. DW-020/DW-023/DW-024/DW-028 deferred to Phase 6.
+modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed + dependency enforcement + roles.edit + permissions.view separated + permissions.assign/revoke restricted to superadmin), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 hardened + RLS INSERT policy removed [ACT-053] + correlation_id top-level column [ACT-055]), api implemented (Stage 3A closed + Phase 3.5 hardened), admin-panel implemented (Phase 4 CLOSED + Phase 5 additions: AdminHealthPage [ACT-063], AdminJobsPage [ACT-063] + performance hardening [ACT-056]), user-panel implemented (Phase 4 CLOSED + session revocation [ACT-063]), health-monitoring implemented (Stage 5A + 5B + 5F complete [ACT-057, ACT-058, ACT-063]), jobs-and-scheduler implemented (Stage 5C + 5D + 5E complete [ACT-059, ACT-060, ACT-062])
+active_work: Phase 5 COMPLETE (Stages 5A–5G closed). Phase 6 planning next. DW-020/DW-023/DW-024/DW-028 deferred to Phase 6.
 current_plan_version: v10.1
 approved_plan_baseline: v10.1
 plan_status: approved
 artifact_governance: active (artifact-index.md, database-migration-ledger.md, phase-closures/)
-deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-011, DW-012, DW-013, DW-016, DW-017, DW-019, DW-020, DW-021, DW-022, DW-023, DW-024, DW-028]
-deferred_work_closed_this_phase: [DW-018, DW-025, DW-026, DW-027]
+deferred_work_open: [DW-001, DW-002, DW-007, DW-008, DW-011, DW-012, DW-013, DW-020, DW-021, DW-022, DW-023, DW-024, DW-028]
+deferred_work_closed_this_phase: [DW-016, DW-017, DW-018, DW-019, DW-025, DW-026, DW-027]
 deployment_config_required:
   - leaked_password_protection: "Enable in Supabase Dashboard → Authentication → Settings → Leaked Password Protection. Cannot be set via SQL migration or edge function. Required for A+ security posture."
 last_updated: 2026-04-12
@@ -86,9 +86,9 @@ If inconsistency is detected → execution must **STOP** and be corrected.
 | admin-panel | implemented (Phase 4 CLOSED [ACT-048] + post-closure: ACT-049 recent-auth alignment, ACT-050 role CRUD, ACT-051 dependency enforcement + roles.edit, ACT-052 permissions.view + superadmin restriction) | 2026-04-12 |
 | user-panel | implemented (Phase 4 CLOSED [ACT-048]: ProfilePage, SecurityPage, UserDashboard, useProfile, useMfaFactors, ReauthDialog, useInactivityTimeout) | 2026-04-12 |
 | audit-logging | implemented (Phase 3B closed + Phase 3.5 hardened + ACT-053: removed overly permissive INSERT RLS policy) | 2026-04-12 |
-| health-monitoring | partial (5A + 5B + 5D[health_check, metrics_aggregate, alert_evaluation] complete) | 2026-04-12 |
+| health-monitoring | implemented (5A + 5B + 5F complete [ACT-057, ACT-058, ACT-063]) | 2026-04-12 |
 | api | implemented (Phase 3A closed + Phase 3.5 hardened: PermissionDeniedError enriched with userId/reason, centralized denial interception in handler.ts) | 2026-04-10 |
-| jobs-and-scheduler | partial (5C + 5D complete) | 2026-04-12 |
+| jobs-and-scheduler | implemented (5C + 5D + 5E complete [ACT-059, ACT-060, ACT-062]) | 2026-04-12 |
 
 ## AI Behavior Constraint
 

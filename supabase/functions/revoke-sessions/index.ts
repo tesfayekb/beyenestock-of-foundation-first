@@ -23,7 +23,7 @@ const BodySchema = z.object({
 
 Deno.serve(createHandler(async (req: Request): Promise<Response> => {
   const ctx = await authenticateRequest(req)
-  requireRecentAuth(ctx.user.lastSignInAt, undefined, ctx.user.id)
+  requireRecentAuth(ctx.user.lastSignInAt, 30 * 60 * 1000, ctx.user.id)
 
   const body = validateRequest(BodySchema, await req.json())
 
