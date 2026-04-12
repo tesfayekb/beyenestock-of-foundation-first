@@ -27,8 +27,13 @@ const BodySchema = z.object({
 
 /**
  * Permission dependency map — server-side copy.
- * Mirrors src/config/permission-deps.ts. Kept inline to avoid
- * import-path issues in the Deno edge function runtime.
+ * Mirrors src/config/permission-deps.ts (canonical source).
+ * Kept inline to avoid import-path issues in the Deno edge function runtime.
+ *
+ * ⚠️  SYNC: Must match src/config/permission-deps.ts and
+ *    supabase/functions/assign-permission-to-role/index.ts.
+ *    See RW-008 in regression-watchlist.md for drift detection protocol.
+ *    Last synced: 2026-04-12 — 23 entries.
  */
 const PERMISSION_DEPS: Record<string, string[]> = {
   'roles.assign':        ['roles.view', 'users.view_all', 'admin.access'],

@@ -51,6 +51,7 @@ CREATE TABLE public.audit_logs (
   metadata JSONB DEFAULT '{}'::jsonb,
   ip_address INET,
   user_agent TEXT,
+  correlation_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -63,6 +64,8 @@ CREATE INDEX idx_role_permissions_permission_id ON public.role_permissions(permi
 CREATE INDEX idx_audit_logs_actor_id ON public.audit_logs(actor_id);
 CREATE INDEX idx_audit_logs_action ON public.audit_logs(action);
 CREATE INDEX idx_audit_logs_created_at ON public.audit_logs(created_at);
+CREATE INDEX idx_audit_logs_target_id ON public.audit_logs(target_id);
+CREATE INDEX idx_audit_logs_correlation_id ON public.audit_logs(correlation_id) WHERE correlation_id IS NOT NULL;
 
 -- ===================== ENABLE RLS =====================
 
