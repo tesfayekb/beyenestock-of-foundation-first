@@ -449,7 +449,23 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 
 ---
 
-### Tables (9)
+### MIG-025: Job Scheduler Infrastructure — Tables + Indexes
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-025 |
+| **Migration File** | `20260412050217_60450a3f-0f32-476d-bc41-c26d2ecbdf7a.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-12 |
+| **Sequence Order** | 25 |
+| **Purpose** | Create `job_registry`, `job_executions`, `job_idempotency_keys` tables for job scheduling infrastructure (Stage 5C) |
+| **Objects Affected** | Tables: `job_registry`, `job_executions`, `job_idempotency_keys`; Indexes: `idx_job_executions_job_state`, `idx_job_executions_state`, `idx_job_executions_schedule_window`; RLS policies: 3× SELECT for `jobs.view`; Trigger: `update_job_registry_updated_at` |
+| **Status** | `active` |
+| **Linked Actions** | ACT-059 |
+
+---
+
+### Tables (12)
 
 | Table | Created By | Status |
 |-------|-----------|--------|
@@ -463,6 +479,9 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `system_metrics` | MIG-024 | Active |
 | `alert_configs` | MIG-024 | Active |
 | `alert_history` | MIG-024 | Active |
+| `job_registry` | MIG-025 | Active |
+| `job_executions` | MIG-025 | Active |
+| `job_idempotency_keys` | MIG-025 | Active |
 
 ### Functions (12)
 
@@ -482,7 +501,7 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `validate_profile_status()` | MIG-011 | Active |
 | `check_user_active_on_login()` | MIG-011 | Active |
 
-### Triggers (8)
+### Triggers (9)
 
 | Trigger | Table | Function | Created By |
 |---------|-------|----------|-----------|
@@ -494,8 +513,9 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `update_roles_updated_at` | `roles` | `update_updated_at` | MIG-001 |
 | `trg_validate_profile_status` | `profiles` | `validate_profile_status` | MIG-011 |
 | `check_user_active_before_login` | `auth.users` | `check_user_active_on_login` | MIG-012 |
+| `update_job_registry_updated_at` | `job_registry` | `update_updated_at_column` | MIG-025 |
 
-### RLS Policies (9)
+### RLS Policies (12)
 
 | Policy | Table | Created By | Status |
 |--------|-------|-----------|--------|
@@ -509,6 +529,9 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | Admins can update any profile | `profiles` | MIG-011 | Active |
 | Users can read own profile (self-scope) | `profiles` | MIG-012 | Active |
 | Users can update own profile (self-scope) | `profiles` | MIG-012 | Active |
+| jobs.view holders can read job_registry | `job_registry` | MIG-025 | Active |
+| jobs.view holders can read job_executions | `job_executions` | MIG-025 | Active |
+| jobs.view holders can read job_idempotency_keys | `job_idempotency_keys` | MIG-025 | Active |
 
 ---
 

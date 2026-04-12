@@ -1529,6 +1529,33 @@ Each action must include:
 
 ---
 
+### ACT-059: Stage 5C — Job Scheduler Infrastructure
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-059 |
+| **Date** | 2026-04-12 |
+| **Action** | (1) Created `job_registry`, `job_executions`, `job_idempotency_keys` tables with RLS (SELECT for `jobs.view`, no client mutations) + 3 indexes + `updated_at` trigger on `job_registry`. (2) Created shared `executeWithRetry()`, `classifyError()`, `detectPoisonJob()` utilities in `_shared/job-executor.ts`. (3) Added DW-028 for true fail-closed audit rollback on health-alert-config update path. (4) Updated code comment in health-alert-config/index.ts to document the partial fail-closed gap. |
+| **Type** | Feature |
+| **Impact Classification** | High |
+| **Modules Affected** | jobs-and-scheduler, health-monitoring |
+| **Files Changed** | supabase/functions/_shared/job-executor.ts (new), supabase/functions/health-alert-config/index.ts (comment update) |
+| **Docs Updated** | database-migration-ledger.md, action-tracker.md, function-index.md, deferred-work-register.md, system-state.md |
+| **Related Routes** | — (no new routes in 5C) |
+| **Related Functions** | executeWithRetry, classifyError, detectPoisonJob, isRetryable |
+| **Related Events** | job.execution_started, job.execution_completed, job.execution_failed |
+| **Evidence** | Migration MIG-025 applied. 3 tables + 3 indexes created. TypeScript zero errors. Shared utility created with full retry/backoff/jitter/poison detection. |
+| **Verified By** | AI Agent |
+| **Before State** | No job scheduling infrastructure |
+| **After State** | 3 tables + 3 indexes + shared job execution utilities deployed |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Drop tables, remove _shared/job-executor.ts |
+| **Blast Radius** | Low |
+| **Health Impact** | Improved — system now has job scheduling infrastructure |
+| **Status** | Verified |
+
+---
+
 - If action introduces regression → must link watchlist item in `related_watchlist`
 - Regression fix actions must reference the original regression
 - Repeated failures in same area → tracked via recurrence in watchlist, referenced here
