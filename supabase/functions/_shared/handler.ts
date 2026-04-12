@@ -7,7 +7,7 @@
  * Enforcement rule: ALL denial audit logging occurs here.
  * No endpoint-level denial logging is permitted.
  */
-import { corsHeaders } from './cors.ts'
+import { getCorsHeaders } from './cors.ts'
 import { apiError } from './api-error.ts'
 import { AuthError, PermissionDeniedError, ValidationError } from './errors.ts'
 import { checkRateLimit, type RateLimitClass } from './rate-limit.ts'
@@ -33,8 +33,11 @@ export function createHandler(
   const rateLimitClass = options?.rateLimit ?? 'standard'
 
   return async (req: Request): Promise<Response> => {
+    const origin = req.headers.get('origin')
+    const cors = getCorsHeaders(origin)
+
     if (req.method === 'OPTIONS') {
-      return new Response('ok', { headers: corsHeaders })
+      return new Response('ok', { headers: cors })
     }
 
     // Rate limit check (before any auth or processing)
@@ -47,26 +50,31 @@ export function createHandler(
     const correlationId = crypto.randomUUID()
 
     try {
-      return await handler(req)
+      const response = await handler(req)
+
+      // Inject CORS headers into handler responses
+      for (const [key, value] of Object.entries(cors)) {
+        response.headers.set(key, value)
+      }
+
+      return response
     } catch (err) {
       // Extract correlation ID from authenticated context if available
       const cid = (err as Record<string, unknown>)?.correlationId as string ?? correlationId
 
       if (err instanceof AuthError) {
-        return apiError(401, err.message, { correlationId: cid })
+        return apiError(401, err.message, { correlationId: cid, _cors: cors })
       }
       if (err instanceof ValidationError) {
         return apiError(400, err.message, {
           code: 'VALIDATION_ERROR',
           field: Object.keys(err.fieldErrors)[0],
           correlationId: cid,
+          _cors: cors,
         })
       }
       if (err instanceof PermissionDeniedError) {
         // ── Centralized denial audit logging (fire-and-forget) ──
-        // Actor extraction: err.userId is authoritative.
-        // JWT fallback is best-effort enrichment only — never affects
-        // authorization logic, only audit metadata.
         let actorId = err.userId
         if (!actorId) {
           actorId = extractActorFromRequest(req)
@@ -82,14 +90,15 @@ export function createHandler(
           return apiError(403, 'Session too old for this action — please re-authenticate', {
             code: 'RECENT_AUTH_REQUIRED',
             correlationId: cid,
+            _cors: cors,
           })
         }
 
-        return apiError(403, 'Permission denied', { correlationId: cid })
+        return apiError(403, 'Permission denied', { correlationId: cid, _cors: cors })
       }
 
       console.error('[HANDLER] Unhandled error:', err, { correlationId: cid })
-      return apiError(500, 'Internal server error', { correlationId: cid })
+      return apiError(500, 'Internal server error', { correlationId: cid, _cors: cors })
     }
   }
 }
@@ -146,6 +155,6 @@ function logDenialAudit(
 export function apiSuccess(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
   })
 }
