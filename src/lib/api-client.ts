@@ -15,9 +15,40 @@ class ApiError extends Error {
   }
 }
 
+/**
+ * Cached auth header to avoid redundant getSession() calls.
+ * The Supabase SDK caches sessions in memory, but this avoids
+ * even the synchronous localStorage read on rapid sequential calls.
+ */
+let _cachedToken: string | null = null;
+let _tokenExpiry = 0;
+
+// Clear cache on auth state change (sign-out, token refresh)
+supabase.auth.onAuthStateChange((_event, session) => {
+  if (session) {
+    _cachedToken = session.access_token;
+    _tokenExpiry = (session.expires_at ?? 0) * 1000 - 60_000; // 60s before expiry
+  } else {
+    _cachedToken = null;
+    _tokenExpiry = 0;
+  }
+});
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
+  // Use cached token if still valid (60s buffer before JWT expiry)
+  if (_cachedToken && Date.now() < _tokenExpiry) {
+    return {
+      'Authorization': `Bearer ${_cachedToken}`,
+      'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    };
+  }
+
   const session = (await supabase.auth.getSession()).data.session;
   if (!session) throw new ApiError('Not authenticated', 401);
+
+  _cachedToken = session.access_token;
+  _tokenExpiry = (session.expires_at ?? 0) * 1000 - 60_000;
+
   return {
     'Authorization': `Bearer ${session.access_token}`,
     'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,

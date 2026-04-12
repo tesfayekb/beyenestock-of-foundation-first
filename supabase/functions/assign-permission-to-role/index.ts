@@ -93,21 +93,16 @@ Deno.serve(createHandler(async (req: Request) => {
   let autoAddedKeys: string[] = []
 
   if (depKeys.length > 0) {
-    // Fetch dependency permissions and existing mappings in parallel
-    const { data: depPerms } = await supabaseAdmin
-      .from('permissions')
-      .select('id, key')
-      .in('key', depKeys)
+    // Fetch dependency permissions AND all existing role mappings in parallel
+    const [depPermsResult, existingResult] = await Promise.all([
+      supabaseAdmin.from('permissions').select('id, key').in('key', depKeys),
+      supabaseAdmin.from('role_permissions').select('permission_id').eq('role_id', role_id),
+    ])
+
+    const depPerms = depPermsResult.data
+    const existingIds = new Set((existingResult.data ?? []).map(m => m.permission_id))
 
     if (depPerms && depPerms.length > 0) {
-      // Parallel: fetch existing mappings while we already have depPerms
-      const { data: existingMappings } = await supabaseAdmin
-        .from('role_permissions')
-        .select('permission_id')
-        .eq('role_id', role_id)
-        .in('permission_id', depPerms.map(p => p.id))
-
-      const existingIds = new Set((existingMappings ?? []).map(m => m.permission_id))
       const missing = depPerms.filter(p => !existingIds.has(p.id))
 
       if (missing.length > 0) {
