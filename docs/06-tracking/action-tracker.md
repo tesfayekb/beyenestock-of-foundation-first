@@ -1502,6 +1502,33 @@ Each action must include:
 
 ---
 
+### ACT-058: Stage 5B — Metrics & Alerting Infrastructure
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-058 |
+| **Date** | 2026-04-12 |
+| **Action** | (1) Created `system_metrics`, `alert_configs`, `alert_history` tables with RLS (SELECT for `monitoring.view`, no client mutations) + 3 indexes. (2) Created `GET /health-metrics` edge function (monitoring.view, time-series query with filters). (3) Created `GET /health-alerts` edge function (monitoring.view, alert history with severity/resolution filters). (4) Created `POST /health-alert-config` edge function (monitoring.configure, strict rate limit, creates/updates alert configs with audit trail). |
+| **Type** | Feature |
+| **Impact Classification** | High |
+| **Modules Affected** | health-monitoring |
+| **Files Changed** | supabase/functions/health-metrics/index.ts (new), supabase/functions/health-alerts/index.ts (new), supabase/functions/health-alert-config/index.ts (new) |
+| **Docs Updated** | route-index.md, action-tracker.md, database-migration-ledger.md |
+| **Related Routes** | GET /health-metrics, GET /health-alerts, POST /health-alert-config |
+| **Related Functions** | authenticateRequest, checkPermissionOrThrow, validateRequest, logAuditEvent |
+| **Related Events** | health.alert_config_created, health.alert_config_updated |
+| **Evidence** | All 3 endpoints deployed. All reject 401 without auth. Migration applied with 3 tables + 3 indexes. TypeScript zero errors. |
+| **Verified By** | AI Agent |
+| **Before State** | No metrics or alerting infrastructure |
+| **After State** | 3 tables + 3 indexes + 3 edge functions deployed and verified |
+| **Rollback Available** | Yes |
+| **Rollback Method** | Drop tables, remove edge functions |
+| **Blast Radius** | Low |
+| **Health Impact** | Improved — system now has metrics collection and alerting capability |
+| **Status** | Verified |
+
+---
+
 - If action introduces regression → must link watchlist item in `related_watchlist`
 - Regression fix actions must reference the original regression
 - Repeated failures in same area → tracked via recurrence in watchlist, referenced here

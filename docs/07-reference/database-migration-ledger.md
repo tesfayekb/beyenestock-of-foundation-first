@@ -433,7 +433,23 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 
 ---
 
-### Tables (6)
+### MIG-024: Metrics & Alerting Tables + Indexes
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-024 |
+| **Migration File** | `20260412044940_9760a86f-246c-4d53-a5fc-41e417cb000f.sql` |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-12 |
+| **Sequence Order** | 24 |
+| **Purpose** | Create `system_metrics`, `alert_configs`, `alert_history` tables for metrics & alerting (Stage 5B) |
+| **Objects Affected** | Tables: `system_metrics`, `alert_configs`, `alert_history`; Indexes: `idx_system_metrics_key_time`, `idx_alert_history_config`, `idx_alert_history_created`; RLS policies: 3× SELECT for `monitoring.view`; Trigger: `update_alert_configs_updated_at` |
+| **Status** | `active` |
+| **Linked Actions** | ACT-058 |
+
+---
+
+### Tables (9)
 
 | Table | Created By | Status |
 |-------|-----------|--------|
@@ -444,6 +460,9 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `audit_logs` | MIG-001 | Active |
 | `profiles` | (pre-existing) | Active — status column added MIG-011 |
 | `system_health_snapshots` | MIG-023 | Active |
+| `system_metrics` | MIG-024 | Active |
+| `alert_configs` | MIG-024 | Active |
+| `alert_history` | MIG-024 | Active |
 
 ### Functions (12)
 

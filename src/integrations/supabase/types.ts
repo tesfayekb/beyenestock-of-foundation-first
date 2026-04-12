@@ -14,6 +14,86 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_configs: {
+        Row: {
+          comparison: string
+          cooldown_seconds: number
+          created_at: string
+          created_by: string
+          enabled: boolean
+          id: string
+          metric_key: string
+          severity: string
+          threshold_value: number
+          updated_at: string
+        }
+        Insert: {
+          comparison: string
+          cooldown_seconds?: number
+          created_at?: string
+          created_by: string
+          enabled?: boolean
+          id?: string
+          metric_key: string
+          severity: string
+          threshold_value: number
+          updated_at?: string
+        }
+        Update: {
+          comparison?: string
+          cooldown_seconds?: number
+          created_at?: string
+          created_by?: string
+          enabled?: boolean
+          id?: string
+          metric_key?: string
+          severity?: string
+          threshold_value?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      alert_history: {
+        Row: {
+          alert_config_id: string
+          created_at: string
+          id: string
+          metric_key: string
+          metric_value: number
+          resolved_at: string | null
+          severity: string
+          threshold_value: number
+        }
+        Insert: {
+          alert_config_id: string
+          created_at?: string
+          id?: string
+          metric_key: string
+          metric_value: number
+          resolved_at?: string | null
+          severity: string
+          threshold_value: number
+        }
+        Update: {
+          alert_config_id?: string
+          created_at?: string
+          id?: string
+          metric_key?: string
+          metric_value?: number
+          resolved_at?: string | null
+          severity?: string
+          threshold_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_history_alert_config_id_fkey"
+            columns: ["alert_config_id"]
+            isOneToOne: false
+            referencedRelation: "alert_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -188,6 +268,30 @@ export type Database = {
           created_at?: string
           id?: string
           status?: string
+        }
+        Relationships: []
+      }
+      system_metrics: {
+        Row: {
+          id: string
+          metadata: Json | null
+          metric_key: string
+          recorded_at: string
+          value: number
+        }
+        Insert: {
+          id?: string
+          metadata?: Json | null
+          metric_key: string
+          recorded_at?: string
+          value: number
+        }
+        Update: {
+          id?: string
+          metadata?: Json | null
+          metric_key?: string
+          recorded_at?: string
+          value?: number
         }
         Relationships: []
       }

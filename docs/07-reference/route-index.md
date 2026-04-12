@@ -1075,16 +1075,17 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Notes** | Public endpoint for monitoring/load balancers. No sensitive internals. Stores snapshot in `system_health_snapshots`. Queries previous snapshot before insert to avoid race condition on status transition detection. |
 | **Lifecycle** | active |
 
-#### `GET /health-detailed`
+#### `GET /health-metrics`
 
 | Field | Value |
 |-------|-------|
-| **Path** | `/health-detailed` |
+| **Path** | `/health-metrics` |
 | **Method** | `GET` |
 | **Classification** | privileged |
 | **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
 | **Permission** | `monitoring.view` |
-| **Response (200)** | `{ status, timestamp, subsystems: { database, auth, audit_pipeline }, summary: { total, healthy, degraded, unhealthy } }` |
+| **Query Params** | `metric_key` (optional), `from` (ISO datetime, optional), `to` (ISO datetime, optional), `limit` (1–500, default 100) |
+| **Response (200)** | `{ data: SystemMetric[], count: number }` |
 | **Error (401)** | Missing/invalid token |
 | **Error (403)** | Permission denied |
 | **Rate Limit** | standard |
@@ -1092,7 +1093,48 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Idempotent** | Yes |
 | **Related functions** | `authenticateRequest()`, `checkPermissionOrThrow()` |
 | **Related permissions** | `monitoring.view` |
-| **Notes** | Returns per-subsystem check results with latency and error details. |
+| **Lifecycle** | active |
+
+#### `GET /health-alerts`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/health-alerts` |
+| **Method** | `GET` |
+| **Classification** | privileged |
+| **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
+| **Permission** | `monitoring.view` |
+| **Query Params** | `severity` (info/warning/critical, optional), `resolved` (true/false, optional), `limit` (1–500, default 50) |
+| **Response (200)** | `{ data: AlertHistory[], count: number }` |
+| **Error (401)** | Missing/invalid token |
+| **Error (403)** | Permission denied |
+| **Rate Limit** | standard |
+| **Audit Required** | No (read-only) |
+| **Idempotent** | Yes |
+| **Related functions** | `authenticateRequest()`, `checkPermissionOrThrow()` |
+| **Related permissions** | `monitoring.view` |
+| **Lifecycle** | active |
+
+#### `POST /health-alert-config`
+
+| Field | Value |
+|-------|-------|
+| **Path** | `/health-alert-config` |
+| **Method** | `POST` |
+| **Classification** | privileged |
+| **Auth Model** | Bearer JWT (validated via `authenticateRequest()`) |
+| **Permission** | `monitoring.configure` |
+| **Request Body (create)** | `{ metric_key: string, severity: enum, threshold_value: number, comparison: enum, enabled?: boolean, cooldown_seconds?: number }` |
+| **Request Body (update)** | `{ id: uuid, ...partial fields }` |
+| **Response (201/200)** | Created/updated `AlertConfig` object |
+| **Error (401)** | Missing/invalid token |
+| **Error (403)** | Permission denied |
+| **Error (400)** | Validation error |
+| **Rate Limit** | strict |
+| **Audit Required** | Yes — `health.alert_config_created` / `health.alert_config_updated` |
+| **Idempotent** | No (create) / Yes (update by id) |
+| **Related functions** | `authenticateRequest()`, `checkPermissionOrThrow()`, `validateRequest()`, `logAuditEvent()` |
+| **Related permissions** | `monitoring.configure` |
 | **Lifecycle** | active |
 
 ---
