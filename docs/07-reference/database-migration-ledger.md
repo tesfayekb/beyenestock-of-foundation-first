@@ -579,7 +579,24 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 
 ---
 
-### Tables (12)
+### MIG-033: MFA Recovery Codes Table
+
+| Field | Value |
+|-------|-------|
+| **Ledger ID** | MIG-033 |
+| **Migration File** | (Lovable-managed migration) |
+| **Source Dir** | `supabase/migrations/` |
+| **Applied Date** | 2026-04-12 |
+| **Sequence Order** | 33 |
+| **Purpose** | Creates `mfa_recovery_codes` table for storing bcrypt-hashed single-use MFA backup codes. RLS enabled with NO policies (service-role only access). Index on `user_id`. |
+| **Depends On** | — |
+| **Status** | `active` |
+| **Linked Actions** | Stage 6A (DW-008) |
+| **Notes** | No client-side access by design. All operations via edge functions using service-role client. |
+
+---
+
+### Tables (13)
 
 | Table | Created By | Status |
 |-------|-----------|--------|
@@ -596,6 +613,7 @@ All SQL migrations applied to the external Supabase database, whether from `sql/
 | `job_registry` | MIG-025 | Active |
 | `job_executions` | MIG-025 | Active |
 | `job_idempotency_keys` | MIG-025 | Active |
+| `mfa_recovery_codes` | MIG-033 | Active |
 
 ### Functions (12)
 
