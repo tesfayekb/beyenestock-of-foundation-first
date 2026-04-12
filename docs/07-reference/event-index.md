@@ -1254,20 +1254,6 @@ Key event chains showing upstream triggers and downstream effects:
 | **Observability** | Logged, traced, alerted |
 | **Lifecycle** | active |
 
-#### `job.paused` — v1
-
-| Field | Value |
-|-------|-------|
-| **Classification** | system |
-| **Severity** | MEDIUM |
-| **Owner module** | jobs-and-scheduler |
-| **Consumers** | audit-logging, admin-panel |
-| **Description** | Job manually paused by operator |
-| **Payload schema** | `{ job_id?: string, class?: string, reason: string, paused_jobs: string[] }` |
-| **Delivery guarantee** | at-least-once |
-| **Ordering** | best-effort |
-| **Idempotency** | event_id |
-| **Lifecycle** | active |
 
 #### `job.resumed` — v1
 
@@ -1284,20 +1270,6 @@ Key event chains showing upstream triggers and downstream effects:
 | **Idempotency** | event_id |
 | **Lifecycle** | active |
 
-#### `job.replayed` — v1
-
-| Field | Value |
-|-------|-------|
-| **Classification** | system |
-| **Severity** | MEDIUM |
-| **Owner module** | jobs-and-scheduler |
-| **Consumers** | audit-logging, admin-panel |
-| **Description** | Dead-lettered execution replayed by operator |
-| **Payload schema** | `{ original_execution_id: uuid, new_execution_id: uuid, job_id: string, reason: string }` |
-| **Delivery guarantee** | at-least-once |
-| **Ordering** | best-effort |
-| **Idempotency** | event_id |
-| **Lifecycle** | active |
 
 #### `job.kill_switch_deactivated` — v1
 

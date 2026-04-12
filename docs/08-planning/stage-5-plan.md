@@ -404,10 +404,12 @@ Implement health monitoring, job scheduling, and operational infrastructure. Inc
 | `job.schedule_missed` | 5D | Scheduled job did not start within expected window |
 | `job.resource_budget_exceeded` | 5D | Job exceeded configured resource budget |
 | `job.kill_switch_activated` | 5E | Global kill switch triggered |
+| `job.kill_switch_deactivated` | 5E | Kill switch deactivated — jobs resuming |
 | `job.paused` | 5E | Job paused by operator or system |
 | `job.resumed` | 5E | Job resumed |
 | `job.cancelled` | 5E | Job execution cancelled by operator |
 | `job.replayed` | 5E | Dead-lettered job replayed |
+| `job.circuit_breaker_tripped` | 5E | Circuit breaker auto-paused a job after repeated dependency failures |
 | `user.sessions_revoked` | 5F | User revokes own sessions (self-service, scope in metadata) |
 
 ## Execution Order
