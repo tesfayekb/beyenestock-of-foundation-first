@@ -342,8 +342,12 @@ At each phase boundary (before advancing to the next phase):
 | DW-025 | Role creation (create-role edge function + UI) | Phase 4 | Phase 6 | `implemented` |
 | DW-026 | Role deletion (delete-role edge function + UI) | Phase 4 | Phase 6 | `implemented` |
 | DW-027 | Admin Edit User Profile | Phase 4 | Phase 4 (Stage 4K) | `implemented` |
-| DW-028 | True fail-closed audit rollback (alert config) | Phase 5 | Phase 6 | `implemented` |
-| DW-029 | Batched audit cleanup DELETE | Phase 5 | Phase 6 | `implemented` |
+| DW-028 | True fail-closed audit rollback (alert config) | Phase 5 | Phase 6 | `deferred` |
+| DW-029 | Batched audit cleanup DELETE | Phase 5 | Phase 6 | `deferred` |
+| DW-030 | TypeScript strict mode | Phase 6 | `unassigned` (v2) | `deferred` |
+| DW-031 | Service worker (Workbox) | Phase 6 | `unassigned` (v2) | `deferred` |
+| DW-032 | CDN security headers (X-Frame-Options, early hints) | Phase 6 | `unassigned` (v2) | `deferred` |
+| DW-033 | Auth page label/input association | Phase 6 | Phase 7 | `deferred` |
 
 
 ### DW-011: Distributed Rate Limiting
