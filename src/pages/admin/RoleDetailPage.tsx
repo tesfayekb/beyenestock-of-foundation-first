@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
+import { ConfirmActionDialog } from '@/components/dashboard/ConfirmActionDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,11 +11,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useRoleDetail } from '@/hooks/useRoles';
 import { usePermissions } from '@/hooks/useRoles';
-import { useAssignPermission, useRevokePermission } from '@/hooks/useRoleActions';
+import { useAssignPermission, useRevokePermission, useDeleteRole } from '@/hooks/useRoleActions';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { checkPermission } from '@/lib/rbac';
 import { ROUTES } from '@/config/routes';
-import { ArrowLeft, Shield, Users, Key, Loader2, Info } from 'lucide-react';
+import { ArrowLeft, Shield, Users, Key, Loader2, Info, Trash2 } from 'lucide-react';
 
 
 interface PermissionGroup {
@@ -31,16 +32,36 @@ export default function RoleDetailPage() {
   const canAssignPerms = checkPermission(context, 'permissions.assign');
   const canRevokePerms = checkPermission(context, 'permissions.revoke');
   const canModifyPerms = (canAssignPerms || canRevokePerms);
+  const canDeleteRole = checkPermission(context, 'roles.delete');
 
   const { data: role, isLoading, error, refetch } = useRoleDetail(id);
   const { data: allPermissions } = usePermissions();
   const assignPermission = useAssignPermission();
   const revokePermission = useRevokePermission();
+  const deleteRole = useDeleteRole();
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const isSuperadmin = role?.key === 'superadmin';
 
   // Track in-flight toggles to show spinners per-permission
   const [pendingToggles, setPendingToggles] = useState<Set<string>>(new Set());
+
+  const handleDeleteRole = useCallback(
+    (reason?: string) => {
+      if (!id || !reason) return;
+      deleteRole.mutate(
+        { role_id: id, reason },
+        {
+          onSuccess: () => {
+            setShowDeleteConfirm(false);
+            navigate(ROUTES.ADMIN_ROLES);
+          },
+        },
+      );
+    },
+    [id, deleteRole, navigate],
+  );
 
   // Build grouped permission matrix
   const groups = useMemo<PermissionGroup[]>(() => {
