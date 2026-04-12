@@ -9,23 +9,25 @@
 
 ## Overview
 
-Phase 6 closes all remaining deferred work items (12 open, 2 deferred to v2), establishes the regression test suite, and passes the release readiness gate from the master plan.
+Phase 6 closes remaining deferred work items (10 open after v2 deferrals), establishes the regression test suite, and passes the release readiness gate from the master plan.
 
 ### Scope Summary
 
 | Category | DW Items | Count |
 |----------|----------|-------|
-| Auth hardening | DW-001, DW-002, DW-008 | 3 |
+| Auth hardening | DW-008 (completed) | 1 |
 | Test infrastructure | DW-012, DW-013 | 2 |
 | Performance hardening | DW-021, DW-022, DW-024 | 3 |
 | Reliability hardening | DW-028, DW-029 | 2 |
 | Scalability & UX | DW-011, DW-023 | 2 |
-| **Total in scope** | | **12** |
+| **Total in scope** | | **10** |
 
 ### Explicitly Excluded (v2)
 
 | ID | Title | Reason |
 |----|-------|--------|
+| DW-001 | Google OAuth | Provider credentials not configured. Deferred to v2. |
+| DW-002 | Apple Sign-In | Provider credentials not configured. Deferred to v2. |
 | DW-007 | Moderator Role | Feature addition, not hardening. Requires new permission set, role seeding, RBAC testing. DEC-018. |
 | DW-020 | User Notification Preferences | No notification backend exists. New module, not hardening. |
 
@@ -33,48 +35,23 @@ Phase 6 closes all remaining deferred work items (12 open, 2 deferred to v2), es
 
 ## Stage Plan
 
-### Stage 6A — Auth Hardening (DW-001, DW-002, DW-008)
+### Stage 6A — Auth Hardening (DW-008) ✅ COMPLETE
 
 **Scope:**
 
-1. **OAuth providers** (DW-001): Google + Apple sign-in per DEC-020.
-   - Supabase Dashboard config (manual step — cannot be automated via migration)
-   - Frontend OAuth buttons on SignIn/SignUp pages
-   - Auth event handling for OAuth sign-in (`auth.signed_in` with provider metadata)
-   - Role assignment on first OAuth login: base `user` role only (no privilege escalation)
-
-2. **Social auth linking** (DW-002): Link/unlink OAuth identities on SecurityPage.
-   - Supabase `linkIdentity()` / `unlinkIdentity()` client-side API
-   - UI on SecurityPage showing linked providers with link/unlink controls
-   - Audit events: `auth.oauth_linked`, `auth.oauth_unlinked`
-   - Protection: cannot unlink last auth method (must have password or other provider)
-
-3. **MFA recovery codes** (DW-008): Per DEC-017 spec.
-   - Generate 10 recovery codes (8 alphanumeric each) on MFA enrollment
-   - Store hashed (bcrypt) in new `mfa_recovery_codes` table (service-role only, no RLS read)
-   - Display codes once on enrollment (user must save), allow regeneration on SecurityPage
-   - Single-use consumption: code works once then invalidated
-   - Recovery code entry on MfaChallenge page as fallback
+1. **MFA recovery codes** (DW-008): Per DEC-017 spec. ✅ Implemented (ACT-064).
+   - 10 recovery codes (8 alphanumeric each) generated on MFA enrollment
+   - Stored hashed (bcrypt) in `mfa_recovery_codes` table (service-role only, no RLS read)
+   - Display codes once on enrollment, allow regeneration on SecurityPage
+   - Single-use consumption with recovery code entry on MfaChallenge page
    - Audit event: `auth.mfa_recovery_used`
 
+2. **OAuth providers** (DW-001, DW-002): Deferred to v2. UI buttons present but providers require Supabase Dashboard configuration with external credentials.
+
 **Migrations:**
-- MIG-033: `mfa_recovery_codes` table (user_id, code_hash, used_at, created_at) + RLS (no client read)
+- MIG-033: `mfa_recovery_codes` table ✅
 
-**New Events:**
-- `auth.oauth_linked` (security, HIGH)
-- `auth.oauth_unlinked` (security, HIGH)
-- `auth.mfa_recovery_used` (security, CRITICAL)
-
-**Gate:**
-- [ ] Google OAuth sign-in/sign-up works E2E
-- [ ] Apple OAuth sign-in/sign-up works E2E
-- [ ] OAuth identity linking/unlinking on SecurityPage
-- [ ] Cannot unlink last auth method
-- [ ] MFA recovery codes generated on enrollment, displayed once
-- [ ] Recovery code single-use consumption works
-- [ ] Recovery code regeneration invalidates old codes
-- [ ] All auth events audited
-- [ ] No privilege escalation via OAuth (base `user` role only on first login)
+**Gate:** ✅ All applicable items passed (OAuth items deferred to v2)
 
 ---
 
