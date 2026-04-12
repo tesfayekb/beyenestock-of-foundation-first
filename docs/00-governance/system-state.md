@@ -32,11 +32,11 @@ Tracks:
 ## Current State
 
 ```yaml
-status: implementation in progress
+status: complete
 phase: development
 code_generation: allowed
 modules_implemented: auth partial (A+D implemented + hardened, B+C deferred), rbac implemented (Phase 2 gate 12/12 closed + dependency enforcement + roles.edit + permissions.view separated + permissions.assign/revoke restricted to superadmin), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 hardened + RLS INSERT policy removed [ACT-053] + correlation_id top-level column [ACT-055]), api implemented (Stage 3A closed + Phase 3.5 hardened), admin-panel implemented (Phase 4 CLOSED + Phase 5 additions: AdminHealthPage [ACT-063], AdminJobsPage [ACT-063] + performance hardening [ACT-056]), user-panel implemented (Phase 4 CLOSED + session revocation [ACT-063]), health-monitoring implemented (Stage 5A + 5B + 5F complete [ACT-057, ACT-058, ACT-063]), jobs-and-scheduler implemented (Stage 5C + 5D + 5E complete [ACT-059, ACT-060, ACT-062])
-active_work: Phase 6 — Hardening & System Validation. Stages 6A–6E COMPLETE. DW-011 deferred to v2 (requires Upstash Redis). Stage 6F (Release Gate) pending.
+active_work: Phase 6 — Hardening & System Validation. CLOSED. All stages 6A–6F complete. DW-011 deferred to v2.
 current_plan_version: v11.0
 approved_plan_baseline: v11.0
 plan_status: approved
@@ -81,7 +81,7 @@ If inconsistency is detected → execution must **STOP** and be corrected.
 
 | Module | Status | Last Updated |
 |--------|--------|-------------|
-| auth | in progress (A+D implemented + hardened: shared functions, events, email gate; duplicate MFA enroll prevention + existing-factor/pending-factor MFA route recovery [ACT-047]; B+C deferred [DW-001/002], MFA recovery codes deferred [DW-008]) | 2026-04-11 |
+| auth | implemented (A+D + hardened + MFA recovery codes [Stage 6A]; B+C deferred to v2 [DW-001/002]) | 2026-04-12 |
 | rbac | implemented (Phase 2 gate 12/12 closed + Phase 3.5 hardened + ACT-049/051/052: dependency enforcement, roles.edit, permissions.view separation, permissions.assign/revoke restricted to superadmin) | 2026-04-12 |
 | user-management | implemented (Phase 3C closed [ACT-032]: lifecycle, deactivate/reactivate, auth ban/unban; Phase 3D Gate 1 runtime-verified [ACT-035]) | 2026-04-10 |
 | admin-panel | implemented (Phase 4 CLOSED [ACT-048] + post-closure: ACT-049 recent-auth alignment, ACT-050 role CRUD, ACT-051 dependency enforcement + roles.edit, ACT-052 permissions.view + superadmin restriction) | 2026-04-12 |

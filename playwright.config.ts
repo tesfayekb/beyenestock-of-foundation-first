@@ -1,10 +1,8 @@
 import { createLovableConfig } from "lovable-agent-playwright-config/config";
 
 export default createLovableConfig({
-  // Add your custom playwright configuration overrides here
-  // Example:
-  // timeout: 60000,
-  // use: {
-  //   baseURL: 'http://localhost:3000',
-  // },
+  timeout: 60000,
+  use: {
+    baseURL: 'https://id-preview--8044fe8a-a0dd-48df-8cc9-f8809f9d8972.lovable.app',
+  },
 });
