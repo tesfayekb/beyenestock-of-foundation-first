@@ -5,7 +5,8 @@
  * Does NOT require MFA (that's the point — user is locked out of MFA).
  * Requires: Bearer JWT (AAL1 only — user has password but not MFA factor).
  *
- * Audit: auth.mfa_recovery_used
+ * Security: Per-user lockout after 5 failed attempts (15-min cooldown).
+ * Audit: auth.mfa_recovery_used / auth.mfa_recovery_failed
  *
  * Owner: auth module (DW-008)
  */
@@ -20,12 +21,40 @@ const BodySchema = z.object({
   code: z.string().length(8),
 })
 
+const MAX_FAILED_ATTEMPTS = 5
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000 // 15 minutes
+
 Deno.serve(createHandler(async (req: Request): Promise<Response> => {
   const ctx = await authenticateRequest(req)
   const userId = ctx.user.id
   const body = validateRequest(BodySchema, await req.json())
 
-  // Fetch unused codes for this user
+  // ── Check lockout status ──
+  const { data: attemptRecord } = await supabaseAdmin
+    .from('mfa_recovery_attempts')
+    .select('failed_count, locked_until')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (attemptRecord?.locked_until && new Date(attemptRecord.locked_until) > new Date()) {
+    await logAuditEvent({
+      actorId: userId,
+      action: 'auth.mfa_recovery_failed',
+      targetType: 'user',
+      targetId: userId,
+      metadata: { reason: 'account_locked', locked_until: attemptRecord.locked_until },
+      ipAddress: ctx.ipAddress,
+      userAgent: ctx.userAgent,
+      correlationId: ctx.correlationId,
+    })
+
+    return new Response(
+      JSON.stringify({ error: 'Account temporarily locked due to too many failed attempts. Try again later.' }),
+      { status: 429, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  // ── Fetch unused codes ──
   const { data: codes, error: fetchError } = await supabaseAdmin
     .from('mfa_recovery_codes')
     .select('id, code_hash')
@@ -43,7 +72,7 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     )
   }
 
-  // Check each code (bcrypt compare is slow by design — 10 codes max)
+  // ── Check each code (bcrypt compare is slow by design — 10 codes max) ──
   let matchedCodeId: string | null = null
   for (const entry of codes) {
     const isMatch = await compare(body.code.toUpperCase(), entry.code_hash)
@@ -54,12 +83,31 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
   }
 
   if (!matchedCodeId) {
+    // ── Increment failed attempt counter ──
+    const newCount = (attemptRecord?.failed_count ?? 0) + 1
+    const lockedUntil = newCount >= MAX_FAILED_ATTEMPTS
+      ? new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString()
+      : null
+
+    await supabaseAdmin
+      .from('mfa_recovery_attempts')
+      .upsert({
+        user_id: userId,
+        failed_count: newCount,
+        locked_until: lockedUntil,
+        last_attempt_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' })
+
     await logAuditEvent({
       actorId: userId,
       action: 'auth.mfa_recovery_failed',
       targetType: 'user',
       targetId: userId,
-      metadata: { reason: 'invalid_code' },
+      metadata: {
+        reason: 'invalid_code',
+        failed_count: newCount,
+        locked: newCount >= MAX_FAILED_ATTEMPTS,
+      },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
       correlationId: ctx.correlationId,
@@ -71,13 +119,18 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     )
   }
 
-  // Mark code as used
-  await supabaseAdmin
-    .from('mfa_recovery_codes')
-    .update({ used_at: new Date().toISOString() })
-    .eq('id', matchedCodeId)
+  // ── Success: mark code used + clear attempt counter ──
+  await Promise.all([
+    supabaseAdmin
+      .from('mfa_recovery_codes')
+      .update({ used_at: new Date().toISOString() })
+      .eq('id', matchedCodeId),
+    supabaseAdmin
+      .from('mfa_recovery_attempts')
+      .delete()
+      .eq('user_id', userId),
+  ])
 
-  // Count remaining codes
   const remaining = codes.length - 1
 
   await logAuditEvent({
