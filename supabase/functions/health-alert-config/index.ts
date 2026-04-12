@@ -5,6 +5,9 @@
  * Creates a new alert config or updates an existing one (by id).
  * Fail-closed audit: config change is rolled back if audit write fails.
  *
+ * Update path: Pre-fetches old values before update. On audit failure,
+ * restores original values (true rollback — DW-028 resolved).
+ *
  * Owner: health-monitoring module
  * Classification: privileged
  * Rate limit: strict (mutation)
@@ -42,11 +45,23 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
 
   const body = await req.json()
 
-  // Update path: if id is present
+  // ── Update path ──
   if (body.id) {
     const validated = validateRequest(UpdateSchema, body)
     const { id, ...updates } = validated
 
+    // Pre-fetch old values for rollback (DW-028: true fail-closed)
+    const { data: oldConfig, error: fetchError } = await supabaseAdmin
+      .from('alert_configs')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !oldConfig) {
+      return apiError(404, 'Alert config not found', { correlationId: ctx.correlationId })
+    }
+
+    // Apply update
     const { data, error } = await supabaseAdmin
       .from('alert_configs')
       .update(updates)
@@ -61,35 +76,57 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
       return apiError(404, 'Alert config not found', { correlationId: ctx.correlationId })
     }
 
-    // Fail-closed audit (partial): On audit failure the update persists in DB.
-    // Caller receives 500. True rollback deferred — requires pre-fetch of old
-    // values before update (DW-028). See also DW-024b for general pattern.
+    // Fail-closed audit with true rollback
     const auditResult = await logAuditEvent({
       actorId: ctx.user.id,
       action: 'health.alert_config_updated',
       targetType: 'alert_config',
       targetId: id,
-      metadata: { updates },
+      metadata: {
+        updates,
+        previous_values: Object.fromEntries(
+          Object.keys(updates).map((k) => [k, (oldConfig as Record<string, unknown>)[k]])
+        ),
+      },
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
       correlationId: ctx.correlationId,
     })
 
     if (!auditResult.success) {
-      // NOTE: The update has already persisted in the DB. True rollback requires
-      // pre-fetching old values before the update (deferred: DW-028).
-      // The caller receives a 500, surfacing the failure even though the change took effect.
-      console.error('[ALERT-CONFIG] Audit write failed; update persists without audit record', {
+      // Rollback: restore original values
+      const rollbackFields: Record<string, unknown> = {}
+      for (const key of Object.keys(updates)) {
+        rollbackFields[key] = (oldConfig as Record<string, unknown>)[key]
+      }
+
+      const { error: rollbackError } = await supabaseAdmin
+        .from('alert_configs')
+        .update(rollbackFields)
+        .eq('id', id)
+
+      if (rollbackError) {
+        console.error('[ALERT-CONFIG] Rollback also failed — data may be inconsistent', {
+          configId: id,
+          correlationId: ctx.correlationId,
+          rollbackError: rollbackError.message,
+        })
+      }
+
+      console.error('[ALERT-CONFIG] Audit write failed; update rolled back', {
         configId: id,
         correlationId: ctx.correlationId,
       })
-      throw new Error('Alert config update aborted: audit trail write failed')
+      return apiError(500, 'Alert config update aborted: audit trail write failed', {
+        code: 'AUDIT_WRITE_FAILED',
+        correlationId: ctx.correlationId,
+      })
     }
 
     return apiSuccess(data)
   }
 
-  // Create path
+  // ── Create path ──
   const validated = validateRequest(CreateSchema, body)
 
   const { data, error } = await supabaseAdmin
@@ -118,13 +155,15 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
   })
 
   if (!auditResult.success) {
-    // Roll back: delete the just-created config
     await supabaseAdmin.from('alert_configs').delete().eq('id', data.id)
     console.error('[ALERT-CONFIG] Audit write failed, rolled back creation', {
       configId: data.id,
       correlationId: ctx.correlationId,
     })
-    throw new Error('Alert config creation aborted: audit trail write failed')
+    return apiError(500, 'Alert config creation aborted: audit trail write failed', {
+      code: 'AUDIT_WRITE_FAILED',
+      correlationId: ctx.correlationId,
+    })
   }
 
   return apiSuccess(data, 201)
