@@ -283,6 +283,28 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Related tests** | Role deletion allow/deny suite, base role protection tests |
 | **Lifecycle** | active |
 
+#### `roles.edit`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-roles-edit` (actual UUID assigned at DB creation) |
+| **Module** | rbac |
+| **Description** | Allows editing role name and description for non-immutable roles. Key is immutable (enforced by DB trigger). |
+| **Classification** | admin-critical |
+| **Scope** | system-wide |
+| **Default roles** | admin, superadmin |
+| **Used by** | admin-panel (role detail page inline edit), `update-role` edge function |
+| **Blast radius** | medium |
+| **Approval required** | Yes — Lead |
+| **Audit required** | Yes |
+| **Reauth required** | No |
+| **Related routes** | `/admin/roles/:id` |
+| **Related functions** | `checkPermission()` |
+| **Related events** | `rbac.role_updated` |
+| **Related risks** | RISK-002 |
+| **Related tests** | Role edit allow/deny suite, immutable role protection tests |
+| **Lifecycle** | active |
+
 #### `permissions.assign`
 
 | Field | Value |
