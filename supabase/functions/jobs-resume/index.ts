@@ -5,7 +5,7 @@
  * Body: { job_id?: string, class?: string, reason: string }
  *
  * Does NOT resume poison jobs — those require manual investigation.
- * Requires: jobs.pause permission (same as pause)
+ * Requires: jobs.resume permission
  * Audit: job.resumed
  *
  * Owner: jobs-and-scheduler module
@@ -25,7 +25,7 @@ const BodySchema = z.object({
 
 Deno.serve(createHandler(async (req: Request): Promise<Response> => {
   const ctx = await authenticateRequest(req)
-  await checkPermissionOrThrow(ctx.user.id, 'jobs.pause')
+  await checkPermissionOrThrow(ctx.user.id, 'jobs.resume')
   requireRecentAuth(ctx.user.lastSignInAt, 30 * 60 * 1000, ctx.user.id)
 
   const body = validateRequest(BodySchema, await req.json())

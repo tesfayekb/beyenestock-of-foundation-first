@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { useUserRoles } from '@/hooks/useUserRoles';
+import { checkPermission } from '@/lib/rbac';
 
 type JobRegistry = {
   id: string;
@@ -57,6 +59,11 @@ function stateColor(state: string) {
 
 export default function AdminJobsPage() {
   const queryClient = useQueryClient();
+  const { context } = useUserRoles();
+  const canKillSwitch = checkPermission(context, 'jobs.emergency');
+  const canPause = checkPermission(context, 'jobs.pause');
+  const canResume = checkPermission(context, 'jobs.resume');
+  const canReplay = checkPermission(context, 'jobs.deadletter.manage');
   const [tab, setTab] = useState('registry');
   const [killSwitchDialog, setKillSwitchDialog] = useState(false);
   const [pauseDialog, setPauseDialog] = useState<{ jobId: string } | null>(null);
@@ -229,13 +236,15 @@ export default function AdminJobsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <Button
-                variant={isKillSwitchActive ? 'default' : 'destructive'}
-                size="sm"
-                onClick={handleOpenKillSwitch}
-              >
-                {isKillSwitchActive ? 'Deactivate Kill Switch' : 'Activate Kill Switch'}
-              </Button>
+              {canKillSwitch && (
+                <Button
+                  variant={isKillSwitchActive ? 'default' : 'destructive'}
+                  size="sm"
+                  onClick={handleOpenKillSwitch}
+                >
+                  {isKillSwitchActive ? 'Deactivate Kill Switch' : 'Activate Kill Switch'}
+                </Button>
+              )}
             </CardContent>
           </Card>
 
@@ -284,11 +293,11 @@ export default function AdminJobsPage() {
                             </td>
                             <td className="py-3 pr-4">{job.max_retries}</td>
                             <td className="py-3">
-                              {job.enabled && job.status === 'registered' && job.class !== 'system_critical' ? (
+                              {job.enabled && job.status === 'registered' && job.class !== 'system_critical' && canPause ? (
                                 <Button variant="ghost" size="sm" onClick={() => handleOpenPause(job.id)}>
                                   <Pause className="h-3 w-3 mr-1" /> Pause
                                 </Button>
-                              ) : job.status === 'paused' ? (
+                              ) : job.status === 'paused' && canResume ? (
                                 <Button variant="ghost" size="sm" onClick={() => handleOpenResume(job.id)}>
                                   <Play className="h-3 w-3 mr-1" /> Resume
                                 </Button>
@@ -363,13 +372,15 @@ export default function AdminJobsPage() {
                               </p>
                             )}
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenReplay(dl.id)}
-                          >
-                            <RotateCcw className="h-3 w-3 mr-1" /> Replay
-                          </Button>
+                          {canReplay && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenReplay(dl.id)}
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" /> Replay
+                            </Button>
+                          )}
                         </div>
                       ))}
                     </div>

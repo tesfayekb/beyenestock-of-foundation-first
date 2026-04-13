@@ -37,6 +37,8 @@ export default function UserDetailPage() {
   const canAssignRoles = checkPermission(context, 'roles.assign');
   const canRevokeRoles = checkPermission(context, 'roles.revoke');
   const canEditProfile = checkPermission(context, 'users.edit_any');
+  const canDeactivate = checkPermission(context, 'users.deactivate');
+  const canReactivate = checkPermission(context, 'users.reactivate');
 
   const { data: profile, isLoading, error, refetch } = useUserDetail(id);
   const { data: userRoles, isLoading: rolesLoading, refetch: refetchRoles } = useUserRolesAdmin(canViewRoles ? id : undefined);
@@ -121,15 +123,19 @@ export default function UserDetailPage() {
           actions={
             !isSelf && (
               isActive ? (
-                <Button variant="destructive" size="sm" onClick={() => setShowDeactivate(true)}>
-                  <ShieldAlert className="mr-2 h-4 w-4" />
-                  Deactivate
-                </Button>
+                canDeactivate && (
+                  <Button variant="destructive" size="sm" onClick={() => setShowDeactivate(true)}>
+                    <ShieldAlert className="mr-2 h-4 w-4" />
+                    Deactivate
+                  </Button>
+                )
               ) : (
-                <Button variant="default" size="sm" onClick={() => setShowReactivate(true)}>
-                  <ShieldCheck className="mr-2 h-4 w-4" />
-                  Reactivate
-                </Button>
+                canReactivate && (
+                  <Button variant="default" size="sm" onClick={() => setShowReactivate(true)}>
+                    <ShieldCheck className="mr-2 h-4 w-4" />
+                    Reactivate
+                  </Button>
+                )
               )
             )
           }
@@ -192,7 +198,9 @@ export default function UserDetailPage() {
               ) : userRoles && userRoles.length > 0 ? (
                 <div className="space-y-2">
                   {userRoles.map((role) => {
-                    const isIrrevocableForActor = role.role_key === 'user' || (role.is_base && !context?.is_superadmin);
+                    const isIrrevocableForActor = role.role_key === 'user'
+                      || (role.is_base && !context?.is_superadmin)
+                      || (role.role_key === 'superadmin' && isSelf);
                     return (
                       <div key={role.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
                         <Badge variant="secondary" className="text-sm">{role.role_name}</Badge>

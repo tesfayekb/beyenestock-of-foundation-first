@@ -20,6 +20,8 @@ import {
 } from '@/components/ui/select';
 import { Download, ChevronLeft, ChevronRight, RotateCcw, Search } from 'lucide-react';
 import { format } from 'date-fns';
+import { useUserRoles } from '@/hooks/useUserRoles';
+import { checkPermission } from '@/lib/rbac';
 
 const PAGE_SIZE = 50;
 
@@ -114,6 +116,9 @@ const columns: DataTableColumn<AuditLogEntry>[] = [
 ];
 
 export default function AdminAuditPage() {
+  const { context } = useUserRoles();
+  const canExport = checkPermission(context, 'audit.export');
+
   // Filters
   const [actionFilter, setActionFilter] = useState('');
   const [targetTypeFilter, setTargetTypeFilter] = useState('');
@@ -187,15 +192,17 @@ export default function AdminAuditPage() {
         title="Audit Logs"
         subtitle="Compliance event log — all security-relevant actions"
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExport}
-            disabled={exporting}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            {exporting ? 'Exporting…' : 'Export CSV'}
-          </Button>
+          canExport && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={exporting}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </Button>
+          )
         }
       />
 
