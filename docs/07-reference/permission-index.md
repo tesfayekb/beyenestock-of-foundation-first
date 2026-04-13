@@ -1,6 +1,6 @@
 # Permission Index
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09 | **Status:** Living Document | **Index Version:** `perm-v1.1`
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-13 | **Status:** Living Document | **Index Version:** `perm-v1.1`
 
 ## Purpose
 
