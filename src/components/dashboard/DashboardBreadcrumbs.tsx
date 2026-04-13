@@ -61,30 +61,32 @@ export function DashboardBreadcrumbs() {
   if (segments.length <= 1) return null;
 
   return (
-    <Breadcrumb>
-      <BreadcrumbList>
-        {segments.map((segment, index) => {
-          const path = '/' + segments.slice(0, index + 1).join('/');
-          const isLast = index === segments.length - 1;
-          const isUuid = UUID_RE.test(segment);
-          const label = isUuid
-            ? resolveEntityName(queryClient, segments, segment)
-            : (labelMap[segment] || segment.charAt(0).toUpperCase() + segment.slice(1));
+    <div className="border-b bg-background px-4 py-1.5">
+      <Breadcrumb>
+        <BreadcrumbList>
+          {segments.map((segment, index) => {
+            const path = '/' + segments.slice(0, index + 1).join('/');
+            const isLast = index === segments.length - 1;
+            const isUuid = UUID_RE.test(segment);
+            const label = isUuid
+              ? resolveEntityName(queryClient, segments, segment)
+              : (labelMap[segment] || segment.charAt(0).toUpperCase() + segment.slice(1));
 
-          return (
-            <Fragment key={path}>
-              {index > 0 && <BreadcrumbSeparator />}
-              <BreadcrumbItem>
-                {isLast ? (
-                  <BreadcrumbPage>{label}</BreadcrumbPage>
-                ) : (
-                  <BreadcrumbLink asChild><Link to={path}>{label}</Link></BreadcrumbLink>
-                )}
-              </BreadcrumbItem>
-            </Fragment>
-          );
-        })}
-      </BreadcrumbList>
-    </Breadcrumb>
+            return (
+              <Fragment key={path}>
+                {index > 0 && <BreadcrumbSeparator />}
+                <BreadcrumbItem>
+                  {isLast ? (
+                    <BreadcrumbPage>{label}</BreadcrumbPage>
+                  ) : (
+                    <BreadcrumbLink asChild><Link to={path}>{label}</Link></BreadcrumbLink>
+                  )}
+                </BreadcrumbItem>
+              </Fragment>
+            );
+          })}
+        </BreadcrumbList>
+      </Breadcrumb>
+    </div>
   );
 }
