@@ -61,7 +61,7 @@ export function DashboardBreadcrumbs() {
   if (segments.length <= 1) return null;
 
   return (
-    <div className="border-b bg-background px-4 py-1.5">
+    <div className="sticky top-14 z-20 border-b bg-background px-4 py-1.5">
       <Breadcrumb>
         <BreadcrumbList>
           {segments.map((segment, index) => {
