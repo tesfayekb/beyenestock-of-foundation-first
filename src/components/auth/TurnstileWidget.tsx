@@ -15,7 +15,7 @@ import {
   useRef,
 } from 'react';
 
-const TURNSTILE_SITE_KEY = '0x4AAAAAAC82V2ZrtUDOUfbx';
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '';
 const TURNSTILE_SCRIPT_ID = 'cf-turnstile-script';
 
 interface TurnstileWidgetProps {
