@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useParams, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
@@ -21,7 +20,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { checkPermission } from '@/lib/rbac';
 import { requiresReauthentication } from '@/lib/auth-guards';
 import { ROUTES } from '@/config/routes';
-import { ROUTES } from '@/config/routes';
 import { PERMISSION_DEPS } from '@/config/permission-deps';
 import { ArrowLeft, Shield, Users, Key, Loader2, Info, Trash2, Pencil, Check, X } from 'lucide-react';
 
@@ -41,7 +39,7 @@ export default function RoleDetailPage() {
   const navigate = useNavigate();
   const { context } = useUserRoles();
   const { user } = useAuth();
-  const { toast } = useToast();
+  
 
   const canAssignPerms = checkPermission(context, 'permissions.assign');
   const canRevokePerms = checkPermission(context, 'permissions.revoke');
