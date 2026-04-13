@@ -200,13 +200,11 @@ function CollapsibleNavGroup({
   item,
   visibleChildren,
   hasActiveChild,
-  isActive,
   renderNavItem,
 }: {
   item: NavItem;
   visibleChildren: NavItem[];
   hasActiveChild: boolean;
-  isActive: (path: string) => boolean;
   renderNavItem: (item: NavItem) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(hasActiveChild);
