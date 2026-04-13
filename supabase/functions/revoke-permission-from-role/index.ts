@@ -120,6 +120,16 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(404, 'Permission not found', { correlationId: ctx.correlationId })
   }
 
+  // Block superadmin-only permissions from being revoked from any non-superadmin role
+  // (they shouldn't be assigned in the first place, but defense-in-depth)
+  if (role.key !== 'superadmin' && SUPERADMIN_ONLY_PERMISSIONS.has(permission.key)) {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(403, `Permission "${permission.key}" is restricted to superadmin only and cannot be modified on other roles`, {
+      correlationId: ctx.correlationId,
+      code: 'SUPERADMIN_ONLY_PERMISSION',
+    })
+  }
+
   // Validate mapping exists
   const { data: mapping } = await supabaseAdmin
     .from('role_permissions')
