@@ -56,55 +56,17 @@ export default function SignIn() {
     }
   };
 
-  const verifyTurnstile = async (): Promise<boolean> => {
-    const token = await getTurnstileToken();
-    if (!token) {
-      return false;
-    }
-
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-turnstile`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
-      });
-
-      if (!res.ok) {
-        toast({
-          variant: 'destructive',
-          title: 'Verification failed',
-          description: 'CAPTCHA verification failed. Please try again.',
-        });
-        turnstileRef.current?.reset();
-        setTurnstileToken(null);
-        return false;
-      }
-
-      setTurnstileToken(token);
-      return true;
-    } catch {
-      toast({
-        variant: 'destructive',
-        title: 'Verification error',
-        description: 'Could not verify CAPTCHA. Please try again.',
-      });
-      turnstileRef.current?.reset();
-      setTurnstileToken(null);
-      return false;
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const verified = await verifyTurnstile();
-    if (!verified) {
+    const token = await getTurnstileToken();
+    if (!token) {
       setLoading(false);
       return;
     }
 
-    const { error } = await signIn(email, password);
+    const { error } = await signIn(email, password, token);
 
     if (error) {
       toast({
@@ -112,6 +74,8 @@ export default function SignIn() {
         title: 'Sign in failed',
         description: error.message,
       });
+      turnstileRef.current?.reset();
+      setTurnstileToken(null);
       setLoading(false);
     }
   };
