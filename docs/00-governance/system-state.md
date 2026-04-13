@@ -58,7 +58,7 @@ Comprehensive hardening pass on RBAC enforcement across server and UI layers. Ke
 - **Edge functions hardened**: `assign-permission-to-role` and `revoke-permission-from-role` both validate against `SUPERADMIN_ONLY_PERMISSIONS` set before executing.
 
 ### UI Enforcement
-- **Permission inheritance visibility**: Base user-role permissions (5 keys: `users.view_self`, `profile.self_manage`, `mfa.self_manage`, `audit.view_own`, `sessions.self_manage`) display as checked/disabled with "inherited from user role" badge on all non-user roles.
+- **Permission inheritance visibility**: Base user-role permissions (5 keys: `users.view_self`, `users.edit_self`, `profile.self_manage`, `mfa.self_manage`, `session.self_manage`) display as checked/disabled with "inherited from user role" badge on all non-user roles.
 - **Superadmin-only badge**: 6 restricted permissions show as disabled with "superadmin only" badge on all non-superadmin roles.
 - **Effective permission count**: Role list and detail pages show union of direct + inherited permissions.
 - **8 button-level gaps closed**: Create Role, Edit Role, Delete Role, Assign Role, Revoke Role, Deactivate User, Reactivate User, Revoke Sessions — all permission-gated with `checkPermission()`.

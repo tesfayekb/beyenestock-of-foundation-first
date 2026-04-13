@@ -11,8 +11,9 @@ Comprehensive hardening pass on RBAC enforcement across server (edge functions) 
 ### Phase 1A/1B — Migration & Schema Foundation
 
 - `is_permission_locked` and `is_immutable` column separation already in schema
-- Superadmin role: `is_immutable = true`, `is_permission_locked = true`
-- Admin/User roles: `is_immutable = true`, `is_permission_locked = false`
+- Superadmin role: `is_immutable = true`, `is_permission_locked = false` (inherits all logically — locking unnecessary)
+- Admin role: `is_immutable = true`, `is_permission_locked = false`
+- User role: `is_immutable = true`, `is_permission_locked = true`
 
 ### Phase 2A — assign-permission-to-role Hardening
 
@@ -32,7 +33,7 @@ Comprehensive hardening pass on RBAC enforcement across server (edge functions) 
 
 ### Phase 3A — RoleDetailPage UI: Permission Inheritance
 
-- Base user-role permissions (5 keys): `users.view_self`, `profile.self_manage`, `mfa.self_manage`, `audit.view_own`, `sessions.self_manage`
+- Base user-role permissions (5 keys): `users.view_self`, `users.edit_self`, `profile.self_manage`, `mfa.self_manage`, `session.self_manage`
 - On non-user roles: these permissions display as checked, disabled, with "inherited from user role" badge
 - On user role itself: permissions are directly manageable (no inheritance badge)
 - `effectivePermissionCount` computed via `useMemo` — union of direct + inherited
@@ -54,14 +55,14 @@ All admin action buttons now enforce granular permissions via `checkPermission()
 
 | # | Button | Page | Permission Required |
 |---|--------|------|-------------------|
-| 1 | Create Role | AdminRolesPage | `roles.create` |
-| 2 | Edit Role (name/description) | RoleDetailPage | `roles.edit` |
-| 3 | Delete Role | RoleDetailPage | `roles.delete` |
-| 4 | Assign Role to User | UserDetailPage | `roles.assign` |
-| 5 | Revoke Role from User | UserDetailPage | `roles.revoke` |
-| 6 | Deactivate User | UserDetailPage | `users.deactivate` |
-| 7 | Reactivate User | UserDetailPage | `users.reactivate` |
-| 8 | Revoke Sessions | UserDetailPage | `sessions.revoke` |
+| 1 | Deactivate User | UserDetailPage | `users.deactivate` |
+| 2 | Reactivate User | UserDetailPage | `users.reactivate` |
+| 3 | Export CSV | AdminAuditPage | `audit.export` |
+| 4 | Kill Switch | AdminJobsPage | `jobs.emergency` |
+| 5 | Pause Job | AdminJobsPage | `jobs.pause` |
+| 6 | Resume Job | AdminJobsPage | `jobs.resume` |
+| 7 | Replay Dead Letter | AdminJobsPage | `jobs.deadletter.manage` |
+| 8 | jobs-resume edge function | jobs-resume/index.ts | Fixed: was checking `jobs.pause` instead of `jobs.resume` |
 
 Buttons are hidden when the user lacks the required permission. Server-side enforcement is the primary gate; UI hiding is defense-in-depth.
 
@@ -89,7 +90,6 @@ Buttons are hidden when the user lacks the required permission. Server-side enfo
 
 ### UI Components
 - `src/pages/admin/RoleDetailPage.tsx`
-- `src/pages/admin/AdminRolesPage.tsx`
 - `src/pages/admin/UserDetailPage.tsx`
 - `src/hooks/useRoleActions.ts`
 
@@ -105,7 +105,7 @@ Buttons are hidden when the user lacks the required permission. Server-side enfo
 
 ## Evidence
 
-- All 15 regression tests pass
+- All 83 tests pass (83/83)
 - Edge functions deployed and verified
 - Server-side 403 enforcement verified for superadmin-only permissions
 - UI inheritance badges render correctly on non-user roles
