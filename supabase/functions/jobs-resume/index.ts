@@ -5,7 +5,7 @@
  * Body: { job_id?: string, class?: string, reason: string }
  *
  * Does NOT resume poison jobs — those require manual investigation.
- * Requires: jobs.pause permission (same as pause)
+ * Requires: jobs.resume permission
  * Audit: job.resumed
  *
  * Owner: jobs-and-scheduler module
