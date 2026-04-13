@@ -68,7 +68,7 @@ export function AdminLayout() {
   return (
     <RequireAuth>
       <RequireMfaForAdmin mfaStatus={mfaStatus} returnTo={returnTo}>
-        <DashboardLayout sections={adminNavigation} title="Admin Console">
+        <DashboardLayout sections={adminNavigation}>
           <RequirePermission
             permission="admin.access"
             fallback={<AccessDenied message="You need admin access to view this page." />}

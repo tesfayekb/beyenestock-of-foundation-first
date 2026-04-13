@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { NavLink } from '@/components/NavLink';
 import { AppBrand } from '@/components/AppBrand';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Sidebar,
   SidebarContent,
@@ -179,25 +180,46 @@ export const DashboardSidebar = React.memo(function DashboardSidebar({ sections,
         {availableDashboards.length > 1 && (
           <div className="px-2 pb-2">
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size={collapsed ? 'icon' : 'default'}
-                  className={collapsed ? 'w-full' : 'w-full justify-between text-left font-normal'}
-                >
-                  {activeDashboard && (
-                    <>
-                      <activeDashboard.icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && (
-                        <>
-                          <span className="ml-2 flex-1 truncate text-sm">{activeDashboard.label}</span>
-                          <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
-                        </>
-                      )}
-                    </>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
+              {collapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="w-full"
+                        aria-label="Switch dashboard"
+                      >
+                        {activeDashboard ? (
+                          <activeDashboard.icon className="h-4 w-4 shrink-0" />
+                        ) : (
+                          <span className="h-4 w-4 rounded bg-muted animate-pulse" />
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Switch dashboard</TooltipContent>
+                </Tooltip>
+              ) : (
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="default"
+                    className="w-full justify-between text-left font-normal"
+                    aria-label="Switch dashboard"
+                  >
+                    {activeDashboard ? (
+                      <>
+                        <activeDashboard.icon className="h-4 w-4 shrink-0" />
+                        <span className="ml-2 flex-1 truncate text-sm">{activeDashboard.label}</span>
+                        <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
+                      </>
+                    ) : (
+                      <span className="h-4 w-4 rounded bg-muted animate-pulse" />
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+              )}
               <DropdownMenuContent align="start" className="w-56">
                 {availableDashboards.map((d) => (
                   <DropdownMenuItem
