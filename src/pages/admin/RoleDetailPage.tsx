@@ -91,6 +91,9 @@ export default function RoleDetailPage() {
     'roles.create',
     'roles.edit',
     'roles.delete',
+    'admin.config',
+    'monitoring.configure',
+    'audit.export',
   ]);
 
   // Track in-flight toggles to show spinners per-permission

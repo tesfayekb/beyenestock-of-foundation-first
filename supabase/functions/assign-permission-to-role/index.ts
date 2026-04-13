@@ -38,6 +38,9 @@ const SUPERADMIN_ONLY_PERMISSIONS = new Set([
   'roles.edit',
   'roles.delete',
   'jobs.emergency',
+  'admin.config',
+  'monitoring.configure',
+  'audit.export',
 ])
 
 const BodySchema = z.object({
