@@ -1,4 +1,4 @@
-import { LayoutDashboard, UserCircle, ShieldCheck, Shield } from 'lucide-react';
+import { LayoutDashboard, UserCircle, ShieldCheck } from 'lucide-react';
 import type { NavSection } from './navigation.types';
 import { ROUTES } from './routes';
 
@@ -22,17 +22,6 @@ export const userNavigation: NavSection[] = [
         url: ROUTES.SETTINGS_SECURITY,
         icon: ShieldCheck,
         permission: 'mfa.self_manage',
-      },
-    ],
-  },
-  {
-    label: 'Administration',
-    items: [
-      {
-        title: 'Admin Console',
-        url: ROUTES.ADMIN,
-        icon: Shield,
-        permission: 'admin.access',
       },
     ],
   },

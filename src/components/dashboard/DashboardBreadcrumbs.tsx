@@ -57,7 +57,8 @@ export function DashboardBreadcrumbs() {
   const queryClient = useQueryClient();
   const segments = location.pathname.split('/').filter(Boolean);
 
-  if (segments.length === 0) return null;
+  // Suppress single-segment breadcrumbs (root pages like /dashboard, /admin)
+  if (segments.length <= 1) return null;
 
   return (
     <Breadcrumb>

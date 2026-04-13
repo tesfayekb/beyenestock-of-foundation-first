@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Shield, Key, FileText, Home, Activity, Cog } from 'lucide-react';
+import { LayoutDashboard, Users, Shield, Key, FileText, Activity, Cog } from 'lucide-react';
 import type { NavSection } from './navigation.types';
 import { ROUTES } from './routes';
 
@@ -67,16 +67,6 @@ export const adminNavigation: NavSection[] = [
         url: ROUTES.ADMIN_AUDIT,
         icon: FileText,
         permission: 'audit.view',
-      },
-    ],
-  },
-  {
-    label: 'Account',
-    items: [
-      {
-        title: 'My Dashboard',
-        url: ROUTES.DASHBOARD,
-        icon: Home,
       },
     ],
   },
