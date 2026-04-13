@@ -2,6 +2,9 @@
  * assign-role — Assign a role to a user.
  *
  * Requires: roles.assign permission.
+ * Guards:
+ *   - Superadmin role can only be assigned by another superadmin (5min reauth).
+ *   - User role cannot be manually assigned (auto-assigned on signup).
  * Audit: HIGH-RISK (fail-closed with rollback).
  *
  * POST /assign-role
@@ -52,6 +55,30 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(404, 'Role not found', { correlationId: ctx.correlationId })
   }
 
+  // Block manual assignment of the base user role — it is auto-assigned on signup
+  if (role.key === 'user') {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(409, 'User role is automatically assigned on signup and cannot be manually assigned', {
+      correlationId: ctx.correlationId,
+      code: 'USER_ROLE_AUTO_ASSIGNED',
+    })
+  }
+
+  // Superadmin role can only be assigned by another superadmin with tighter reauth
+  if (role.key === 'superadmin') {
+    const { data: actorIsSuperadmin } = await supabaseAdmin.rpc('is_superadmin', {
+      _user_id: ctx.user.id,
+    })
+    if (!actorIsSuperadmin) {
+      const { apiError } = await import('../_shared/api-error.ts')
+      return apiError(403, 'Only a superadmin can assign the superadmin role', {
+        correlationId: ctx.correlationId,
+      })
+    }
+    // Tighter reauth window for superadmin assignment: 5 minutes
+    requireRecentAuth(ctx.user.lastSignInAt, 5 * 60 * 1000, ctx.user.id)
+  }
+
   // Assign role
   const { error: insertError } = await supabaseAdmin
     .from('user_roles')
@@ -75,6 +102,7 @@ Deno.serve(createHandler(async (req: Request) => {
       role_id,
       role_key: role.key,
       target_user_id,
+      assigned_by_is_superadmin: role.key === 'superadmin' ? true : undefined,
     },
     ipAddress: ctx.ipAddress,
     userAgent: ctx.userAgent,

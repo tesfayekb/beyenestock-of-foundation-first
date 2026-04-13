@@ -1,7 +1,7 @@
 /**
  * create-role — Create a new custom role.
  *
- * Requires: roles.create permission + recent auth.
+ * Requires: roles.create permission + superadmin + 5min reauth.
  * Audit: rbac.role_created (fail-closed with rollback).
  *
  * POST /create-role
@@ -34,7 +34,20 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const ctx = await authenticateRequest(req)
   await checkPermissionOrThrow(ctx.user.id, 'roles.create')
-  requireRecentAuth(ctx.user.lastSignInAt, 30 * 60 * 1000, ctx.user.id)
+
+  // Superadmin-only gate
+  const { data: actorIsSuperadmin } = await supabaseAdmin.rpc('is_superadmin', {
+    _user_id: ctx.user.id,
+  })
+  if (!actorIsSuperadmin) {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(403, 'Only a superadmin can create roles', {
+      correlationId: ctx.correlationId,
+    })
+  }
+
+  // Tighter reauth: 5 minutes for role creation
+  requireRecentAuth(ctx.user.lastSignInAt, 5 * 60 * 1000, ctx.user.id)
 
   const body = await req.json()
   const { key, name, description } = validateRequest(BodySchema, body)
@@ -47,10 +60,10 @@ Deno.serve(createHandler(async (req: Request) => {
     })
   }
 
-  // Insert the new role (is_base=false, is_immutable=false for custom roles)
+  // Insert the new role (is_base=false, is_immutable=false, is_permission_locked=false for custom roles)
   const { data: newRole, error: insertError } = await supabaseAdmin
     .from('roles')
-    .insert({ key, name, description: description || null, is_base: false, is_immutable: false })
+    .insert({ key, name, description: description || null, is_base: false, is_immutable: false, is_permission_locked: false })
     .select('id, key, name')
     .single()
 
