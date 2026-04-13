@@ -58,6 +58,6 @@ const handler = createHandler(async (req: Request): Promise<Response> => {
   }
 
   return apiSuccess({ success: true })
-}, { rateLimit: 'auth' })
+}, { rateLimit: 'strict' })
 
 Deno.serve(handler)

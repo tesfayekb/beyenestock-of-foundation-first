@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { safeRedirectPath } from '@/lib/safe-redirect';
-import TurnstileWidget from '@/components/auth/TurnstileWidget';
+import TurnstileWidget, { type TurnstileWidgetHandle } from '@/components/auth/TurnstileWidget';
 
 const SUPABASE_URL = 'https://wbmbsclrgcnqaxmdsgfc.supabase.co';
 
@@ -19,6 +19,7 @@ export default function SignIn() {
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
   const { signIn, user, mfaStatus } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -39,13 +40,26 @@ export default function SignIn() {
     }
   }, [user, mfaStatus, from, navigate]);
 
-  const verifyTurnstile = async (): Promise<boolean> => {
-    if (!turnstileToken) {
+  const getTurnstileToken = async (): Promise<string | null> => {
+    if (turnstileToken) {
+      return turnstileToken;
+    }
+
+    try {
+      return await turnstileRef.current?.execute() ?? null;
+    } catch (error) {
       toast({
         variant: 'destructive',
         title: 'Verification required',
-        description: 'Please complete the CAPTCHA verification.',
+        description: error instanceof Error ? error.message : 'Please complete the CAPTCHA check and try again.',
       });
+      return null;
+    }
+  };
+
+  const verifyTurnstile = async (): Promise<boolean> => {
+    const token = await getTurnstileToken();
+    if (!token) {
       return false;
     }
 
@@ -53,7 +67,7 @@ export default function SignIn() {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-turnstile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: turnstileToken }),
+        body: JSON.stringify({ token }),
       });
 
       if (!res.ok) {
@@ -62,10 +76,12 @@ export default function SignIn() {
           title: 'Verification failed',
           description: 'CAPTCHA verification failed. Please try again.',
         });
+        turnstileRef.current?.reset();
         setTurnstileToken(null);
         return false;
       }
 
+      setTurnstileToken(token);
       return true;
     } catch {
       toast({
@@ -73,6 +89,8 @@ export default function SignIn() {
         title: 'Verification error',
         description: 'Could not verify CAPTCHA. Please try again.',
       });
+      turnstileRef.current?.reset();
+      setTurnstileToken(null);
       return false;
     }
   };
@@ -157,12 +175,13 @@ export default function SignIn() {
             </div>
 
             <TurnstileWidget
+              ref={turnstileRef}
               onVerify={setTurnstileToken}
               onExpire={() => setTurnstileToken(null)}
               onError={() => setTurnstileToken(null)}
             />
 
-            <Button type="submit" className="w-full" disabled={loading || !turnstileToken}>
+            <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Signing in...' : 'Sign in'}
             </Button>
 

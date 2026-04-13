@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import TurnstileWidget from '@/components/auth/TurnstileWidget';
+import TurnstileWidget, { type TurnstileWidgetHandle } from '@/components/auth/TurnstileWidget';
 
 const SUPABASE_URL = 'https://wbmbsclrgcnqaxmdsgfc.supabase.co';
 
@@ -15,16 +15,30 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
   const { resetPassword } = useAuth();
   const { toast } = useToast();
 
-  const verifyTurnstile = async (): Promise<boolean> => {
-    if (!turnstileToken) {
+  const getTurnstileToken = async (): Promise<string | null> => {
+    if (turnstileToken) {
+      return turnstileToken;
+    }
+
+    try {
+      return await turnstileRef.current?.execute() ?? null;
+    } catch (error) {
       toast({
         variant: 'destructive',
         title: 'Verification required',
-        description: 'Please complete the CAPTCHA verification.',
+        description: error instanceof Error ? error.message : 'Please complete the CAPTCHA check and try again.',
       });
+      return null;
+    }
+  };
+
+  const verifyTurnstile = async (): Promise<boolean> => {
+    const token = await getTurnstileToken();
+    if (!token) {
       return false;
     }
 
@@ -32,7 +46,7 @@ export default function ForgotPassword() {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-turnstile`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: turnstileToken }),
+        body: JSON.stringify({ token }),
       });
 
       if (!res.ok) {
@@ -41,10 +55,12 @@ export default function ForgotPassword() {
           title: 'Verification failed',
           description: 'CAPTCHA verification failed. Please try again.',
         });
+        turnstileRef.current?.reset();
         setTurnstileToken(null);
         return false;
       }
 
+      setTurnstileToken(token);
       return true;
     } catch {
       toast({
@@ -52,6 +68,8 @@ export default function ForgotPassword() {
         title: 'Verification error',
         description: 'Could not verify CAPTCHA. Please try again.',
       });
+      turnstileRef.current?.reset();
+      setTurnstileToken(null);
       return false;
     }
   };
@@ -69,10 +87,8 @@ export default function ForgotPassword() {
     const { error } = await resetPassword(email);
 
     if (error) {
-      // Never reveal whether an email exists — always show the same message
       console.error('[ForgotPassword] Reset error:', error.code);
     }
-    // Always show "check your email" to prevent user enumeration
     setSubmitted(true);
     setLoading(false);
   };
@@ -120,13 +136,14 @@ export default function ForgotPassword() {
             </div>
 
             <TurnstileWidget
+              ref={turnstileRef}
               onVerify={setTurnstileToken}
               onExpire={() => setTurnstileToken(null)}
               onError={() => setTurnstileToken(null)}
             />
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={loading || !turnstileToken}>
+            <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Sending…' : 'Send reset link'}
             </Button>
             <Link to="/sign-in" className="text-sm text-muted-foreground hover:text-primary">
