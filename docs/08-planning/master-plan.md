@@ -466,6 +466,7 @@ Based on dependency chains and phases:
 5. **Phase 4:** PLAN-ADMIN-001, PLAN-USRPNL-001
 6. **Phase 5:** PLAN-HEALTH-001, PLAN-JOBS-001 (can overlap with Phase 3/4)
 7. **Phase 6:** System-wide hardening and validation
+8. **Phase 7:** PLAN-INVITE-001 (depends on Phases 1, 2, 4)
 
 ## Execution Rules
 
