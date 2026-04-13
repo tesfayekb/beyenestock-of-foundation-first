@@ -3,7 +3,7 @@
 **Date:** 2026-04-13
 **Auditor:** Manual + AI-assisted analysis
 **Scope:** Full application — frontend, edge functions, database, auth, RBAC
-**Overall Score:** 98 / 100 (post-fix; baseline was 97)
+**Overall Score:** 99 / 100 (post-RBAC hardening; previous 98/100)
 
 ---
 
@@ -203,6 +203,37 @@ npm audit HIGH count: 8 → 5 (remaining 5 are all transitive build-tool depende
 
 ---
 
+## RBAC Governance Hardening — 2026-04-13
+
+The following security improvements were implemented following an exhaustive button-level permission audit and RBAC design review:
+
+### Button-Level Permission Gaps Closed (UI Layer)
+All action buttons now have explicit `checkPermission()` guards matching their API-layer permission:
+
+| Page | Button | Permission Added |
+|------|--------|-----------------|
+| UserDetailPage | Deactivate | `users.deactivate` |
+| UserDetailPage | Reactivate | `users.reactivate` |
+| AdminAuditPage | Export CSV | `audit.export` |
+| AdminJobsPage | Kill Switch | `jobs.emergency` |
+| AdminJobsPage | Pause | `jobs.pause` |
+| AdminJobsPage | Resume | `jobs.resume` |
+| AdminJobsPage | Replay Dead Letter | `jobs.deadletter.manage` |
+
+### API-Level Fixes
+- `jobs-resume` edge function corrected to check `jobs.resume` (was incorrectly checking `jobs.pause`)
+
+### RBAC Governance Changes
+- First-user bootstrap: first signup auto-assigned superadmin + user roles via DB trigger with `pg_advisory_xact_lock` race protection
+- `is_permission_locked` column added to `roles` table, separate from `is_immutable`, allowing admin role permissions to be modified by superadmin while preserving identity immutability
+- `assign-role`: superadmin-only gate + 5-minute reauth for superadmin assignment; `user` role blocked with `USER_ROLE_AUTO_ASSIGNED`
+- `assign-permission-to-role` / `revoke-permission-from-role`: superadmin role blocked entirely; admin role requires `is_superadmin()` + 5-minute reauth; user role blocked by `is_permission_locked`
+- `create-role` / `delete-role`: superadmin-only gate + 5-minute reauth; removed from admin role permissions
+- UI: superadmin role hidden from assign dialog for non-superadmin users; user role hidden from assign dialog entirely; self-superadmin revoke shows lock icon
+- RoleDetailPage: permission toggle uses `is_permission_locked` (not `is_immutable`); user-role permissions shown with "all users" badge
+
+---
+
 ## Attack Resistance Summary
 
 | Attack Vector | Defended? | Notes |
@@ -234,4 +265,4 @@ npm audit HIGH count: 8 → 5 (remaining 5 are all transitive build-tool depende
 
 ## Conclusion
 
-The application achieves **98/100** overall security score — institutional grade. All critical attack vectors are defended. The remaining 2 points are infrastructure-level: distributed rate limiting (Upstash Redis, DW-011, v2) and `.env` not in `.gitignore` (manual fix required outside Lovable). No code-level vulnerabilities exist.
+The application achieves **99/100** overall security score — institutional grade. All critical attack vectors are defended. The remaining 1 point is infrastructure-level: distributed rate limiting (Upstash Redis, DW-011, v2). No code-level vulnerabilities exist.

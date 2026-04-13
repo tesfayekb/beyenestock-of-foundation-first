@@ -1,6 +1,6 @@
 # Permission Index
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09 | **Status:** Living Document | **Index Version:** `perm-v1.1`
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-13 | **Status:** Living Document | **Index Version:** `perm-v1.1`
 
 ## Purpose
 
@@ -252,19 +252,21 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Description** | Allows creating new dynamic roles within the RBAC system |
 | **Classification** | admin-critical |
 | **Scope** | system-wide |
-| **Default roles** | admin, superadmin |
+| **Default roles** | superadmin |
 | **Used by** | admin-panel (role management UI, API) |
 | **Blast radius** | system-wide |
 | **Approval required** | Yes — Lead |
 | **Audit required** | Yes |
-| **Reauth required** | No |
+| **Reauth required** | Yes (5-minute window) |
 | **Related routes** | `/admin/roles` (POST) |
-| **Related functions** | `checkPermission()` |
+| **Related functions** | `checkPermission()`, `is_superadmin()` |
 | **Related events** | `rbac.role_created` |
 | **Related risks** | RISK-002 (privilege escalation via new role) |
 | **Related tests** | Role creation allow/deny suite |
 | **Depends on** | `roles.view`, `admin.access` |
 | **Lifecycle** | active |
+
+> **Note:** `roles.create` requires superadmin regardless of role assignment — the permission documents the capability, but the edge function enforces `is_superadmin()` as an additional gate.
 
 #### `roles.delete`
 
@@ -275,19 +277,21 @@ Permissions classified as `destructive`, `system-wide`, or `security-critical` r
 | **Description** | Allows deleting dynamic roles. Destructive — removes role and all associated permissions. Base roles (superadmin, user) cannot be deleted. |
 | **Classification** | admin-critical, destructive |
 | **Scope** | system-wide |
-| **Default roles** | admin, superadmin |
+| **Default roles** | superadmin |
 | **Used by** | admin-panel (role management UI, API) |
 | **Blast radius** | system-wide |
 | **Approval required** | Yes — Lead |
 | **Audit required** | Yes |
-| **Reauth required** | Yes |
+| **Reauth required** | Yes (5-minute window) |
 | **Related routes** | `/admin/roles/:id` (DELETE) |
-| **Related functions** | `checkPermission()` |
+| **Related functions** | `checkPermission()`, `is_superadmin()` |
 | **Related events** | `rbac.role_deleted` |
 | **Related risks** | RISK-002 (orphaned users after role deletion) |
 | **Related tests** | Role deletion allow/deny suite, base role protection tests |
 | **Depends on** | `roles.view`, `admin.access` |
 | **Lifecycle** | active |
+
+> **Note:** `roles.delete` requires superadmin regardless of role assignment — the permission documents the capability, but the edge function enforces `is_superadmin()` as an additional gate.
 
 #### `roles.edit`
 

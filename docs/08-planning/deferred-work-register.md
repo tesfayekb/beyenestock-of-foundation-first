@@ -1,6 +1,6 @@
 # Deferred Work Register
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-10
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-13
 
 ## Purpose
 
@@ -348,6 +348,8 @@ At each phase boundary (before advancing to the next phase):
 | DW-031 | Service worker (Workbox) | Phase 6 | `unassigned` (v2) | `deferred` |
 | DW-032 | CDN security headers (X-Frame-Options, early hints) | Phase 6 | `unassigned` (v2) | `deferred` |
 | DW-033 | Auth page label/input association | Phase 6 | Phase 7 | `deferred` |
+| DW-034 | Superadmin Assignment Notification Email | Post-Phase 6 | `unassigned` (v2) | `deferred (v2)` |
+| DW-035 | Invite-Only Signup Flow | Post-Phase 6 | `unassigned` (v2) | `deferred (v2)` |
 
 
 ### DW-011: Distributed Rate Limiting
@@ -891,6 +893,54 @@ At each phase boundary (before advancing to the next phase):
 | **Related Actions** | — |
 | **Required Tests for Closure** | Screen reader announces correct label for every auth form input; axe-core scan shows zero label-association violations |
 | **Status** | `deferred` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-034: Superadmin Assignment Notification Email
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-034 |
+| **Date Deferred** | 2026-04-13 |
+| **Source Plan Section** | RBAC Governance Hardening |
+| **Source Phase** | Post-Phase 6 |
+| **Title** | Out-of-band email notification when superadmin is assigned |
+| **Reason Deferred** | No transactional email service configured for v1. The event is fully audited in audit_logs (rbac.role_assigned with assigned_by_is_superadmin: true) but no email notification fires. |
+| **Blocking Dependencies** | Transactional email provider integration (SendGrid, Resend, or similar) |
+| **Impact on Source Phase** | None — audit trail is complete; email is defense-in-depth |
+| **Future Owner Phase** | `unassigned` (v2) |
+| **Future Owner Module** | RBAC, Auth |
+| **Required Plan Realignment** | v2 must include email notification service and template for superadmin assignment events |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Superadmin assignment triggers email to both assignor and assignee; email contains actor, target, timestamp, correlation ID; no sensitive data in email body |
+| **Status** | `deferred (v2)` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-035: Invite-Only Signup Flow
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-035 |
+| **Date Deferred** | 2026-04-13 |
+| **Source Plan Section** | RBAC Governance Hardening |
+| **Source Phase** | Post-Phase 6 |
+| **Title** | Admin-controlled invite-only user signup (disable open registration) |
+| **Reason Deferred** | Currently any person can register at the sign-up URL. All RBAC protections mean registered users have no admin access without explicit role assignment, but the open signup surface exists. Full invite flow requires email token generation, invite management UI, and Supabase signup restriction. |
+| **Blocking Dependencies** | Transactional email provider; invite token edge function; invite management admin UI; Supabase "Allow new users to sign up" dashboard setting coordination |
+| **Impact on Source Phase** | None — all registered users are properly RBAC-gated; open signup is a governance preference not a security vulnerability |
+| **Future Owner Phase** | `unassigned` (v2) |
+| **Future Owner Module** | Auth, Admin Panel |
+| **Required Plan Realignment** | v2 must include: invite token generation endpoint, invite list admin UI, email delivery of invite links, Supabase signup restriction toggle, first-signup bootstrap compatibility (first invite = superadmin) |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Non-invited email cannot create account; invited email can create account via token; expired invite rejected; invite revocation works; first invite creates superadmin correctly |
+| **Status** | `deferred (v2)` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
 

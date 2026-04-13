@@ -1,6 +1,6 @@
 # RBAC Module
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-13
 
 ## Purpose
 
@@ -36,11 +36,43 @@ Authorization consists of:
 **Rules:**
 
 - Base roles cannot be deleted (enforced by DB trigger on `is_immutable`)
-- Base roles' `key`, `is_base`, `is_immutable` columns cannot be modified (enforced by DB trigger)
-- `superadmin` automatically has all permissions via logical inheritance in `has_permission()` — not via seeded role_permissions rows
-- `admin` is provisioned during system bootstrap and receives permissions as defined in [permission-index.md](../07-reference/permission-index.md)
-- `moderator` role is deferred to v2 (see DEC-018)
-- Last superadmin assignment cannot be deleted (enforced by DB trigger)
+- Base roles' `key`, `is_base`, `is_immutable`, and `is_permission_locked` columns cannot be modified (enforced by DB trigger)
+- `superadmin` automatically has all permissions via logical inheritance in `has_permission()` — no individual permission rows can be assigned or revoked from superadmin
+- `admin` permissions can only be modified by a superadmin with 5-minute reauth window
+- `user` role permissions are locked (`is_permission_locked = true`) and cannot be modified by any actor
+- Last superadmin assignment cannot be deleted (enforced by DB trigger + application layer)
+- A superadmin cannot revoke their own superadmin role (enforced by application layer + API)
+
+## Superadmin Governance
+
+Superadmin is the apex role. Its assignment and management follow stricter rules than all other roles.
+
+### Bootstrap
+The first user to sign up is automatically assigned both `superadmin` and `user` roles via a DB trigger (`handle_new_user_role`). This is protected with `pg_advisory_xact_lock(42)` to prevent race conditions. The event is recorded in audit logs as `rbac.first_superadmin_bootstrapped`.
+
+### Assignment
+- Only an existing superadmin can assign the `superadmin` role to another user
+- Requires 5-minute reauth window (vs 30-minute standard)
+- Enforced at API layer in `assign-role` edge function
+- Any admin with `roles.assign` is blocked from assigning superadmin (403)
+
+### Revocation
+- A superadmin cannot revoke their own superadmin role (UI shows lock icon; API returns 409)
+- The last superadmin cannot be removed under any circumstances (DB trigger enforces)
+- Standard hierarchy: only superadmin can revoke the `admin` or `superadmin` role from others
+
+### Permission scope
+- Superadmin inherits all permissions logically — no individual `role_permissions` rows exist for superadmin
+- Individual permission assignment to superadmin is blocked (409 from assign-permission-to-role)
+
+## User Role Governance
+
+- The `user` role is automatically assigned to every new user on signup (DB trigger `handle_new_user_role`)
+- The `user` role cannot be manually assigned via API — blocked with `USER_ROLE_AUTO_ASSIGNED` (409)
+- The `user` role cannot be revoked from any user — blocked at API layer and shown as locked in UI
+- User role is removed only when the user account is deleted (cascade via `ON DELETE CASCADE`)
+- The `user` role has `is_permission_locked = true` — its permissions cannot be modified by any actor
+- The 5 user-role permissions (`users.view_self`, `users.edit_self`, `profile.self_manage`, `mfa.self_manage`, `session.self_manage`) are universally held by all users and shown as "all users" in the RoleDetailPage UI
 
 ## Dynamic Roles
 
@@ -89,6 +121,7 @@ roles (
   description TEXT,
   is_base BOOLEAN NOT NULL DEFAULT false,
   is_immutable BOOLEAN NOT NULL DEFAULT false,
+  is_permission_locked BOOLEAN NOT NULL DEFAULT false,  -- protects permission assignments; separate from identity immutability
   created_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ
 )
@@ -166,17 +199,21 @@ role_permissions (
 | `rbac.permission_assigned` | Permission added to role | audit-logging |
 | `rbac.permission_revoked` | Permission removed from role | audit-logging |
 | `rbac.permission_denied` | Access denied | audit-logging, health-monitoring |
+| `rbac.first_superadmin_bootstrapped` | First user signup triggers superadmin auto-assignment | audit-logging |
 
 ## Privileged RBAC Actions
 
-The following are HIGH impact:
-
-- Assigning roles
-- Revoking roles
-- Creating roles
-- Deleting roles
-- Assigning permissions
-- Revoking permissions
+| Action | Required Permission | Additional Guard | Reauth Window |
+|--------|-------------------|-----------------|---------------|
+| Assign any role | `roles.assign` | — | 30 min |
+| Assign superadmin role | `roles.assign` | `is_superadmin()` check | 5 min |
+| Revoke any role | `roles.revoke` | Hierarchy check (superadmin only for admin/superadmin) | 30 min |
+| Create role | `roles.create` | `is_superadmin()` required | 5 min |
+| Delete role | `roles.delete` | `is_superadmin()` required | 5 min |
+| Assign permission to any role | `permissions.assign` | — | 30 min |
+| Assign/revoke permission on admin role | `permissions.assign/revoke` | `is_superadmin()` required | 5 min |
+| Assign/revoke permission on superadmin role | — | Blocked entirely (409) | — |
+| Assign/revoke permission on user role | — | Blocked by `is_permission_locked` (409) | — |
 
 **Requirements:**
 
