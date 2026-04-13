@@ -367,7 +367,8 @@ export default function RoleDetailPage() {
                           const isPending = pendingToggles.has(perm.id);
                           const isDep = requiredByDeps.has(perm.key);
                           const isDepBlocked = isDep && perm.assigned;
-                          const isDisabled = role.is_immutable || isSuperadmin || isPending || !canModifyPerms ||
+                          const isUniversal = USER_ROLE_PERMISSION_KEYS.has(perm.key);
+                          const isDisabled = isPermissionLocked || isSuperadmin || isPending || !canModifyPerms ||
                             isDepBlocked ||
                             (perm.assigned && !canRevokePerms) || (!perm.assigned && !canAssignPerms);
                           return (
@@ -393,6 +394,9 @@ export default function RoleDetailPage() {
                                   <p className="text-sm font-mono text-foreground leading-tight">{perm.key}</p>
                                   {isDep && perm.assigned && (
                                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">dependency</Badge>
+                                  )}
+                                  {isUniversal && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">all users</Badge>
                                   )}
                                 </div>
                                 {perm.description && (
