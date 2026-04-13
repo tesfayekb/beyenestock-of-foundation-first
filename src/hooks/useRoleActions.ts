@@ -74,7 +74,7 @@ export function useRevokeRole() {
   });
 }
 
-export function useAssignPermission() {
+export function useAssignPermission(onReauthRequired?: (permissionId: string, wasAssigned: boolean) => void) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (params: AssignPermissionParams) =>
@@ -90,8 +90,9 @@ export function useAssignPermission() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'permissions'] });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, variables) => {
       if (error instanceof ApiError && error.code === 'RECENT_AUTH_REQUIRED') {
+        onReauthRequired?.(variables.permission_id, false);
         return;
       }
       toast.error(error.message || 'Failed to assign permission');
@@ -99,7 +100,7 @@ export function useAssignPermission() {
   });
 }
 
-export function useRevokePermission() {
+export function useRevokePermission(onReauthRequired?: (permissionId: string, wasAssigned: boolean) => void) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (params: RevokePermissionParams) => apiClient.post('revoke-permission-from-role', params),
@@ -109,8 +110,9 @@ export function useRevokePermission() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'permissions'] });
     },
-    onError: (error: Error) => {
+    onError: (error: Error, variables) => {
       if (error instanceof ApiError && error.code === 'RECENT_AUTH_REQUIRED') {
+        onReauthRequired?.(variables.permission_id, true);
         return;
       }
       toast.error(error.message || 'Failed to revoke permission');
