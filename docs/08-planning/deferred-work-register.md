@@ -326,8 +326,8 @@ At each phase boundary (before advancing to the next phase):
 | DW-009 | requireRole() Shared Function | Phase 2 | Phase 3 | `implemented` |
 | DW-010 | requireSelfScope() Shared Function | Phase 2 | Phase 3 | `implemented` |
 | DW-011 | Distributed Rate Limiting | Phase 3 | Phase 6 | `deferred (v2)` |
-| DW-012 | Authenticated lifecycle test infrastructure | Phase 3 | Phase 6 | `implemented` |
-| DW-013 | Orphaned test-user cleanup automation | Phase 3 | Phase 6 | `implemented` |
+| DW-012 | Authenticated lifecycle test infrastructure | Phase 3 | Phase 6 | `deferred (v2)` |
+| DW-013 | Orphaned test-user cleanup automation | Phase 3 | Phase 6 | `deferred (v2)` |
 | DW-014 | Denial audit logging | Phase 3 | Phase 3.5 | `implemented` |
 | DW-015 | Superadmin guardrails | Phase 3 | Phase 3.5 | `implemented` |
 | DW-016 | Admin Monitoring/Health UI | Phase 4 | Phase 5 | `implemented` |
@@ -342,7 +342,7 @@ At each phase boundary (before advancing to the next phase):
 | DW-025 | Role creation (create-role edge function + UI) | Phase 4 | Phase 6 | `implemented` |
 | DW-026 | Role deletion (delete-role edge function + UI) | Phase 4 | Phase 6 | `implemented` |
 | DW-027 | Admin Edit User Profile | Phase 4 | Phase 4 (Stage 4K) | `implemented` |
-| DW-028 | True fail-closed audit rollback (alert config) | Phase 5 | Phase 6 | `deferred` |
+| DW-028 | True fail-closed audit rollback (alert config) | Phase 5 | `unassigned` (v2) | `deferred (v2)` |
 | DW-029 | Batched audit cleanup DELETE | Phase 5 | Phase 6 | `implemented` |
 | DW-030 | TypeScript strict mode | Phase 6 | `unassigned` (v2) | `deferred` |
 | DW-031 | Service worker (Workbox) | Phase 6 | `unassigned` (v2) | `deferred` |
@@ -350,7 +350,7 @@ At each phase boundary (before advancing to the next phase):
 | DW-033 | Auth page label/input association | Phase 6 | Phase 7 | `deferred` |
 | DW-034 | Superadmin Assignment Notification Email | Post-Phase 6 | `unassigned` (v2) | `deferred (v2)` |
 | DW-035 | Invite-Only Signup Flow | Post-Phase 6 | `unassigned` (v2) | `deferred (v2)` |
-| DW-036 | Global Error Monitoring (Sentry) | Post-Phase 6 | Pre-production | `deferred (pre-production)` |
+| DW-036 | Global Error Monitoring (Sentry) | Post-Phase 6 | Pre-production | `partially-implemented (code complete)` |
 | DW-037 | Remove .env from Git Tracking | Post-Phase 6 | Immediate | `implemented` |
 
 
@@ -395,7 +395,7 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | ACT-030 (regression tests created), ACT-031 (evidence corrected) |
 | **Required Tests for Closure** | deactivate already-deactivated → 409; reactivate already-active → 409; invalid UUID → 400; missing body → 400; unban failure → no profile change; profile update failure after unban → re-ban; ban failure on deactivation → rollback to active; audit write failure → no mutation |
-| **Status** | `assigned` |
+| **Status** | `deferred (v2)` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
 | **Scope Expansion Note (2026-04-13)** | Scope expanded from original deactivate-user 409/rollback paths to cover all 34 edge functions (~75-95 integration tests). Expanded scope includes: privilege escalation regression suite (GAP 1 — admin→admin assignment blocked, superadmin-only permissions enforced), audit integrity suite (every mutation produces audit entry, IP redaction for non-superadmin, null IP preserved for system events), input validation suite (malformed UUIDs, oversized payloads, missing fields), and rate limiting verification. Original scope is a subset of the expanded coverage. Rate limiting tests require care: Supabase's built-in function-level throttling means hitting deployed functions 11+ times in rapid succession — must avoid triggering limits on the test runner itself. |
@@ -419,7 +419,7 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | ACT-031 (orphan documented) |
 | **Required Tests for Closure** | Verify test-user creation and deletion both succeed programmatically |
-| **Status** | `assigned` |
+| **Status** | `deferred (v2)` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
 
@@ -780,7 +780,7 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | ACT-058 |
 | **Required Tests for Closure** | (1) Update with simulated audit failure restores original values. (2) Caller receives appropriate error. (3) No orphaned config changes without audit records. |
-| **Status** | `deferred` |
+| **Status** | `deferred (v2)` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
 

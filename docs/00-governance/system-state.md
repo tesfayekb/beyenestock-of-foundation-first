@@ -42,8 +42,8 @@ approved_plan_baseline: v11.0
 plan_status: approved
 artifact_governance: active (artifact-index.md, database-migration-ledger.md, phase-closures/)
 deferred_work_open: []
-deferred_work_v2: [DW-001, DW-002, DW-007, DW-011, DW-020]
-deferred_work_closed_this_phase: [DW-008, DW-012, DW-013, DW-016, DW-017, DW-018, DW-019, DW-021, DW-022, DW-023, DW-024, DW-025, DW-026, DW-027, DW-028, DW-029]
+deferred_work_v2: [DW-001, DW-002, DW-007, DW-011, DW-012, DW-013, DW-020, DW-028]
+deferred_work_closed_this_phase: [DW-008, DW-016, DW-017, DW-018, DW-019, DW-021, DW-022, DW-023, DW-024, DW-025, DW-026, DW-027, DW-029]
 deployment_config_required:
   - leaked_password_protection: "Enable in Supabase Dashboard → Authentication → Settings → Leaked Password Protection. Cannot be set via SQL migration or edge function. Required for A+ security posture."
 last_updated: 2026-04-13
