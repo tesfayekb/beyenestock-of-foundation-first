@@ -6,17 +6,65 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import TurnstileWidget from '@/components/auth/TurnstileWidget';
+
+const SUPABASE_URL = 'https://wbmbsclrgcnqaxmdsgfc.supabase.co';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const { resetPassword } = useAuth();
   const { toast } = useToast();
+
+  const verifyTurnstile = async (): Promise<boolean> => {
+    if (!turnstileToken) {
+      toast({
+        variant: 'destructive',
+        title: 'Verification required',
+        description: 'Please complete the CAPTCHA verification.',
+      });
+      return false;
+    }
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-turnstile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: turnstileToken }),
+      });
+
+      if (!res.ok) {
+        toast({
+          variant: 'destructive',
+          title: 'Verification failed',
+          description: 'CAPTCHA verification failed. Please try again.',
+        });
+        setTurnstileToken(null);
+        return false;
+      }
+
+      return true;
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Verification error',
+        description: 'Could not verify CAPTCHA. Please try again.',
+      });
+      return false;
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    const verified = await verifyTurnstile();
+    if (!verified) {
+      setLoading(false);
+      return;
+    }
 
     const { error } = await resetPassword(email);
 
@@ -70,9 +118,15 @@ export default function ForgotPassword() {
                 autoComplete="email"
               />
             </div>
+
+            <TurnstileWidget
+              onVerify={setTurnstileToken}
+              onExpire={() => setTurnstileToken(null)}
+              onError={() => setTurnstileToken(null)}
+            />
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || !turnstileToken}>
               {loading ? 'Sending…' : 'Send reset link'}
             </Button>
             <Link to="/sign-in" className="text-sm text-muted-foreground hover:text-primary">
