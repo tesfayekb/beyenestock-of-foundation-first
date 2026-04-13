@@ -120,11 +120,19 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     }
   }
 
+  // Check if actor is superadmin — controls PII redaction (GAP 4: GDPR ip_address protection)
+  const { data: isSuperadmin } = await supabaseAdmin.rpc('is_superadmin', {
+    _user_id: ctx.user.id,
+  })
+
   // Enrich rows with actor_display_name and target_display_name
+  // Redact ip_address and user_agent for non-superadmin callers (GDPR Article 4)
   const enrichedRows = rows.map((r) => ({
     ...r,
     actor_display_name: r.actor_id ? (actorNameMap.get(r.actor_id) ?? r.actor_id) : null,
     target_display_name: r.target_id ? (targetDisplayMap.get(r.target_id) ?? null) : null,
+    ip_address: isSuperadmin ? r.ip_address : '[redacted]',
+    user_agent: isSuperadmin ? r.user_agent : '[redacted]',
   }))
 
   const nextCursor = rows.length === params.limit ? rows[rows.length - 1].created_at : null

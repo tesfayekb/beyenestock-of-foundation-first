@@ -107,8 +107,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       window.setTimeout(() => {
+        // GAP 12: Purge stale cached data when session is lost (token expiry, forced revocation)
+        if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+          queryClient.clear();
+        }
         syncAuthState(session);
       }, 0);
     });
@@ -169,7 +173,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     const userId = state.user?.id;
     queryClient.clear();
-    await supabase.auth.signOut();
+    // GAP 5: Global session termination — revokes all refresh tokens across all devices
+    await supabase.auth.signOut({ scope: 'global' });
     if (userId) {
       emitSignedOut(userId);
     }
@@ -189,6 +194,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.updateUser({ password });
     if (!error && state.user) {
       emitPasswordReset(state.user.id, 'completed');
+      // GAP 8: Revoke all other sessions after password change to prevent
+      // compromised sessions from remaining active
+      await supabase.auth.signOut({ scope: 'others' });
     }
     return { error };
   }, [state.user]);

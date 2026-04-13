@@ -64,18 +64,26 @@ Deno.serve(createHandler(async (req: Request) => {
     })
   }
 
-  // Superadmin role can only be assigned by another superadmin with tighter reauth
-  if (role.key === 'superadmin') {
+  // Privilege hierarchy enforcement (mirrors revoke-role)
+  // Weight: superadmin=3, admin=2, everything else=1
+  const ROLE_WEIGHTS: Record<string, number> = { superadmin: 3, admin: 2 }
+  const targetWeight = ROLE_WEIGHTS[role.key] ?? 1
+
+  if (targetWeight >= 2) {
+    // Only superadmin can assign admin or superadmin roles
     const { data: actorIsSuperadmin } = await supabaseAdmin.rpc('is_superadmin', {
       _user_id: ctx.user.id,
     })
     if (!actorIsSuperadmin) {
       const { apiError } = await import('../_shared/api-error.ts')
-      return apiError(403, 'Only a superadmin can assign the superadmin role', {
+      return apiError(403, `Only superadmin can assign the ${role.key} role`, {
         correlationId: ctx.correlationId,
       })
     }
-    // Tighter reauth window for superadmin assignment: 5 minutes
+  }
+
+  // Tighter reauth window for superadmin assignment: 5 minutes
+  if (role.key === 'superadmin') {
     requireRecentAuth(ctx.user.lastSignInAt, 5 * 60 * 1000, ctx.user.id)
   }
 
