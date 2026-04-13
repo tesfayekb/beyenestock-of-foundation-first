@@ -41,17 +41,27 @@ describe('RW-008: PERMISSION_DEPS drift detection', () => {
     expect(src).toContain('permission-deps.json');
   });
 
-  it('assign-permission edge function reads permission-deps.json', () => {
+  it('assign-permission edge function uses permission-deps shared module', () => {
     const src = readSource('supabase/functions/assign-permission-to-role/index.ts');
-    expect(src).toContain('permission-deps.json');
-    // Should NOT have inline PERMISSION_DEPS object literal
-    expect(src).not.toMatch(/PERMISSION_DEPS[^=]*=\s*\{[\s\S]*?'roles\.assign'/);
+    // Must import from the shared TS module (not raw JSON)
+    expect(src).toContain("from '../_shared/permission-deps.ts'");
+    // Must not have its own inline PERMISSION_DEPS literal
+    expect(src).not.toMatch(/const PERMISSION_DEPS\s*=/);
   });
 
-  it('revoke-permission edge function reads permission-deps.json', () => {
+  it('revoke-permission edge function uses permission-deps shared module', () => {
     const src = readSource('supabase/functions/revoke-permission-from-role/index.ts');
-    expect(src).toContain('permission-deps.json');
-    expect(src).not.toMatch(/PERMISSION_DEPS[^=]*=\s*\{[\s\S]*?'roles\.assign'/);
+    expect(src).toContain("from '../_shared/permission-deps.ts'");
+    expect(src).not.toMatch(/const PERMISSION_DEPS\s*=/);
+  });
+
+  it('_shared/permission-deps.ts is in sync with permission-deps.json', () => {
+    const ssot = readJson('permission-deps.json');
+    const sharedSrc = readSource('supabase/functions/_shared/permission-deps.ts');
+    // Every key in the SSOT JSON must appear in the shared TS module
+    for (const key of Object.keys(ssot)) {
+      expect(sharedSrc, `${key} missing from _shared/permission-deps.ts`).toContain(`"${key}"`);
+    }
   });
 
   it('admin.access is a dependency for all admin permissions', () => {

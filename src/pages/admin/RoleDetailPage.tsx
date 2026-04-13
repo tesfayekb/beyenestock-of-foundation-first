@@ -376,9 +376,11 @@ export default function RoleDetailPage() {
                           const isDep = requiredByDeps.has(perm.key);
                           const isDepBlocked = isDep && perm.assigned;
                           const isUniversal = USER_ROLE_PERMISSION_KEYS.has(perm.key);
+                          // For non-user roles, user-role permissions are inherited and cannot be toggled
+                          const isInheritedFromUserRole = isUniversal && role.key !== 'user';
                           const isAdminBlocked = role.key === 'admin' && ADMIN_BLOCKED_PERMISSION_KEYS.has(perm.key);
                           const isDisabled = isPermissionLocked || isSuperadmin || isPending || !canModifyPerms ||
-                            isDepBlocked || isAdminBlocked ||
+                            isDepBlocked || isAdminBlocked || isInheritedFromUserRole ||
                             (perm.assigned && !canRevokePerms) || (!perm.assigned && !canAssignPerms);
                           return (
                             <label
@@ -392,7 +394,7 @@ export default function RoleDetailPage() {
                                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                                 ) : (
                                   <Checkbox
-                                    checked={perm.assigned}
+                                    checked={perm.assigned || isInheritedFromUserRole}
                                     disabled={isDisabled}
                                     onCheckedChange={() => handleToggle(perm.id, perm.assigned)}
                                   />
@@ -404,7 +406,10 @@ export default function RoleDetailPage() {
                                   {isDep && perm.assigned && (
                                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">dependency</Badge>
                                   )}
-                                  {isUniversal && (
+                                  {isInheritedFromUserRole && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">inherited from user role</Badge>
+                                  )}
+                                  {isUniversal && role.key === 'user' && (
                                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">all users</Badge>
                                   )}
                                   {isAdminBlocked && (
