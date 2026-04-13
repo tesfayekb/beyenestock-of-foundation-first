@@ -118,3 +118,28 @@ async function resolveUsers(roleId: string) {
     assigned_at: ur.assigned_at,
   }))
 }
+
+async function resolveUserRolePermissions() {
+  const { data: userRole } = await supabaseAdmin
+    .from('roles')
+    .select('id')
+    .eq('key', 'user')
+    .single()
+
+  if (!userRole) return []
+
+  const { data: rpData } = await supabaseAdmin
+    .from('role_permissions')
+    .select('permission_id')
+    .eq('role_id', userRole.id)
+
+  const permissionIds = (rpData ?? []).map((rp) => rp.permission_id)
+  if (permissionIds.length === 0) return []
+
+  const { data } = await supabaseAdmin
+    .from('permissions')
+    .select('id, key, description')
+    .in('id', permissionIds)
+
+  return data ?? []
+}

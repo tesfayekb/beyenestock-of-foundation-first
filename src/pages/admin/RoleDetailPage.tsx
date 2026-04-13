@@ -161,6 +161,18 @@ export default function RoleDetailPage() {
       }));
   }, [allPermissions, role]);
 
+  // Effective permission count includes inherited user-role permissions for non-user roles
+  const effectivePermissionCount = useMemo(() => {
+    if (!role || !allPermissions) return 0;
+    if (role.key === 'user' || role.key === 'superadmin') return role.permissions.length;
+    const directKeys = new Set(role.permissions.map(p => p.key));
+    let inherited = 0;
+    for (const key of USER_ROLE_PERMISSION_KEYS) {
+      if (!directKeys.has(key)) inherited++;
+    }
+    return role.permissions.length + inherited;
+  }, [role, allPermissions]);
+
   // Compute which permissions are required as dependencies of other assigned permissions
   const requiredByDeps = useMemo<Set<string>>(() => {
     if (!role) return new Set();
