@@ -31,11 +31,12 @@ export function UserLayout() {
 
   // GAP 6: Enforce MFA for users who hold admin.access permission
   const hasAdminAccess = permissions.includes('admin.access');
-  if (hasAdminAccess && mfaStatus === 'none') {
+  if (hasAdminAccess && (mfaStatus === 'none' || mfaStatus === 'challenge_required')) {
     const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    const mfaRedirect = mfaStatus === 'none' ? ROUTES.MFA_ENROLL : '/mfa-challenge';
     return (
       <RequireAuth>
-        <Navigate to={ROUTES.MFA_ENROLL} replace state={{ returnTo }} />
+        <Navigate to={mfaRedirect} replace state={{ returnTo }} />
       </RequireAuth>
     );
   }
