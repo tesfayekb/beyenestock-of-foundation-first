@@ -338,12 +338,12 @@ export default function RoleDetailPage() {
               <Key className="h-4 w-4" />
               Permissions ({role.permissions.length} / {allPermissions?.length ?? '…'})
             </CardTitle>
-            {role.is_immutable && !isSuperadmin && (
+            {isPermissionLocked && !isSuperadmin && (
               <p className="text-xs text-muted-foreground mt-1">
-                This role is immutable — permissions cannot be changed.
+                This role's permissions are locked and cannot be changed.
               </p>
             )}
-            {!canModifyPerms && !role.is_immutable && !isSuperadmin && (
+            {!canModifyPerms && !isPermissionLocked && !isSuperadmin && (
               <p className="text-xs text-muted-foreground mt-1">
                 Permission assignment requires superadmin access.
               </p>
