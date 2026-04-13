@@ -54,12 +54,12 @@ last_updated: 2026-04-13
 Comprehensive hardening pass on RBAC enforcement across server and UI layers. Key changes:
 
 ### Server-Side Enforcement
-- **Superadmin-only permissions**: `permissions.assign`, `permissions.revoke`, `roles.create`, `roles.edit`, `roles.delete`, `jobs.emergency` permanently restricted to `superadmin` role at edge function level. Any attempt to assign these to a non-superadmin role returns `403 SUPERADMIN_ONLY_PERMISSION`.
+- **Superadmin-only permissions (9 keys)**: `permissions.assign`, `permissions.revoke`, `roles.create`, `roles.edit`, `roles.delete`, `jobs.emergency`, `admin.config`, `monitoring.configure`, `audit.export` — permanently restricted to `superadmin` role at edge function level. Any attempt to assign these to a non-superadmin role returns `403 SUPERADMIN_ONLY_PERMISSION`.
 - **Edge functions hardened**: `assign-permission-to-role` and `revoke-permission-from-role` both validate against `SUPERADMIN_ONLY_PERMISSIONS` set before executing.
 
 ### UI Enforcement
 - **Permission inheritance visibility**: Base user-role permissions (5 keys: `users.view_self`, `users.edit_self`, `profile.self_manage`, `mfa.self_manage`, `session.self_manage`) display as checked/disabled with "inherited from user role" badge on all non-user roles.
-- **Superadmin-only badge**: 6 restricted permissions show as disabled with "superadmin only" badge on all non-superadmin roles.
+- **Superadmin-only badge**: 9 restricted permissions show as disabled with "superadmin only" badge on all non-superadmin roles.
 - **Effective permission count**: Role list and detail pages show union of direct + inherited permissions.
 - **8 button-level gaps closed**: Create Role, Edit Role, Delete Role, Assign Role, Revoke Role, Deactivate User, Reactivate User, Revoke Sessions — all permission-gated with `checkPermission()`.
 - **Reauth dialog fix**: Resolved TanStack Query v5 `onError` ordering conflict — moved reauth detection to global mutation `onError` handler, moved `refetch()` to `onSettled`.
