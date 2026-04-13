@@ -65,17 +65,6 @@ export default function UserDetailPage() {
     return allRoles.filter((r) => !assignedIds.has(r.id));
   }, [allRoles, userRoles]);
 
-  if (isLoading) {
-    return <div className="space-y-6"><LoadingSkeleton variant="page" /></div>;
-  }
-
-  if (error || !profile) {
-    return <div className="space-y-6"><ErrorState message={error?.message ?? 'User not found'} onRetry={() => refetch()} /></div>;
-  }
-
-  const isActive = profile.status === 'active';
-  const initials = (profile.display_name ?? '?').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
-
   const handleDeactivate = useCallback((reason?: string) => {
     deactivateMutation.mutate({ user_id: id!, reason }, { onSuccess: () => setShowDeactivate(false) });
   }, [id, deactivateMutation]);
@@ -99,6 +88,16 @@ export default function UserDetailPage() {
     );
   }, [id, revokeRoleTarget, revokeRoleMutation, refetchRoles]);
 
+  if (isLoading) {
+    return <div className="space-y-6"><LoadingSkeleton variant="page" /></div>;
+  }
+
+  if (error || !profile) {
+    return <div className="space-y-6"><ErrorState message={error?.message ?? 'User not found'} onRetry={() => refetch()} /></div>;
+  }
+
+  const isActive = profile.status === 'active';
+  const initials = (profile.display_name ?? '?').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
   const auditEntries: AuditLogEntry[] = auditData?.data ?? [];
 
   return (
