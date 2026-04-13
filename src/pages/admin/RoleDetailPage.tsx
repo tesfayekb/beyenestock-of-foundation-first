@@ -51,8 +51,12 @@ export default function RoleDetailPage() {
 
   const { data: role, isLoading, error, refetch } = useRoleDetail(id);
   const { data: allPermissions } = usePermissions();
-  const assignPermission = useAssignPermission();
-  const revokePermission = useRevokePermission();
+  const handleReauthRequired = useCallback((permissionId: string, wasAssigned: boolean) => {
+    setPendingPermissionAction({ permissionId, currentlyAssigned: wasAssigned });
+    setShowReauth(true);
+  }, []);
+  const assignPermission = useAssignPermission(handleReauthRequired);
+  const revokePermission = useRevokePermission(handleReauthRequired);
   const deleteRole = useDeleteRole();
   const updateRole = useUpdateRole();
 
@@ -185,27 +189,13 @@ export default function RoleDetailPage() {
       mutation.mutate(
         { role_id: id, permission_id: permissionId },
         {
-          onError: (mutationError) => {
-            if (mutationError instanceof ApiError && mutationError.code === 'RECENT_AUTH_REQUIRED') {
-              setPendingPermissionAction({ permissionId, currentlyAssigned });
-              setShowReauth(true);
-            } else {
-              toast({
-                variant: 'destructive',
-                title: 'Permission update failed',
-                description: mutationError instanceof ApiError
-                  ? mutationError.message
-                  : 'An unexpected error occurred. Please try again.',
-              });
-            }
-            refetch();
-          },
           onSettled: () => {
             setPendingToggles((prev) => {
               const next = new Set(prev);
               next.delete(permissionId);
               return next;
             });
+            refetch();
           },
         },
       );
