@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
@@ -23,6 +23,15 @@ const LayoutFallback = () => (
 );
 
 export function DashboardLayout({ sections, title, children }: DashboardLayoutProps) {
+  // Clean up body styles that Radix Sheet may leave behind when
+  // the layout unmounts during a cross-layout navigation (e.g. admin → user).
+  useEffect(() => {
+    return () => {
+      document.body.style.pointerEvents = '';
+      document.body.style.overflow = '';
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <a
