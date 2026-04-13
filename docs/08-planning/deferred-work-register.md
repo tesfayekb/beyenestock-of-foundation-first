@@ -343,13 +343,15 @@ At each phase boundary (before advancing to the next phase):
 | DW-026 | Role deletion (delete-role edge function + UI) | Phase 4 | Phase 6 | `implemented` |
 | DW-027 | Admin Edit User Profile | Phase 4 | Phase 4 (Stage 4K) | `implemented` |
 | DW-028 | True fail-closed audit rollback (alert config) | Phase 5 | Phase 6 | `deferred` |
-| DW-029 | Batched audit cleanup DELETE | Phase 5 | Phase 6 | `deferred` |
+| DW-029 | Batched audit cleanup DELETE | Phase 5 | Phase 6 | `implemented` |
 | DW-030 | TypeScript strict mode | Phase 6 | `unassigned` (v2) | `deferred` |
 | DW-031 | Service worker (Workbox) | Phase 6 | `unassigned` (v2) | `deferred` |
 | DW-032 | CDN security headers (X-Frame-Options, early hints) | Phase 6 | `unassigned` (v2) | `deferred` |
 | DW-033 | Auth page label/input association | Phase 6 | Phase 7 | `deferred` |
 | DW-034 | Superadmin Assignment Notification Email | Post-Phase 6 | `unassigned` (v2) | `deferred (v2)` |
 | DW-035 | Invite-Only Signup Flow | Post-Phase 6 | `unassigned` (v2) | `deferred (v2)` |
+| DW-036 | Global Error Monitoring (Sentry) | Post-Phase 6 | Pre-production | `deferred (pre-production)` |
+| DW-037 | Remove .env from Git Tracking | Post-Phase 6 | Immediate | `implemented` |
 
 
 ### DW-011: Distributed Rate Limiting
@@ -396,6 +398,7 @@ At each phase boundary (before advancing to the next phase):
 | **Status** | `assigned` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
+| **Scope Expansion Note (2026-04-13)** | Scope expanded from original deactivate-user 409/rollback paths to cover all 34 edge functions (~75-95 integration tests). Expanded scope includes: privilege escalation regression suite (GAP 1 — admin→admin assignment blocked, superadmin-only permissions enforced), audit integrity suite (every mutation produces audit entry, IP redaction for non-superadmin, null IP preserved for system events), input validation suite (malformed UUIDs, oversized payloads, missing fields), and rate limiting verification. Original scope is a subset of the expanded coverage. Rate limiting tests require care: Supabase's built-in function-level throttling means hitting deployed functions 11+ times in rapid succession — must avoid triggering limits on the test runner itself. |
 
 ---
 
@@ -797,9 +800,10 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | DEC-007 (90-day retention) |
 | **Related Actions** | ACT-060 |
 | **Required Tests for Closure** | (1) Batch delete removes correct records. (2) Multiple batches complete within timeout. (3) No records newer than cutoff are deleted. |
-| **Status** | `deferred` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | Phase 5 Stage 5D implementation |
+| **Implemented in Plan Version** | v11.0 |
+| **Resolution Note** | Batched loop implemented in `job-audit-cleanup/index.ts` with `BATCH_SIZE = 1000`, 25-second timeout budget (`TIMEOUT_BUDGET_MS = 25_000`) — time-based rather than count-based, superior to fixed MAX_ITERATIONS approach as it handles any volume within the 30s edge function limit. Break-on-empty exits when `count < BATCH_SIZE`. Execution metadata includes `totalDeleted` + `elapsed_ms`. `idx_audit_logs_created_at` index confirmed present in schema. `rpc_batch_delete_audit_logs` RPC exists via migration 20260412095151. No inter-batch pause — intentional: timeout-budget approach runs as fast as possible while respecting the time limit. |
 
 ---
 
@@ -955,14 +959,14 @@ At each phase boundary (before advancing to the next phase):
 | **Original Plan Section** | Post-closure security hardening gap analysis (GAP 7) |
 | **Original Phase** | RBAC Governance Hardening |
 | **Deferred Reason** | Requires third-party integration (Sentry/Datadog) with PII scrubbing configuration; not addressable within current edge function + UI architecture alone |
-| **Blocking Dependencies** | Selection of monitoring vendor; PII scrubbing policy definition; budget approval for SaaS integration |
-| **Future Phase Assignment** | v2 |
+| **Blocking Dependencies** | Selection of monitoring vendor; PII scrubbing policy definition; budget approval for SaaS integration; **CI/CD pipeline or manual source map upload process** (Lovable handles deploys internally — source maps require either GitHub Actions workflow on push to main, or manual upload via `sentry-cli` after build, or alternative hosting provider's build pipeline) |
+| **Future Phase Assignment** | Pre-production (before first real user signup) |
 | **Impact if Not Done** | Production errors invisible without user reports; attack pattern detection limited to audit logs only; no frontend error telemetry |
-| **Required Plan Realignment** | v2 must include: vendor selection, `window.onerror` + `unhandledrejection` handler, ErrorBoundary telemetry integration, PII scrubbing before payload transmission |
+| **Required Plan Realignment** | Implementation plan documented 2026-04-13. Sentry free tier sufficient. Session Replay (`@sentry/replay`) **not recommended** for admin console — adds ~50KB bundle for low-value replay data in admin context. Rely on breadcrumbs + structured context instead. Add replay only if errors are regularly hard to reproduce. Source map upload requires CI/CD decision: if deploying via Lovable, use GitHub Actions; if migrating to Vercel/Netlify/other, use that provider's build pipeline. |
 | **Related Decisions** | — |
 | **Related Actions** | — |
-| **Required Tests for Closure** | Error boundary captures and reports unhandled exceptions; PII (emails, tokens) scrubbed from payloads; error telemetry reaches monitoring dashboard |
-| **Status** | `deferred (v2)` |
+| **Required Tests for Closure** | Error boundary captures and reports unhandled exceptions; PII (emails, tokens) scrubbed from payloads; error telemetry reaches monitoring dashboard; source maps resolve stack traces to original TypeScript |
+| **Status** | `deferred (pre-production)` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
 
@@ -973,7 +977,7 @@ At each phase boundary (before advancing to the next phase):
 | **ID** | DW-037 |
 | **Original Plan Section** | Post-closure security hardening gap analysis (GAP 3) |
 | **Original Phase** | RBAC Governance Hardening |
-| **Deferred Reason** | Requires manual git state commands (`git rm --cached .env`) which cannot be executed by AI tooling |
+| **Deferred Reason** | Required manual git state commands (`git rm --cached .env`) which cannot be executed by AI tooling |
 | **Blocking Dependencies** | Manual developer action in local terminal |
 | **Future Phase Assignment** | Immediate — next developer session |
 | **Impact if Not Done** | `.env` pattern risk: accidental commit of real secrets (service role key, third-party API keys) to version control |
@@ -981,9 +985,10 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | — |
 | **Required Tests for Closure** | `.env` not present in `git ls-files`; `.gitignore` contains `.env` entry |
-| **Status** | `deferred (immediate)` |
-| **Implemented by Action** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | Manual git operation (2026-04-13) |
 | **Implemented in Plan Version** | — |
+| **Resolution Note** | `.env` removed from git index via `git rm --cached .env`. `.gitignore` updated with `.env` entry. Verified: `.env` not in git index, not in HEAD tree, `.gitignore` has entry, `git status` clean. Committed as `dee670e`. |
 
 ---
 
