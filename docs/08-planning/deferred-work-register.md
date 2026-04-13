@@ -966,9 +966,10 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | — |
 | **Required Tests for Closure** | Error boundary captures and reports unhandled exceptions; PII (emails, tokens) scrubbed from payloads; error telemetry reaches monitoring dashboard; source maps resolve stack traces to original TypeScript |
-| **Status** | `deferred (pre-production)` |
-| **Implemented by Action** | — |
+| **Status** | `partially-implemented` |
+| **Implemented by Action** | SDK integration completed 2026-04-13. `@sentry/react` installed, `Sentry.init()` in `src/main.tsx`, `ErrorBoundary` reports to Sentry, `api-client.ts` captures 5xx with correlation IDs, PII scrubbed (email + JWT), Session Replay disabled, dev mode disabled. Vite dedupe configured. |
 | **Implemented in Plan Version** | — |
+| **Remaining for Closure** | 1) **Local verification**: Developer must run `npm run dev` with `VITE_SENTRY_DSN` in `.env` and `enabled: true` (temporary), trigger a test error, confirm it appears in Sentry dashboard, then revert `enabled` to `import.meta.env.PROD`. 2) **Source map upload**: Requires CI/CD pipeline decision (GitHub Actions / hosting provider build). 3) **Production deployment**: Set `VITE_SENTRY_DSN` in hosting provider env vars. |
 
 ### DW-037: Remove .env from Git Tracking
 
