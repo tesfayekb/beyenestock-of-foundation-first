@@ -2,6 +2,10 @@
  * assign-permission-to-role — Assign a permission to a role.
  *
  * Requires: permissions.assign permission.
+ * Guards:
+ *   - Blocked on permission-locked roles (e.g. user role).
+ *   - Blocked on superadmin (inherits all permissions automatically).
+ *   - Admin role modifications require superadmin + 5min reauth.
  * Audit: HIGH-RISK (fail-closed with rollback).
  *
  * Dependency enforcement: when assigning a permission that has
@@ -64,7 +68,7 @@ Deno.serve(createHandler(async (req: Request) => {
 
   // Validate role and permission in parallel (independent lookups)
   const [roleResult, permResult] = await Promise.all([
-    supabaseAdmin.from('roles').select('id, key, is_immutable').eq('id', role_id).single(),
+    supabaseAdmin.from('roles').select('id, key, is_immutable, is_permission_locked').eq('id', role_id).single(),
     supabaseAdmin.from('permissions').select('id, key').eq('id', permission_id).single(),
   ])
 
@@ -76,11 +80,34 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(404, 'Role not found', { correlationId: ctx.correlationId })
   }
 
-  if (role.is_immutable) {
+  // Block permission-locked roles (e.g. user role)
+  if (role.is_permission_locked) {
     const { apiError } = await import('../_shared/api-error.ts')
-    return apiError(409, `Cannot modify permissions of immutable role: ${role.key}`, {
+    return apiError(409, `Cannot modify permissions of permission-locked role: ${role.key}`, {
       correlationId: ctx.correlationId,
     })
+  }
+
+  // Block superadmin — inherits all permissions automatically
+  if (role.key === 'superadmin') {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(409, 'Superadmin inherits all permissions automatically — individual assignments are not allowed', {
+      correlationId: ctx.correlationId,
+    })
+  }
+
+  // Admin role: only superadmin can modify its permissions, with tighter reauth
+  if (role.key === 'admin') {
+    const { data: actorIsSuperadmin } = await supabaseAdmin.rpc('is_superadmin', {
+      _user_id: ctx.user.id,
+    })
+    if (!actorIsSuperadmin) {
+      const { apiError } = await import('../_shared/api-error.ts')
+      return apiError(403, 'Only a superadmin can modify admin role permissions', {
+        correlationId: ctx.correlationId,
+      })
+    }
+    requireRecentAuth(ctx.user.lastSignInAt, 5 * 60 * 1000, ctx.user.id)
   }
 
   if (!permission) {

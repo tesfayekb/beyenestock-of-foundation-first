@@ -1,7 +1,7 @@
 /**
  * delete-role — Delete a custom (non-immutable) role.
  *
- * Requires: roles.delete permission + recent auth.
+ * Requires: roles.delete permission + superadmin + 5min reauth.
  * Audit: rbac.role_deleted (fail-closed with rollback).
  *
  * DB cascade: role_permissions and user_roles rows are deleted automatically
@@ -34,7 +34,20 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const ctx = await authenticateRequest(req)
   await checkPermissionOrThrow(ctx.user.id, 'roles.delete')
-  requireRecentAuth(ctx.user.lastSignInAt, 30 * 60 * 1000, ctx.user.id)
+
+  // Superadmin-only gate
+  const { data: actorIsSuperadmin } = await supabaseAdmin.rpc('is_superadmin', {
+    _user_id: ctx.user.id,
+  })
+  if (!actorIsSuperadmin) {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(403, 'Only a superadmin can delete roles', {
+      correlationId: ctx.correlationId,
+    })
+  }
+
+  // Tighter reauth: 5 minutes for role deletion
+  requireRecentAuth(ctx.user.lastSignInAt, 5 * 60 * 1000, ctx.user.id)
 
   const body = await req.json()
   const { role_id, reason } = validateRequest(BodySchema, body)
@@ -123,6 +136,7 @@ Deno.serve(createHandler(async (req: Request) => {
         description: role.description || null,
         is_base: false,
         is_immutable: false,
+        is_permission_locked: false,
       })
 
     const { apiError } = await import('../_shared/api-error.ts')

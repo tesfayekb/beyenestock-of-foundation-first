@@ -8,6 +8,7 @@ export interface RoleListItem {
   description: string | null;
   is_base: boolean;
   is_immutable: boolean;
+  is_permission_locked: boolean;
   created_at: string;
   updated_at: string;
   permission_count: number;

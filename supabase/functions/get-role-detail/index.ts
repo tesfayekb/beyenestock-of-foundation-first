@@ -35,10 +35,10 @@ Deno.serve(createHandler(async (req: Request) => {
   const params = Object.fromEntries(url.searchParams.entries())
   const { role_id } = validateRequest(QuerySchema, params)
 
-  // Fetch role
+  // Fetch role (now includes is_permission_locked)
   const { data: role, error } = await supabaseAdmin
     .from('roles')
-    .select('id, key, name, description, is_base, is_immutable, created_at, updated_at')
+    .select('id, key, name, description, is_base, is_immutable, is_permission_locked, created_at, updated_at')
     .eq('id', role_id)
     .single()
 

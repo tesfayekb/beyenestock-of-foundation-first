@@ -62,6 +62,19 @@ export default function RoleDetailPage() {
   const [pendingPermissionAction, setPendingPermissionAction] = useState<PendingPermissionAction | null>(null);
 
   const isSuperadmin = role?.key === 'superadmin';
+  const isPermissionLocked = role?.is_permission_locked ?? false;
+
+  /**
+   * The 5 permissions universally held by every user via the base 'user' role.
+   * Hardcoded — these only change via seed migration (a deployment event).
+   */
+  const USER_ROLE_PERMISSION_KEYS = new Set([
+    'users.view_self',
+    'users.edit_self',
+    'profile.self_manage',
+    'mfa.self_manage',
+    'session.self_manage',
+  ]);
 
   // Track in-flight toggles to show spinners per-permission
   const [pendingToggles, setPendingToggles] = useState<Set<string>>(new Set());
@@ -182,7 +195,7 @@ export default function RoleDetailPage() {
 
   const handleToggle = useCallback(
     (permissionId: string, currentlyAssigned: boolean) => {
-      if (!id || role?.is_immutable || isSuperadmin) return;
+      if (!id || isPermissionLocked || isSuperadmin) return;
 
       // Block revocation of dependency permissions
       if (currentlyAssigned) {
@@ -198,7 +211,7 @@ export default function RoleDetailPage() {
 
       performToggle(permissionId, currentlyAssigned);
     },
-    [id, role?.is_immutable, isSuperadmin, allPermissions, requiredByDeps, user, performToggle],
+    [id, isPermissionLocked, isSuperadmin, allPermissions, requiredByDeps, user, performToggle],
   );
 
   if (isLoading) {
@@ -325,12 +338,12 @@ export default function RoleDetailPage() {
               <Key className="h-4 w-4" />
               Permissions ({role.permissions.length} / {allPermissions?.length ?? '…'})
             </CardTitle>
-            {role.is_immutable && !isSuperadmin && (
+            {isPermissionLocked && !isSuperadmin && (
               <p className="text-xs text-muted-foreground mt-1">
-                This role is immutable — permissions cannot be changed.
+                This role's permissions are locked and cannot be changed.
               </p>
             )}
-            {!canModifyPerms && !role.is_immutable && !isSuperadmin && (
+            {!canModifyPerms && !isPermissionLocked && !isSuperadmin && (
               <p className="text-xs text-muted-foreground mt-1">
                 Permission assignment requires superadmin access.
               </p>
@@ -354,7 +367,8 @@ export default function RoleDetailPage() {
                           const isPending = pendingToggles.has(perm.id);
                           const isDep = requiredByDeps.has(perm.key);
                           const isDepBlocked = isDep && perm.assigned;
-                          const isDisabled = role.is_immutable || isSuperadmin || isPending || !canModifyPerms ||
+                          const isUniversal = USER_ROLE_PERMISSION_KEYS.has(perm.key);
+                          const isDisabled = isPermissionLocked || isSuperadmin || isPending || !canModifyPerms ||
                             isDepBlocked ||
                             (perm.assigned && !canRevokePerms) || (!perm.assigned && !canAssignPerms);
                           return (
@@ -380,6 +394,9 @@ export default function RoleDetailPage() {
                                   <p className="text-sm font-mono text-foreground leading-tight">{perm.key}</p>
                                   {isDep && perm.assigned && (
                                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">dependency</Badge>
+                                  )}
+                                  {isUniversal && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">all users</Badge>
                                   )}
                                 </div>
                                 {perm.description && (

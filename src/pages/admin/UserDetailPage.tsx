@@ -59,11 +59,20 @@ export default function UserDetailPage() {
   const isSelf = currentUser?.id === id;
 
   // Roles not yet assigned to this user
+  const currentUserIsSuperadmin = context?.is_superadmin ?? false;
+
+  // Roles available for assignment: exclude already-assigned, user (auto-assigned),
+  // and superadmin (unless current user is superadmin)
   const availableRoles = useMemo(() => {
     if (!allRoles || !userRoles) return [];
     const assignedIds = new Set(userRoles.map((ur) => ur.role_id));
-    return allRoles.filter((r) => !assignedIds.has(r.id));
-  }, [allRoles, userRoles]);
+    return allRoles.filter((r) => {
+      if (assignedIds.has(r.id)) return false;
+      if (r.key === 'user') return false;
+      if (r.key === 'superadmin' && !currentUserIsSuperadmin) return false;
+      return true;
+    });
+  }, [allRoles, userRoles, currentUserIsSuperadmin]);
 
   const handleDeactivate = useCallback((reason?: string) => {
     deactivateMutation.mutate({ user_id: id!, reason }, { onSuccess: () => setShowDeactivate(false) });
