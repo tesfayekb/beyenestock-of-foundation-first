@@ -22,7 +22,7 @@ export default function AdminDashboard() {
       {errorStats ? (
         <ErrorState message={errorStats.message || 'Failed to load dashboard stats.'} />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           {loadingStats ? (
             <div className="col-span-full">
               <LoadingSkeleton variant="card" rows={4} />
@@ -55,7 +55,7 @@ export default function AdminDashboard() {
       ) : rolesBreakdown.length > 0 ? (
         <div>
           <h3 className="mb-3 text-sm font-medium text-muted-foreground">Roles Breakdown</h3>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
             {rolesBreakdown.map((r) => (
               <StatCard key={r.key} title={r.name} value={r.user_count} icon={ShieldCheck} />
             ))}

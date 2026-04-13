@@ -15,16 +15,16 @@ export function StatCard({ title, value, icon: Icon, trend, className }: StatCar
 
   return (
     <Card className={cn('shadow-sm', className)}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <CardContent className="p-4 sm:p-6">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0 space-y-1">
+            <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-muted-foreground truncate">
               {title}
             </p>
-            <p className="font-display text-2xl font-bold">{value}</p>
+            <p className="font-display text-xl sm:text-2xl font-bold truncate">{value}</p>
           </div>
-          <div className="rounded-lg bg-muted p-3">
-            <Icon className="h-5 w-5 text-muted-foreground" />
+          <div className="shrink-0 rounded-lg bg-muted p-2 sm:p-3">
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
           </div>
         </div>
         {trend && (

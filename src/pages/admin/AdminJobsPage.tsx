@@ -218,8 +218,8 @@ export default function AdminJobsPage() {
         <>
           {/* Emergency Controls */}
           <Card className={isKillSwitchActive ? 'border-destructive' : ''}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
+             <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
+               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
                     <AlertOctagon className="h-4 w-4" />
@@ -235,7 +235,7 @@ export default function AdminJobsPage() {
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
               {canKillSwitch && (
                 <Button
                   variant={isKillSwitchActive ? 'default' : 'destructive'}
@@ -249,7 +249,7 @@ export default function AdminJobsPage() {
           </Card>
 
           {/* Stats */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
             <StatCard title="Registered Jobs" value={realJobs.length} icon={Cog} />
             <StatCard title="Active" value={activeJobCount} icon={Play} />
             <StatCard title="Paused / Poison" value={pausedPoisonCount} icon={Pause} />
