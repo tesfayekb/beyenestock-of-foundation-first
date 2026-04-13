@@ -120,9 +120,35 @@ Buttons are hidden when the user lacks the required permission. Server-side enfo
 - UI inheritance badges render correctly on non-user roles
 - Reauth dialog opens correctly on `RECENT_AUTH_REQUIRED`
 
+## Post-Closure Security Hardening (2026-04-13)
+
+Additional institutional-level security improvements applied after the initial RBAC governance hardening, based on a 12-point gap analysis:
+
+| GAP | Fix | Files |
+|-----|-----|-------|
+| 1 🔴 Admin→Admin privilege escalation | `ROLE_WEIGHTS` hierarchy check in assign-role — only superadmin can assign admin/superadmin | `assign-role/index.ts` |
+| 2 🔴 audit_logs FK blocks user deletion | `ON DELETE SET NULL` migration — preserves audit trail, enables GDPR erasure | Migration 20260413 |
+| 3 🔴 .env tracked in git | Manual: `git rm --cached .env` + `.gitignore` | Manual git operation (pending) |
+| 4 🟠 IP/User-agent PII in audit logs | Redacted for non-superadmin callers (GDPR Article 4); null IPs preserved as null | `query-audit-logs/index.ts` |
+| 5 🟠 signOut local-session-only | `scope: 'global'` — all devices signed out (NIST SP 800-63B) | `AuthContext.tsx` |
+| 6 🟠 Admin MFA bypass via user dashboard | UserLayout enforces MFA for `admin.access` holders; handles both `none` and `challenge_required` | `UserLayout.tsx` |
+| 8 🟠 Password change leaves sessions | `signOut({ scope: 'others' })` after `updatePassword` | `AuthContext.tsx` |
+| 11 🟡 Custom role escalation path | Closed by GAP 1 fix — hierarchy check blocks admin assignment from custom roles | — |
+| 12 🟡 Stale cache on JWT expiry | `queryClient.clear()` on `SIGNED_OUT` / failed `TOKEN_REFRESHED` | `AuthContext.tsx` |
+| 7 🟠 No error monitoring | Deferred to v2 (DW-036) | — |
+| 9 🟡 No edge function integration tests | Already tracked as DW-012 | — |
+| 10 🟡 Unbounded audit DELETE | Already tracked as DW-029 | — |
+
+### Additional Refinements (Findings A–C)
+
+- **Finding A**: UserLayout GAP 6 expanded to handle `challenge_required` in addition to `none` — redirects to `/mfa-challenge` vs `/mfa-enroll` respectively
+- **Finding B**: `assign-role` audit metadata now sets `assigned_by_is_superadmin: true` for both admin and superadmin assignments (forensic clarity)
+- **Finding C**: `query-audit-logs` preserves `null` IP/user-agent for system events instead of replacing with `[redacted]`
+
 ## Related Documents
 
 - [Deferred Work Register — DW-015 supersession note](../deferred-work-register.md)
+- [Deferred Work Register — DW-036 Global Error Monitoring](../deferred-work-register.md)
 - [System State — RBAC Governance Hardening section](../../00-governance/system-state.md)
 - [RBAC Module Documentation](../../04-modules/rbac.md)
 - [Security Architecture](../../02-security/security-architecture.md)

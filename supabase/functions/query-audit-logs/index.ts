@@ -131,8 +131,8 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
     ...r,
     actor_display_name: r.actor_id ? (actorNameMap.get(r.actor_id) ?? r.actor_id) : null,
     target_display_name: r.target_id ? (targetDisplayMap.get(r.target_id) ?? null) : null,
-    ip_address: isSuperadmin ? r.ip_address : '[redacted]',
-    user_agent: isSuperadmin ? r.user_agent : '[redacted]',
+    ip_address: isSuperadmin ? r.ip_address : (r.ip_address ? '[redacted]' : null),
+    user_agent: isSuperadmin ? r.user_agent : (r.user_agent ? '[redacted]' : null),
   }))
 
   const nextCursor = rows.length === params.limit ? rows[rows.length - 1].created_at : null

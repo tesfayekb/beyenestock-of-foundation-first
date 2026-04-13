@@ -110,7 +110,7 @@ Deno.serve(createHandler(async (req: Request) => {
       role_id,
       role_key: role.key,
       target_user_id,
-      assigned_by_is_superadmin: role.key === 'superadmin' ? true : undefined,
+      assigned_by_is_superadmin: (role.key === 'superadmin' || role.key === 'admin') ? true : undefined,
     },
     ipAddress: ctx.ipAddress,
     userAgent: ctx.userAgent,

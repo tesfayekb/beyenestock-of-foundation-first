@@ -947,6 +947,46 @@ At each phase boundary (before advancing to the next phase):
 
 ---
 
+### DW-036: Global Error Monitoring (Sentry/Datadog)
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-036 |
+| **Original Plan Section** | Post-closure security hardening gap analysis (GAP 7) |
+| **Original Phase** | RBAC Governance Hardening |
+| **Deferred Reason** | Requires third-party integration (Sentry/Datadog) with PII scrubbing configuration; not addressable within current edge function + UI architecture alone |
+| **Blocking Dependencies** | Selection of monitoring vendor; PII scrubbing policy definition; budget approval for SaaS integration |
+| **Future Phase Assignment** | v2 |
+| **Impact if Not Done** | Production errors invisible without user reports; attack pattern detection limited to audit logs only; no frontend error telemetry |
+| **Required Plan Realignment** | v2 must include: vendor selection, `window.onerror` + `unhandledrejection` handler, ErrorBoundary telemetry integration, PII scrubbing before payload transmission |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Error boundary captures and reports unhandled exceptions; PII (emails, tokens) scrubbed from payloads; error telemetry reaches monitoring dashboard |
+| **Status** | `deferred (v2)` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+### DW-037: Remove .env from Git Tracking
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-037 |
+| **Original Plan Section** | Post-closure security hardening gap analysis (GAP 3) |
+| **Original Phase** | RBAC Governance Hardening |
+| **Deferred Reason** | Requires manual git state commands (`git rm --cached .env`) which cannot be executed by AI tooling |
+| **Blocking Dependencies** | Manual developer action in local terminal |
+| **Future Phase Assignment** | Immediate — next developer session |
+| **Impact if Not Done** | `.env` pattern risk: accidental commit of real secrets (service role key, third-party API keys) to version control |
+| **Required Plan Realignment** | Run: `echo ".env" >> .gitignore && git rm --cached .env && git commit -m "chore: remove .env from git tracking"` |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | `.env` not present in `git ls-files`; `.gitignore` contains `.env` entry |
+| **Status** | `deferred (immediate)` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
 ## Used By / Affects
 
 - Phase gate closure decisions
