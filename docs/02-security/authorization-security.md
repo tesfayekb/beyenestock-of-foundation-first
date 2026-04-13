@@ -1,6 +1,6 @@
 # Authorization Security
 
-> **Owner:** Project Lead | **Last Reviewed:** 2026-04-09
+> **Owner:** Project Lead | **Last Reviewed:** 2026-04-13
 
 ## Purpose
 
@@ -53,6 +53,7 @@ CREATE TABLE public.roles (
     description TEXT,
     is_base BOOLEAN NOT NULL DEFAULT false,
     is_immutable BOOLEAN NOT NULL DEFAULT false,
+    is_permission_locked BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -72,6 +73,11 @@ CREATE TABLE public.user_roles (
 - Roles MUST be stored in separate authorization tables
 - Roles MUST NOT be stored on users or profile tables
 - Role assignment and removal are privileged actions and must be audited
+- `is_immutable` protects role identity: `key`, `is_base`, `is_immutable`, `is_permission_locked` cannot be changed for immutable roles
+- `is_permission_locked` independently protects permission assignments — a role can be identity-immutable but allow permission changes (admin), or both locked (user), or neither (custom roles)
+- User role (`is_permission_locked = true`): no permission modifications by any actor under any circumstances
+- Admin role (`is_permission_locked = false`, `is_immutable = true`): superadmin can modify permissions with 5-minute reauth
+- Superadmin role: no explicit permission rows; inherits all logically; modification blocked entirely
 
 ## Permission Model
 
@@ -180,6 +186,20 @@ $$;
 - Do not query role tables directly inside RLS policies if recursion risk exists
 - Client claims alone must never determine authorization
 
+## Privilege Escalation Prevention
+
+The following controls specifically prevent privilege escalation attacks:
+
+| Attack Vector | Prevention Mechanism | Layer |
+|---------------|---------------------|-------|
+| Admin assigns themselves superadmin | `assign-role` checks `is_superadmin(actor)` before allowing superadmin assignment | API |
+| Admin creates superadmin-level custom role with all permissions | `create-role` requires `is_superadmin(actor)` | API |
+| Admin modifies their own role's permissions | `assign-permission-to-role` checks `is_superadmin(actor)` for admin role changes | API |
+| User manually assigns `user` role to escalate in future | `assign-role` blocks `user` role with `USER_ROLE_AUTO_ASSIGNED` (409) | API |
+| Superadmin removes last superadmin (locking out system) | DB trigger `prevent_last_superadmin_delete` + application-layer count check | DB + API |
+| Superadmin removes own superadmin (accidental lockout) | `revoke-role` checks `role.key === 'superadmin' && target === actor` | API + UI |
+| Race condition on first signup (two users both get superadmin) | `pg_advisory_xact_lock(42)` serializes the superadmin count check in trigger | DB |
+
 ## RLS Rules
 
 - Every application table MUST have RLS enabled
@@ -224,8 +244,8 @@ The following are HIGH impact and require strict controls:
 | `roles.assign` | Assign roles to users | admin, superadmin |
 | `roles.revoke` | Revoke roles from users | admin, superadmin |
 | `roles.view` | View role assignments and definitions | admin, superadmin |
-| `roles.create` | Create dynamic roles | admin, superadmin |
-| `roles.delete` | Delete dynamic roles (destructive) | admin, superadmin |
+| `roles.create` | Create dynamic roles | superadmin (requires `is_superadmin()` gate) |
+| `roles.delete` | Delete dynamic roles (destructive) | superadmin (requires `is_superadmin()` gate) |
 | `permissions.assign` | Assign permissions to roles | admin, superadmin |
 | `permissions.revoke` | Revoke permissions from roles | admin, superadmin |
 | `admin.access` | Access admin panel | admin, superadmin |
