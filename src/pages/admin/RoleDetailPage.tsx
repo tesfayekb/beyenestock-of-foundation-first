@@ -80,13 +80,16 @@ export default function RoleDetailPage() {
     'session.self_manage',
   ]);
 
-  // Permissions that can never be assigned to the admin role by design.
-  // These are governed by superadmin-level access only or are structurally blocked.
-  const ADMIN_BLOCKED_PERMISSION_KEYS = new Set([
+  /**
+   * Permissions permanently restricted to superadmin only.
+   * These govern role/permission management and can never be assigned to any other role.
+   */
+  const SUPERADMIN_ONLY_PERMISSION_KEYS = new Set([
     'permissions.assign',
     'permissions.revoke',
     'jobs.emergency',
     'roles.create',
+    'roles.edit',
     'roles.delete',
   ]);
 
