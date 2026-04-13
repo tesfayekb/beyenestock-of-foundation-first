@@ -393,9 +393,9 @@ export default function RoleDetailPage() {
                           const isUniversal = USER_ROLE_PERMISSION_KEYS.has(perm.key);
                           // For non-user roles, user-role permissions are inherited and cannot be toggled
                           const isInheritedFromUserRole = isUniversal && role.key !== 'user';
-                          const isAdminBlocked = role.key === 'admin' && ADMIN_BLOCKED_PERMISSION_KEYS.has(perm.key);
+                          const isSuperadminOnly = !isSuperadmin && SUPERADMIN_ONLY_PERMISSION_KEYS.has(perm.key);
                           const isDisabled = isPermissionLocked || isSuperadmin || isPending || !canModifyPerms ||
-                            isDepBlocked || isAdminBlocked || isInheritedFromUserRole ||
+                            isDepBlocked || isSuperadminOnly || isInheritedFromUserRole ||
                             (perm.assigned && !canRevokePerms) || (!perm.assigned && !canAssignPerms);
                           return (
                             <label
