@@ -17,7 +17,16 @@ Comprehensive hardening pass on RBAC enforcement across server (edge functions) 
 
 ### Phase 2A — assign-permission-to-role Hardening
 
-- Added `SUPERADMIN_ONLY_PERMISSIONS` set: `permissions.assign`, `permissions.revoke`, `roles.create`, `roles.edit`, `roles.delete`, `jobs.emergency`
+- Added `SUPERADMIN_ONLY_PERMISSIONS` set (9 keys):
+  - `permissions.assign` — governs the RBAC system itself
+  - `permissions.revoke` — governs the RBAC system itself
+  - `roles.create` — structural change to authorization model
+  - `roles.edit` — structural change to authorization model
+  - `roles.delete` — structural change to authorization model
+  - `jobs.emergency` — system-wide kill switch
+  - `admin.config` — system configuration; privilege escalation vector (NIST AC-6, SOC 2 CC6.3)
+  - `monitoring.configure` — alert threshold modification enables audit evasion (PCI-DSS Req 10, SOC 2 CC7)
+  - `audit.export` — bulk compliance data exfiltration risk (HIPAA, GDPR, SOC 2, ISO 27001 A.9.2.3)
 - Server rejects any attempt to assign these permissions to a non-superadmin role with `403 SUPERADMIN_ONLY_PERMISSION`
 - Validates `role.key !== 'superadmin'` before blocking — superadmin itself retains full assignment capability
 
