@@ -11,7 +11,6 @@ import { useToast } from '@/hooks/use-toast';
 import { safeRedirectPath } from '@/lib/safe-redirect';
 import TurnstileWidget, { type TurnstileWidgetHandle } from '@/components/auth/TurnstileWidget';
 
-const SUPABASE_URL = 'https://wbmbsclrgcnqaxmdsgfc.supabase.co';
 
 export default function SignIn() {
   const [email, setEmail] = useState('');

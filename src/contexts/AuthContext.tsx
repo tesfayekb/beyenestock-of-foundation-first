@@ -127,13 +127,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string, displayName?: string) => {
+  const signUp = useCallback(async (email: string, password: string, displayName?: string, captchaToken?: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { display_name: displayName },
         emailRedirectTo: window.location.origin,
+        captchaToken,
       },
     });
 
@@ -144,8 +145,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const signIn = useCallback(async (email: string, password: string, captchaToken?: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password, options: { captchaToken } });
 
     if (error) {
       const reason = error.message?.toLowerCase().includes('invalid')
