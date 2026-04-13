@@ -396,6 +396,7 @@ At each phase boundary (before advancing to the next phase):
 | **Status** | `assigned` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
+| **Scope Expansion Note (2026-04-13)** | Scope expanded from original deactivate-user 409/rollback paths to cover all 34 edge functions (~75-95 integration tests). Expanded scope includes: privilege escalation regression suite (GAP 1 — admin→admin assignment blocked, superadmin-only permissions enforced), audit integrity suite (every mutation produces audit entry, IP redaction for non-superadmin, null IP preserved for system events), input validation suite (malformed UUIDs, oversized payloads, missing fields), and rate limiting verification. Original scope is a subset of the expanded coverage. Rate limiting tests require care: Supabase's built-in function-level throttling means hitting deployed functions 11+ times in rapid succession — must avoid triggering limits on the test runner itself. |
 
 ---
 
