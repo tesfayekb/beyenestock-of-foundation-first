@@ -212,7 +212,11 @@ export default function UserDetailPage() {
                                   <Lock className="h-3 w-3" />
                                 </span>
                               </TooltipTrigger>
-                              <TooltipContent>Base role — cannot be revoked</TooltipContent>
+                              <TooltipContent>
+                                {role.role_key === 'superadmin' && isSelf
+                                  ? 'Cannot revoke your own superadmin role'
+                                  : 'Base role — cannot be revoked'}
+                              </TooltipContent>
                             </Tooltip>
                           ) : (
                             <Button
