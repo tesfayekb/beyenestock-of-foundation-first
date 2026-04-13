@@ -350,6 +350,8 @@ At each phase boundary (before advancing to the next phase):
 | DW-033 | Auth page label/input association | Phase 6 | Phase 7 | `deferred` |
 | DW-034 | Superadmin Assignment Notification Email | Post-Phase 6 | `unassigned` (v2) | `deferred (v2)` |
 | DW-035 | Invite-Only Signup Flow | Post-Phase 6 | `unassigned` (v2) | `deferred (v2)` |
+| DW-036 | Global Error Monitoring (Sentry) | Post-Phase 6 | Pre-production | `deferred (pre-production)` |
+| DW-037 | Remove .env from Git Tracking | Post-Phase 6 | Immediate | `implemented` |
 
 
 ### DW-011: Distributed Rate Limiting
