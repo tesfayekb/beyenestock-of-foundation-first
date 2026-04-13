@@ -957,14 +957,14 @@ At each phase boundary (before advancing to the next phase):
 | **Original Plan Section** | Post-closure security hardening gap analysis (GAP 7) |
 | **Original Phase** | RBAC Governance Hardening |
 | **Deferred Reason** | Requires third-party integration (Sentry/Datadog) with PII scrubbing configuration; not addressable within current edge function + UI architecture alone |
-| **Blocking Dependencies** | Selection of monitoring vendor; PII scrubbing policy definition; budget approval for SaaS integration |
-| **Future Phase Assignment** | v2 |
+| **Blocking Dependencies** | Selection of monitoring vendor; PII scrubbing policy definition; budget approval for SaaS integration; **CI/CD pipeline or manual source map upload process** (Lovable handles deploys internally — source maps require either GitHub Actions workflow on push to main, or manual upload via `sentry-cli` after build, or alternative hosting provider's build pipeline) |
+| **Future Phase Assignment** | Pre-production (before first real user signup) |
 | **Impact if Not Done** | Production errors invisible without user reports; attack pattern detection limited to audit logs only; no frontend error telemetry |
-| **Required Plan Realignment** | v2 must include: vendor selection, `window.onerror` + `unhandledrejection` handler, ErrorBoundary telemetry integration, PII scrubbing before payload transmission |
+| **Required Plan Realignment** | Implementation plan documented 2026-04-13. Sentry free tier sufficient. Session Replay (`@sentry/replay`) **not recommended** for admin console — adds ~50KB bundle for low-value replay data in admin context. Rely on breadcrumbs + structured context instead. Add replay only if errors are regularly hard to reproduce. Source map upload requires CI/CD decision: if deploying via Lovable, use GitHub Actions; if migrating to Vercel/Netlify/other, use that provider's build pipeline. |
 | **Related Decisions** | — |
 | **Related Actions** | — |
-| **Required Tests for Closure** | Error boundary captures and reports unhandled exceptions; PII (emails, tokens) scrubbed from payloads; error telemetry reaches monitoring dashboard |
-| **Status** | `deferred (v2)` |
+| **Required Tests for Closure** | Error boundary captures and reports unhandled exceptions; PII (emails, tokens) scrubbed from payloads; error telemetry reaches monitoring dashboard; source maps resolve stack traces to original TypeScript |
+| **Status** | `deferred (pre-production)` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
 
