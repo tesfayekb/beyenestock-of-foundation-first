@@ -463,6 +463,7 @@ export type Database = {
           id: string
           is_base: boolean
           is_immutable: boolean
+          is_permission_locked: boolean
           key: string
           name: string
           updated_at: string
@@ -473,6 +474,7 @@ export type Database = {
           id?: string
           is_base?: boolean
           is_immutable?: boolean
+          is_permission_locked?: boolean
           key: string
           name: string
           updated_at?: string
@@ -483,6 +485,7 @@ export type Database = {
           id?: string
           is_base?: boolean
           is_immutable?: boolean
+          is_permission_locked?: boolean
           key?: string
           name?: string
           updated_at?: string
