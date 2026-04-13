@@ -1,0 +1,30 @@
+/**
+ * Permission dependency map — SSOT inline copy.
+ * ⚠️  SYNC: Must match /permission-deps.json in project root.
+ *    See RW-008 in regression-watchlist.md for drift detection protocol.
+ */
+export const PERMISSION_DEPS: Record<string, string[]> = {
+  "roles.assign":        ["roles.view", "users.view_all", "admin.access"],
+  "roles.revoke":        ["roles.view", "users.view_all", "admin.access"],
+  "roles.create":        ["roles.view", "admin.access"],
+  "roles.delete":        ["roles.view", "admin.access"],
+  "roles.edit":          ["roles.view", "admin.access"],
+  "permissions.assign":  ["roles.view", "permissions.view", "admin.access"],
+  "permissions.revoke":  ["roles.view", "permissions.view", "admin.access"],
+  "permissions.view":    ["admin.access"],
+  "users.edit_any":      ["users.view_all", "admin.access"],
+  "users.deactivate":    ["users.view_all", "admin.access"],
+  "users.reactivate":    ["users.view_all", "admin.access"],
+  "audit.export":        ["audit.view", "admin.access"],
+  "audit.view":          ["admin.access"],
+  "monitoring.configure": ["monitoring.view", "admin.access"],
+  "monitoring.view":      ["admin.access"],
+  "jobs.trigger":            ["jobs.view", "admin.access"],
+  "jobs.pause":              ["jobs.view", "admin.access"],
+  "jobs.resume":             ["jobs.view", "admin.access"],
+  "jobs.retry":              ["jobs.view", "admin.access"],
+  "jobs.deadletter.manage":  ["jobs.view", "admin.access"],
+  "jobs.emergency":          ["admin.access"],
+  "jobs.view":               ["admin.access"],
+  "admin.config":            ["admin.access"],
+}
