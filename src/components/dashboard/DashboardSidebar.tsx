@@ -169,7 +169,7 @@ export const DashboardSidebar = React.memo(function DashboardSidebar({ sections,
   );
 
   return (
-    <Sidebar collapsible="icon" variant="inset">
+    <Sidebar collapsible="icon" variant="sidebar">
       <SidebarHeader className="p-0">
         {/* Brand row — h-14 to match topbar */}
         <div className="flex h-14 items-center gap-2 px-3">
