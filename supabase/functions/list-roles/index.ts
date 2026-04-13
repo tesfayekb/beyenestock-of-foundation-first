@@ -25,6 +25,7 @@ interface RoleListItem {
   description: string | null
   is_base: boolean
   is_immutable: boolean
+  is_permission_locked: boolean
   created_at: string
   updated_at: string
   permission_count: number
@@ -44,7 +45,7 @@ Deno.serve(createHandler(async (req: Request) => {
   const [rolesResult, totalPermResult] = await Promise.all([
     supabaseAdmin
       .from('roles')
-      .select('id, key, name, description, is_base, is_immutable, created_at, updated_at, role_permissions(count), user_roles(count)')
+      .select('id, key, name, description, is_base, is_immutable, is_permission_locked, created_at, updated_at, role_permissions(count), user_roles(count)')
       .order('created_at', { ascending: true }),
     supabaseAdmin
       .from('permissions')
@@ -62,6 +63,7 @@ Deno.serve(createHandler(async (req: Request) => {
     description: r.description,
     is_base: r.is_base,
     is_immutable: r.is_immutable,
+    is_permission_locked: r.is_permission_locked,
     created_at: r.created_at,
     updated_at: r.updated_at,
     permission_count: r.key === 'superadmin'
