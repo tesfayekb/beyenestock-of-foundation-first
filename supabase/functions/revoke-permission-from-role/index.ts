@@ -19,6 +19,7 @@ import { authenticateRequest } from '../_shared/authenticate-request.ts'
 import { checkPermissionOrThrow, requireRecentAuth } from '../_shared/authorization.ts'
 import { logAuditEvent } from '../_shared/audit.ts'
 import { supabaseAdmin } from '../_shared/supabase-admin.ts'
+import { PERMISSION_DEPS } from '../_shared/permission-deps.ts'
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
 import { validateRequest } from '../_shared/validate-request.ts'
 
@@ -28,8 +29,6 @@ const BodySchema = z.object({
   role_id: z.string().trim().regex(uuidRegex, 'Invalid UUID'),
   permission_id: z.string().trim().regex(uuidRegex, 'Invalid UUID'),
 })
-
-import { PERMISSION_DEPS } from '../_shared/permission-deps.ts'
 
 /**
  * Find all permission keys that directly depend on the given key.
