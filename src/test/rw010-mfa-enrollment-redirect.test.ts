@@ -16,12 +16,6 @@ describe('RW-010: MFA enrollment route configuration', () => {
   });
 
   it('/mfa-enroll is wrapped in RequireAuth', () => {
-    // The route should be inside RequireAuth
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const mfaSection = appContent.substring(
-      appContent.indexOf('/mfa-enroll'),
-      appContent.indexOf('/mfa-enroll') + 200
-    );
     // Looking backward from mfa-enroll, RequireAuth should be present
     const beforeMfa = appContent.substring(0, appContent.indexOf('/mfa-enroll'));
     const lastRequireAuth = beforeMfa.lastIndexOf('RequireAuth');

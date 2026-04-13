@@ -28,16 +28,8 @@ const MUTATION_FUNCTIONS = [
   'update-role',
 ];
 
-/* Reference list of read-only functions (used for documentation, not in tests) */
-// @ts-expect-error Kept as documentation reference for audit coverage tracking
-void [
-  'export-audit-logs', 'get-profile', 'get-role-detail', 'get-user-stats',
-  'health-alert-config', 'health-alerts', 'health-check', 'health-detailed',
-  'health-metrics', 'job-alert-evaluation', 'job-audit-cleanup', 'job-health-check',
-  'job-metrics-aggregate', 'jobs-dead-letters', 'jobs-kill-switch', 'jobs-pause',
-  'jobs-replay-dead-letter', 'jobs-resume', 'list-permissions', 'list-roles',
-  'list-users', 'query-audit-logs',
-];
+
+
 
 describe('RW-005: Audit event completeness', () => {
   for (const fn of MUTATION_FUNCTIONS) {
