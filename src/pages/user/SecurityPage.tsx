@@ -94,7 +94,7 @@ export default function SecurityPage() {
   // OAuth identity helpers
   const identities = user?.identities ?? [];
   const linkedProviders = identities.map(i => i.provider);
-  const hasEmailAuth = linkedProviders.includes('email');
+  const _hasEmailAuth = linkedProviders.includes('email');
   const hasGoogle = linkedProviders.includes('google');
   const hasApple = linkedProviders.includes('apple');
   const canUnlink = identities.length > 1; // must keep at least one auth method

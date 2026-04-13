@@ -81,7 +81,7 @@ describe('RW-003: Shared function contracts', () => {
       // Terminal permissions (no entry in PERMISSION_DEPS but can be a dep value)
       const terminals = new Set(['admin.access', 'roles.view', 'users.view_all', 'audit.view', 'permissions.view', 'monitoring.view', 'jobs.view']);
 
-      for (const [key, deps] of Object.entries(PERMISSION_DEPS)) {
+      for (const [_key, deps] of Object.entries(PERMISSION_DEPS)) {
         for (const dep of deps) {
           const isKnown = allKeys.has(dep) || terminals.has(dep);
           expect(isKnown).toBe(true);

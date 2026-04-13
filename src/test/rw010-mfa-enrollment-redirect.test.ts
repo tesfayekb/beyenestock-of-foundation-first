@@ -17,7 +17,7 @@ describe('RW-010: MFA enrollment route configuration', () => {
 
   it('/mfa-enroll is wrapped in RequireAuth', () => {
     // The route should be inside RequireAuth
-    const mfaSection = appContent.substring(
+    const _mfaSection = appContent.substring(
       appContent.indexOf('/mfa-enroll'),
       appContent.indexOf('/mfa-enroll') + 200
     );

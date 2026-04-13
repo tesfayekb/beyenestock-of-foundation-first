@@ -5,7 +5,7 @@
  * Scans edge function source files for mutation patterns and checks audit calls.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync, statSync } from 'fs';
+import { readFileSync } from 'fs';
 import { resolve, join } from 'path';
 
 const FUNCTIONS_DIR = resolve(__dirname, '../../supabase/functions');
@@ -29,7 +29,7 @@ const MUTATION_FUNCTIONS = [
 ];
 
 /** Edge functions that are read-only or system-internal (no audit required) */
-const READ_ONLY_FUNCTIONS = [
+const _READ_ONLY_FUNCTIONS = [
   'export-audit-logs',
   'get-profile',
   'get-role-detail',
