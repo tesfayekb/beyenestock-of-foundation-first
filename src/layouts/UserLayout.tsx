@@ -21,7 +21,7 @@ export function UserLayout() {
   const { user, mfaStatus } = useAuth();
   const queryClient = useQueryClient();
   const location = useLocation();
-  const { data: authCtx } = useUserRoles();
+  const { permissions } = useUserRoles();
 
   useEffect(() => {
     if (!user) return;
