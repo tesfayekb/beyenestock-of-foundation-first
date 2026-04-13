@@ -25,6 +25,20 @@ import { validateRequest } from '../_shared/validate-request.ts'
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/**
+ * Permissions that are permanently restricted to superadmin only.
+ * These can never be assigned to any other role — they govern role/permission
+ * management itself and must remain under superadmin-exclusive control.
+ */
+const SUPERADMIN_ONLY_PERMISSIONS = new Set([
+  'permissions.assign',
+  'permissions.revoke',
+  'roles.create',
+  'roles.edit',
+  'roles.delete',
+  'jobs.emergency',
+])
+
 const BodySchema = z.object({
   role_id: z.string().trim().regex(uuidRegex, 'Invalid UUID'),
   permission_id: z.string().trim().regex(uuidRegex, 'Invalid UUID'),
@@ -104,6 +118,16 @@ Deno.serve(createHandler(async (req: Request) => {
   if (!permission) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(404, 'Permission not found', { correlationId: ctx.correlationId })
+  }
+
+  // Block superadmin-only permissions from being revoked from any non-superadmin role
+  // (they shouldn't be assigned in the first place, but defense-in-depth)
+  if (role.key !== 'superadmin' && SUPERADMIN_ONLY_PERMISSIONS.has(permission.key)) {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(403, `Permission "${permission.key}" is restricted to superadmin only and cannot be modified on other roles`, {
+      correlationId: ctx.correlationId,
+      code: 'SUPERADMIN_ONLY_PERMISSION',
+    })
   }
 
   // Validate mapping exists

@@ -80,13 +80,16 @@ export default function RoleDetailPage() {
     'session.self_manage',
   ]);
 
-  // Permissions that can never be assigned to the admin role by design.
-  // These are governed by superadmin-level access only or are structurally blocked.
-  const ADMIN_BLOCKED_PERMISSION_KEYS = new Set([
+  /**
+   * Permissions permanently restricted to superadmin only.
+   * These govern role/permission management and can never be assigned to any other role.
+   */
+  const SUPERADMIN_ONLY_PERMISSION_KEYS = new Set([
     'permissions.assign',
     'permissions.revoke',
     'jobs.emergency',
     'roles.create',
+    'roles.edit',
     'roles.delete',
   ]);
 
@@ -390,9 +393,9 @@ export default function RoleDetailPage() {
                           const isUniversal = USER_ROLE_PERMISSION_KEYS.has(perm.key);
                           // For non-user roles, user-role permissions are inherited and cannot be toggled
                           const isInheritedFromUserRole = isUniversal && role.key !== 'user';
-                          const isAdminBlocked = role.key === 'admin' && ADMIN_BLOCKED_PERMISSION_KEYS.has(perm.key);
+                          const isSuperadminOnly = !isSuperadmin && SUPERADMIN_ONLY_PERMISSION_KEYS.has(perm.key);
                           const isDisabled = isPermissionLocked || isSuperadmin || isPending || !canModifyPerms ||
-                            isDepBlocked || isAdminBlocked || isInheritedFromUserRole ||
+                            isDepBlocked || isSuperadminOnly || isInheritedFromUserRole ||
                             (perm.assigned && !canRevokePerms) || (!perm.assigned && !canAssignPerms);
                           return (
                             <label
@@ -424,7 +427,7 @@ export default function RoleDetailPage() {
                                   {isUniversal && role.key === 'user' && (
                                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">all users</Badge>
                                   )}
-                                  {isAdminBlocked && (
+                                  {isSuperadminOnly && (
                                     <Badge variant="outline" className="ml-1 text-xs text-muted-foreground">superadmin only</Badge>
                                   )}
                                 </div>
