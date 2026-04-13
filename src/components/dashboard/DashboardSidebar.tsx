@@ -184,8 +184,9 @@ export const DashboardSidebar = React.memo(function DashboardSidebar({ sections,
                   variant="ghost"
                   size={collapsed ? 'icon' : 'default'}
                   className={collapsed ? 'w-full' : 'w-full justify-between text-left font-normal'}
+                  aria-label="Switch dashboard"
                 >
-                  {activeDashboard && (
+                  {activeDashboard ? (
                     <>
                       <activeDashboard.icon className="h-4 w-4 shrink-0" />
                       {!collapsed && (
@@ -195,6 +196,8 @@ export const DashboardSidebar = React.memo(function DashboardSidebar({ sections,
                         </>
                       )}
                     </>
+                  ) : (
+                    <span className="h-4 w-4 rounded bg-muted animate-pulse" />
                   )}
                 </Button>
               </DropdownMenuTrigger>
