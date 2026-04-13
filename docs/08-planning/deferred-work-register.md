@@ -623,9 +623,10 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | — |
 | **Required Tests for Closure** | Email search works beyond 1000 users; no auth.admin.listUsers() in search path; query performance < 500ms at 10K users |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | Phase 6 Stage 6C/6D closure |
+| **Implemented in Plan Version** | v11.0 |
+| **Resolution Note** | Closed in Phase 6 Stage 6C/6D. Server-side search via `get-user-stats` edge function with DB-level filtering. |
 
 ---
 
@@ -647,9 +648,10 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | — |
 | **Required Tests for Closure** | Single query returns user + email + roles; response time < 200ms at 10K users |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | Phase 6 Stage 6C/6D closure |
+| **Implemented in Plan Version** | v11.0 |
+| **Resolution Note** | Closed in Phase 6 Stage 6C/6D. Server-shaped user DTO via optimized edge function queries. |
 
 ---
 
@@ -671,9 +673,10 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | — |
 | **Required Tests for Closure** | Audit entries show actor display name; optional actor-scope toggle works; no N+1 for actor resolution |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | Phase 6 Stage 6C/6D closure |
+| **Implemented in Plan Version** | v11.0 |
+| **Resolution Note** | Closed in Phase 6 Stage 6C/6D. Audit actor display name resolution and scope filtering implemented. |
 
 ---
 
@@ -695,9 +698,10 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | — |
 | **Required Tests for Closure** | Dashboard and role list load in < 1s at 10K users; no unbounded client-side fetches |
-| **Status** | `assigned` |
-| **Implemented by Action** | — |
-| **Implemented in Plan Version** | — |
+| **Status** | `implemented` |
+| **Implemented by Action** | Phase 6 Stage 6C/6D closure |
+| **Implemented in Plan Version** | v11.0 |
+| **Resolution Note** | Closed in Phase 6 Stage 6C/6D. Server-side aggregation via `get-user-stats` edge function; unbounded client-side queries eliminated. |
 
 ---
 
@@ -966,10 +970,10 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | — |
 | **Related Actions** | — |
 | **Required Tests for Closure** | Error boundary captures and reports unhandled exceptions; PII (emails, tokens) scrubbed from payloads; error telemetry reaches monitoring dashboard; source maps resolve stack traces to original TypeScript |
-| **Status** | `partially-implemented` |
-| **Implemented by Action** | SDK integration completed 2026-04-13. `@sentry/react` installed, `Sentry.init()` in `src/main.tsx`, `ErrorBoundary` reports to Sentry, `api-client.ts` captures 5xx with correlation IDs, PII scrubbed (email + JWT), Session Replay disabled, dev mode disabled. Vite dedupe configured. |
+| **Status** | `partially-implemented (code complete — awaiting production deployment)` |
+| **Implemented by Action** | SDK integration completed 2026-04-13. |
 | **Implemented in Plan Version** | — |
-| **Remaining for Closure** | 1) **Local verification**: Developer must run `npm run dev` with `VITE_SENTRY_DSN` in `.env` and `enabled: true` (temporary), trigger a test error, confirm it appears in Sentry dashboard, then revert `enabled` to `import.meta.env.PROD`. 2) **Source map upload**: Requires CI/CD pipeline decision (GitHub Actions / hosting provider build). 3) **Production deployment**: Set `VITE_SENTRY_DSN` in hosting provider env vars. |
+| **Resolution Note** | `@sentry/react` installed, `Sentry.init()` configured in `src/main.tsx` with PII scrubbing (email + JWT redacted) and Session Replay disabled. `ErrorBoundary` reports uncaught exceptions to Sentry. `api-client.ts` captures 5xx errors with correlation IDs. Dev mode disabled (`enabled: import.meta.env.PROD`). Vite dedupe configured. Activates automatically when `VITE_SENTRY_DSN` is set in production environment. Remaining deployment-step items: (1) Set `VITE_SENTRY_DSN` in hosting provider env vars. (2) Source map upload via CI/CD pipeline (deployment-provider dependent). |
 
 ### DW-037: Remove .env from Git Tracking
 

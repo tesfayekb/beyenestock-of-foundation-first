@@ -165,7 +165,7 @@ Implement role-based access control.
 ---
 
 ### PLAN-HEALTH-001: Health Monitoring
-**Status:** `approved`
+**Status:** `implemented`
 **Risk Level:** MEDIUM
 **Module Doc:** [health-monitoring.md](../04-modules/health-monitoring.md)
 
@@ -195,7 +195,7 @@ Implement role-based access control.
 ---
 
 ### PLAN-JOBS-001: Jobs and Scheduler
-**Status:** `approved`
+**Status:** `implemented`
 **Risk Level:** MEDIUM
 **Module Doc:** [jobs-and-scheduler.md](../04-modules/jobs-and-scheduler.md)
 
