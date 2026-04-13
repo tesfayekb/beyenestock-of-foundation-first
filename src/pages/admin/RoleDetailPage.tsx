@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
@@ -20,7 +20,7 @@ import { useUserRoles } from '@/hooks/useUserRoles';
 import { useAuth } from '@/contexts/AuthContext';
 import { checkPermission } from '@/lib/rbac';
 import { requiresReauthentication } from '@/lib/auth-guards';
-import { ApiError } from '@/lib/api-client';
+import { ROUTES } from '@/config/routes';
 import { ROUTES } from '@/config/routes';
 import { PERMISSION_DEPS } from '@/config/permission-deps';
 import { ArrowLeft, Shield, Users, Key, Loader2, Info, Trash2, Pencil, Check, X } from 'lucide-react';
