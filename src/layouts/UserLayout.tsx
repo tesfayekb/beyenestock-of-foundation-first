@@ -30,7 +30,7 @@ export function UserLayout() {
   }, [user, queryClient]);
 
   // GAP 6: Enforce MFA for users who hold admin.access permission
-  const hasAdminAccess = authCtx?.permissions?.includes('admin.access') ?? false;
+  const hasAdminAccess = permissions.includes('admin.access');
   if (hasAdminAccess && mfaStatus === 'none') {
     const returnTo = `${location.pathname}${location.search}${location.hash}`;
     return (
