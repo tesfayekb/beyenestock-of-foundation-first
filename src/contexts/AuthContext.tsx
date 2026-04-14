@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import type { User, Session, AuthError } from '@supabase/supabase-js';
+import { AuthApiError, type User, type Session, type AuthError } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -74,6 +74,69 @@ async function getMfaStatusFromSdk(): Promise<MfaStatus> {
     return 'enrolled';
   }
   return 'none';
+}
+
+async function signInWithPasswordWithoutCaptcha(
+  email: string,
+  password: string
+): Promise<{ data: { user: User | null; session: Session | null }; error: AuthError | null }> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  if (!supabaseUrl || !supabasePublishableKey) {
+    return {
+      data: { user: null, session: null },
+      error: new AuthApiError('Supabase client configuration is missing.', 500, 'client_config_missing'),
+    };
+  }
+
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: {
+        apikey: supabasePublishableKey,
+        Authorization: `Bearer ${supabasePublishableKey}`,
+        'Content-Type': 'application/json;charset=UTF-8',
+        'X-Client-Info': 'supabase-js-web/2.103.0',
+        'X-Supabase-Api-Version': '2024-01-01',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const payload = await response.json().catch(() => ({} as Record<string, unknown>));
+
+    if (!response.ok) {
+      return {
+        data: { user: null, session: null },
+        error: new AuthApiError(
+          typeof payload.message === 'string' ? payload.message : 'Sign in failed',
+          response.status,
+          typeof payload.code === 'string' ? payload.code : undefined
+        ),
+      };
+    }
+
+    if (typeof payload.access_token !== 'string' || typeof payload.refresh_token !== 'string') {
+      return {
+        data: { user: null, session: null },
+        error: new AuthApiError('Supabase returned an invalid session response.', 500, 'invalid_session_response'),
+      };
+    }
+
+    return await supabase.auth.setSession({
+      access_token: payload.access_token,
+      refresh_token: payload.refresh_token,
+    });
+  } catch (error) {
+    return {
+      data: { user: null, session: null },
+      error: new AuthApiError(
+        error instanceof Error ? error.message : 'Sign in failed',
+        500,
+        'unexpected_failure'
+      ),
+    };
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -158,11 +221,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? captchaToken
       : undefined;
 
-    const { data, error } = await supabase.auth.signInWithPassword(
-      normalizedCaptchaToken
-        ? { email, password, options: { captchaToken: normalizedCaptchaToken } }
-        : { email, password }
-    );
+    const { data, error } = normalizedCaptchaToken
+      ? await supabase.auth.signInWithPassword({
+          email,
+          password,
+          options: { captchaToken: normalizedCaptchaToken },
+        })
+      : await signInWithPasswordWithoutCaptcha(email, password);
 
     if (error) {
       const reason = error.message?.toLowerCase().includes('invalid')
