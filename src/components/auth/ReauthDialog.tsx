@@ -170,6 +170,7 @@ export function ReauthDialog({
         return;
       }
 
+      invalidateTokenCache();
       resetState();
       onOpenChange(false);
       onVerified();
