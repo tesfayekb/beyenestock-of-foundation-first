@@ -175,6 +175,7 @@ Deno.serve(createHandler(async (req: Request) => {
           role_id: role_id ?? null,
           invited_by: ctx.user.id,
           status: 'pending',
+          expires_at: expiresAt,
         })
 
       if (insertError) {
