@@ -17,6 +17,7 @@ import { ROUTES } from '@/config/routes';
 import { format } from 'date-fns';
 import { Search } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
+import { formatFullName, getInitials } from '@/lib/format-name';
 
 const PAGE_SIZE = 50;
 
@@ -50,7 +51,8 @@ export default function AdminUsersPage() {
         key: 'user',
         header: 'User',
         cell: (row) => {
-          const initials = (row.display_name ?? '?').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+          const initials = getInitials(row.display_name, row.last_name);
+          const fullName = formatFullName(row.display_name, row.last_name);
           return (
             <div className="flex items-center gap-3">
               <Avatar className="h-8 w-8">
@@ -59,7 +61,7 @@ export default function AdminUsersPage() {
               </Avatar>
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-foreground">
-                  {row.display_name ?? '—'}
+                  {fullName}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
                   {row.email ?? row.id}

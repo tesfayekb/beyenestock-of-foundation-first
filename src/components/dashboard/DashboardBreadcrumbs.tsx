@@ -39,7 +39,7 @@ function resolveEntityName(
   if (parentSegment === 'users') {
     // useUserDetail uses key ['admin', 'user', id]
     const data = queryClient.getQueryData<any>(['admin', 'user', uuid]);
-    if (data?.display_name) return data.display_name;
+    if (data?.display_name || data?.last_name) return [data.display_name, data.last_name].filter(Boolean).join(' ');
     if (data?.email) return data.email;
   }
 

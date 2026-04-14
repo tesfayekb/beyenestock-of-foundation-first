@@ -25,6 +25,10 @@ const BodySchema = z.object({
     z.string().trim().min(1).max(255),
     z.null(),
   ]).optional(),
+  last_name: z.union([
+    z.string().trim().min(1).max(255),
+    z.null(),
+  ]).optional(),
   // SCENARIO-2: Restrict to https:// URLs only
   avatar_url: z.union([
     z.string().url().max(2048).refine(
@@ -34,7 +38,7 @@ const BodySchema = z.object({
     z.null(),
   ]).optional(),
 }).refine(
-  (d) => d.display_name !== undefined || d.avatar_url !== undefined,
+  (d) => d.display_name !== undefined || d.last_name !== undefined || d.avatar_url !== undefined,
   { message: 'At least one field to update is required' }
 )
 
@@ -46,7 +50,7 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const ctx = await authenticateRequest(req)
   const body = await req.json()
-  const { user_id, display_name, avatar_url } = validateRequest(BodySchema, body)
+  const { user_id, display_name, last_name, avatar_url } = validateRequest(BodySchema, body)
 
   const targetUserId = user_id ?? ctx.user.id
   const isSelf = targetUserId === ctx.user.id
@@ -64,13 +68,14 @@ Deno.serve(createHandler(async (req: Request) => {
   // Build update payload — only include provided fields
   const updatePayload: Record<string, unknown> = {}
   if (display_name !== undefined) updatePayload.display_name = display_name
+  if (last_name !== undefined) updatePayload.last_name = last_name
   if (avatar_url !== undefined) updatePayload.avatar_url = avatar_url
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .update(updatePayload)
     .eq('id', targetUserId)
-    .select('id, display_name, avatar_url, email_verified, status, created_at, updated_at')
+    .select('id, display_name, last_name, avatar_url, email_verified, status, created_at, updated_at')
     .single()
 
   if (error || !data) {

@@ -1,5 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfile } from '@/hooks/useProfile';
+import { formatFullName } from '@/lib/format-name';
 import { useMfaFactors } from '@/hooks/useMfaFactors';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
@@ -17,8 +18,9 @@ export default function UserDashboard() {
 
   if (isLoading) return <LoadingSkeleton />;
 
-  const greeting = profile?.display_name
-    ? `Welcome back, ${profile.display_name}`
+  const fullName = formatFullName(profile?.display_name, profile?.last_name);
+  const greeting = fullName !== '—'
+    ? `Welcome back, ${fullName}`
     : 'Welcome back';
 
   // FINDING-3 FIX: Use verifiedFactors.length > 0 (consistent with SecurityPage)
@@ -45,8 +47,8 @@ export default function UserDashboard() {
               <p className="font-medium">{user?.email ?? '—'}</p>
             </div>
             <div className="text-sm">
-              <p className="text-muted-foreground text-xs">Display Name</p>
-              <p className="font-medium">{profile?.display_name ?? '—'}</p>
+              <p className="text-muted-foreground text-xs">Name</p>
+              <p className="font-medium">{formatFullName(profile?.display_name, profile?.last_name)}</p>
             </div>
             <div className="text-sm">
               <p className="text-muted-foreground text-xs">Status</p>

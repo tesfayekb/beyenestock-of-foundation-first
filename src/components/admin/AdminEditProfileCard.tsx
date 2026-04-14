@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 interface AdminEditProfileCardProps {
   userId: string;
   displayName: string | null;
+  lastName: string | null;
   avatarUrl: string | null;
   canEdit: boolean;
   isSelf: boolean;
@@ -20,30 +21,33 @@ interface AdminEditProfileCardProps {
 export function AdminEditProfileCard({
   userId,
   displayName,
+  lastName,
   avatarUrl,
   canEdit,
   isSelf,
 }: AdminEditProfileCardProps) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(displayName ?? '');
+  const [firstName, setFirstName] = useState(displayName ?? '');
+  const [lastNameVal, setLastNameVal] = useState(lastName ?? '');
   const [avatar, setAvatar] = useState(avatarUrl ?? '');
   const [submitting, setSubmitting] = useState(false);
 
-  // Sync when props change (e.g. after refetch)
   useEffect(() => {
     if (!editing) {
-      setName(displayName ?? '');
+      setFirstName(displayName ?? '');
+      setLastNameVal(lastName ?? '');
       setAvatar(avatarUrl ?? '');
     }
-  }, [displayName, avatarUrl, editing]);
+  }, [displayName, lastName, avatarUrl, editing]);
 
-  const isDirty = name !== (displayName ?? '') || avatar !== (avatarUrl ?? '');
+  const isDirty = firstName !== (displayName ?? '') || lastNameVal !== (lastName ?? '') || avatar !== (avatarUrl ?? '');
   const avatarValid = isValidAvatarUrl(avatar);
-  const canSubmit = isDirty && avatarValid && name.length <= 255 && !submitting;
+  const canSubmit = isDirty && avatarValid && firstName.length <= 255 && lastNameVal.length <= 255 && !submitting;
 
   const handleCancel = () => {
-    setName(displayName ?? '');
+    setFirstName(displayName ?? '');
+    setLastNameVal(lastName ?? '');
     setAvatar(avatarUrl ?? '');
     setEditing(false);
   };
@@ -56,7 +60,8 @@ export function AdminEditProfileCard({
     try {
       await apiClient.patch('update-profile', {
         user_id: userId,
-        display_name: name || null,
+        display_name: firstName || null,
+        last_name: lastNameVal || null,
         avatar_url: avatar || null,
       });
       await queryClient.invalidateQueries({ queryKey: ['admin', 'user', userId] });
@@ -69,7 +74,6 @@ export function AdminEditProfileCard({
     }
   };
 
-  // Don't show edit button for self or without permission
   const showEditButton = canEdit && !isSelf;
 
   if (!editing) {
@@ -83,15 +87,27 @@ export function AdminEditProfileCard({
 
   return (
     <form onSubmit={handleSave} className="space-y-4 border-t pt-4">
-      <div className="space-y-2">
-        <Label htmlFor="admin-edit-name">Display Name</Label>
-        <Input
-          id="admin-edit-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={255}
-          placeholder="Display name"
-        />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="admin-edit-first-name">First Name</Label>
+          <Input
+            id="admin-edit-first-name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            maxLength={255}
+            placeholder="First name"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="admin-edit-last-name">Last Name</Label>
+          <Input
+            id="admin-edit-last-name"
+            value={lastNameVal}
+            onChange={(e) => setLastNameVal(e.target.value)}
+            maxLength={255}
+            placeholder="Last name"
+          />
+        </div>
       </div>
       <div className="space-y-2">
         <Label htmlFor="admin-edit-avatar">Avatar URL</Label>

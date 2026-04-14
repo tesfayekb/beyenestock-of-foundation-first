@@ -25,6 +25,7 @@ import { ROUTES } from '@/config/routes';
 import { format } from 'date-fns';
 import { ArrowLeft, ShieldAlert, ShieldCheck, Mail, Calendar, Clock, FileText, Plus, X, Lock } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatFullName, getInitials } from '@/lib/format-name';
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -108,7 +109,8 @@ export default function UserDetailPage() {
   }
 
   const isActive = profile.status === 'active';
-  const initials = (profile.display_name ?? '?').split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
+  const initials = getInitials(profile.display_name, profile.last_name);
+  const fullName = formatFullName(profile.display_name, profile.last_name, 'Unknown User');
   const auditEntries: AuditLogEntry[] = auditData?.data ?? [];
 
   return (
@@ -118,7 +120,7 @@ export default function UserDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <PageHeader
-          title={profile.display_name ?? 'Unknown User'}
+          title={fullName}
           subtitle={profile.email ?? id}
           actions={
             !isSelf && (
@@ -153,7 +155,7 @@ export default function UserDetailPage() {
                 <AvatarFallback className="text-lg">{initials}</AvatarFallback>
               </Avatar>
               <div className="space-y-1">
-                <p className="font-display text-lg font-semibold">{profile.display_name ?? '—'}</p>
+                <p className="font-display text-lg font-semibold">{fullName}</p>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={profile.status as 'active' | 'deactivated'} />
                   <StatusBadge
@@ -171,6 +173,7 @@ export default function UserDetailPage() {
             <AdminEditProfileCard
               userId={id!}
               displayName={profile.display_name}
+              lastName={profile.last_name}
               avatarUrl={profile.avatar_url}
               canEdit={canEditProfile}
               isSelf={isSelf}

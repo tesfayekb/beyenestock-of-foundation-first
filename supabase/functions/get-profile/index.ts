@@ -47,7 +47,7 @@ Deno.serve(createHandler(async (req: Request) => {
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
-    .select('id, display_name, avatar_url, email, email_verified, status, created_at, updated_at')
+    .select('id, display_name, last_name, avatar_url, email, email_verified, status, created_at, updated_at')
     .eq('id', targetUserId)
     .single()
 

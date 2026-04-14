@@ -25,7 +25,7 @@ export interface PermissionListItem {
 
 export interface RoleDetail extends RoleListItem {
   permissions: { id: string; key: string; description: string | null }[];
-  users: { id: string; display_name: string | null; assigned_at: string }[];
+  users: { id: string; display_name: string | null; last_name: string | null; assigned_at: string }[];
 }
 
 /** Shared query key for role list — used by hooks and prefetch. */

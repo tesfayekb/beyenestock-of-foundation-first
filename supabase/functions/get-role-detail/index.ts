@@ -108,13 +108,13 @@ async function resolveUsers(roleId: string) {
   const userIds = urData.map((ur) => ur.user_id)
   const { data: profiles } = await supabaseAdmin
     .from('profiles')
-    .select('id, display_name')
+    .select('id, display_name, last_name')
     .in('id', userIds)
 
-  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name]))
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, { display_name: p.display_name, last_name: p.last_name }]))
   return urData.map((ur) => ({
     id: ur.user_id,
-    display_name: profileMap.get(ur.user_id) ?? null,
+    display_name: profileMap.get(ur.user_id)?.display_name ?? null, last_name: profileMap.get(ur.user_id)?.last_name ?? null,
     assigned_at: ur.assigned_at,
   }))
 }

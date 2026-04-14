@@ -470,7 +470,7 @@ export default function RoleDetailPage() {
                     onClick={() => navigate(ROUTES.ADMIN_USER_DETAIL.replace(':id', userRole.id))}
                   >
                     <p className="text-sm font-medium text-foreground">
-                      {userRole.display_name ?? userRole.id.slice(0, 8) + '…'}
+                      {[userRole.display_name, userRole.last_name].filter(Boolean).join(' ') || userRole.id.slice(0, 8) + '…'}
                     </p>
                   </div>
                 ))}
