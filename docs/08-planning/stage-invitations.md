@@ -195,6 +195,7 @@ No token validation — invited users bypass the hook entirely via `inviteUserBy
 - `user.bulk_invited` — bulk invite with count
 - `user.invitation_revoked` — invitation revoked
 - `user.invitation_resent` — invitation resent
+- `user.invitation_accepted` — invitation consumed during signup (emitted by `handle_new_user_role` trigger in Phase 1, not an edge function)
 
 ### Deliverables
 
