@@ -43,4 +43,13 @@ describe('RW-010: MFA enrollment route configuration', () => {
     expect(signInContent).toContain('challenge_required');
     expect(signInContent).toContain('/mfa-challenge');
   });
+
+  it('SignIn suppresses redirect while OAuth handoff is in progress', () => {
+    const signInContent = readFileSync(
+      resolve(__dirname, '../pages/SignIn.tsx'),
+      'utf-8'
+    );
+    expect(signInContent).toContain('oauthStarting');
+    expect(signInContent).toContain('if (authLoading || oauthStarting)');
+  });
 });
