@@ -35,8 +35,8 @@ Tracks:
 status: complete
 phase: development
 code_generation: allowed
-modules_implemented: auth implemented (A+B+D implemented + hardened incl. Google account-picker prompt [ACT-064], C cancelled per DEC-025), rbac implemented (Phase 2 gate 12/12 closed + dependency enforcement + roles.edit + permissions.view separated + permissions.assign/revoke restricted to superadmin + RBAC governance hardening 2026-04-13), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 hardened + RLS INSERT policy removed [ACT-053] + correlation_id top-level column [ACT-055]), api implemented (Stage 3A closed + Phase 3.5 hardened), admin-panel implemented (Phase 4 CLOSED + Phase 5 additions: AdminHealthPage [ACT-063], AdminJobsPage [ACT-063] + performance hardening [ACT-056] + RBAC governance hardening 2026-04-13), user-panel implemented (Phase 4 CLOSED + session revocation [ACT-063]), health-monitoring implemented (Stage 5A + 5B + 5F complete [ACT-057, ACT-058, ACT-063]), jobs-and-scheduler implemented (Stage 5C + 5D + 5E complete [ACT-059, ACT-060, ACT-062])
-active_work: All phases complete. PLAN-INVITE-001 (User Onboarding & Invitations) implemented — 6-phase plan complete. OAuth account-picker hardening reconciled 2026-04-14 [ACT-064].
+modules_implemented: auth implemented (A+B+D implemented + hardened incl. Google account-picker prompt [ACT-064] + revoked-session local cleanup [ACT-065], C cancelled per DEC-025), rbac implemented (Phase 2 gate 12/12 closed + dependency enforcement + roles.edit + permissions.view separated + permissions.assign/revoke restricted to superadmin + RBAC governance hardening 2026-04-13), user-management implemented (Stage 3C closed), audit-logging implemented (Stage 3B closed + Phase 3.5 hardened + RLS INSERT policy removed [ACT-053] + correlation_id top-level column [ACT-055]), api implemented (Stage 3A closed + Phase 3.5 hardened), admin-panel implemented (Phase 4 CLOSED + Phase 5 additions: AdminHealthPage [ACT-063], AdminJobsPage [ACT-063] + performance hardening [ACT-056] + RBAC governance hardening 2026-04-13), user-panel implemented (Phase 4 CLOSED + session revocation [ACT-063] + global revoke local cleanup [ACT-065]), health-monitoring implemented (Stage 5A + 5B + 5F complete [ACT-057, ACT-058, ACT-063]), jobs-and-scheduler implemented (Stage 5C + 5D + 5E complete [ACT-059, ACT-060, ACT-062])
+active_work: All phases complete. PLAN-INVITE-001 (User Onboarding & Invitations) implemented — 6-phase plan complete. OAuth account-picker hardening reconciled 2026-04-14 [ACT-064]. Revoked-session cleanup reconciled 2026-04-14 [ACT-065].
 current_plan_version: v11.0
 approved_plan_baseline: v11.0
 plan_status: approved
@@ -107,11 +107,11 @@ If inconsistency is detected → execution must **STOP** and be corrected.
 
 | Module | Status | Last Updated |
 |--------|--------|-------------|
-| auth | implemented (A+B+D + hardened + MFA recovery codes [Stage 6A] + Google account-picker prompt [ACT-064]; C cancelled per DEC-025) | 2026-04-14 |
+| auth | implemented (A+B+D + hardened + MFA recovery codes [Stage 6A] + Google account-picker prompt [ACT-064] + revoked-session local cleanup [ACT-065]; C cancelled per DEC-025) | 2026-04-14 |
 | rbac | implemented (Phase 2 gate 12/12 closed + Phase 3.5 hardened + ACT-049/051/052 + **RBAC governance hardening 2026-04-13**: superadmin-only permission enforcement, user-role inheritance visibility, 8 button-level gaps closed, reauth dialog fix) | 2026-04-13 |
 | user-management | implemented (Phase 3C closed [ACT-032]: lifecycle, deactivate/reactivate, auth ban/unban; Phase 3D Gate 1 runtime-verified [ACT-035]) | 2026-04-10 |
 | admin-panel | implemented (Phase 4 CLOSED [ACT-048] + post-closure enhancements + **RBAC governance hardening 2026-04-13**: permission inheritance badges, superadmin-only badges, effective permission counts, permission-gated action buttons) | 2026-04-13 |
-| user-panel | implemented (Phase 4 CLOSED [ACT-048]: ProfilePage, SecurityPage, UserDashboard, useProfile, useMfaFactors, ReauthDialog, useInactivityTimeout) | 2026-04-12 |
+| user-panel | implemented (Phase 4 CLOSED [ACT-048]: ProfilePage, SecurityPage, UserDashboard, useProfile, useMfaFactors, ReauthDialog, useInactivityTimeout + global revoke local cleanup [ACT-065]) | 2026-04-14 |
 | audit-logging | implemented (Phase 3B closed + Phase 3.5 hardened + ACT-053: removed overly permissive INSERT RLS policy) | 2026-04-12 |
 | health-monitoring | implemented (5A + 5B + 5F complete [ACT-057, ACT-058, ACT-063]) | 2026-04-12 |
 | api | implemented (Phase 3A closed + Phase 3.5 hardened: PermissionDeniedError enriched with userId/reason, centralized denial interception in handler.ts) | 2026-04-10 |

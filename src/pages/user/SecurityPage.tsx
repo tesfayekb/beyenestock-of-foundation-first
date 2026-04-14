@@ -12,7 +12,7 @@ import { ShieldCheck, ShieldOff, Trash2, KeyRound, Clock, LogIn, Lock, Monitor, 
 import { PasswordChangeCard } from '@/components/user/PasswordChangeCard';
 import { ReauthDialog } from '@/components/auth/ReauthDialog';
 import { ConfirmActionDialog } from '@/components/dashboard/ConfirmActionDialog';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, invalidateTokenCache } from '@/lib/api-client';
 import { toast } from 'sonner';
 
 export default function SecurityPage() {
@@ -55,11 +55,13 @@ export default function SecurityPage() {
     try {
       await apiClient.post('revoke-sessions', { scope });
       if (scope === 'global') {
-        toast.success('All sessions revoked. Redirecting to sign-in…');
-        setTimeout(() => navigate(ROUTES.SIGN_IN), 1500);
-      } else {
-        toast.success('Other sessions have been revoked.');
+        toast.success('All sessions revoked. Signing out…');
+        invalidateTokenCache();
+        await supabase.auth.signOut({ scope: 'local' });
+        window.location.replace(ROUTES.SIGN_IN);
+        return;
       }
+      toast.success('Other sessions have been revoked.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to revoke sessions';
       toast.error(msg);
@@ -68,7 +70,7 @@ export default function SecurityPage() {
       setShowRevokeOthers(false);
       setShowRevokeAll(false);
     }
-  }, [navigate]);
+  }, []);
 
   const handleGenerateRecoveryCodes = useCallback(async () => {
     setGeneratingCodes(true);
