@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: {
         data: { display_name: displayName, last_name: lastName },
         emailRedirectTo: window.location.origin,
-        captchaToken,
+        captchaToken: captchaToken === 'dev-mode-bypass-token' ? undefined : captchaToken,
       },
     });
 
