@@ -50,6 +50,7 @@ function isValidEmail(email: string): boolean {
 export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [roleId, setRoleId] = useState<string>('');
   const [existingUser, setExistingUser] = useState<ExistingUserCheck | null>(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -108,6 +109,7 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
   const resetForm = useCallback(() => {
     setEmail('');
     setDisplayName('');
+    setLastName('');
     setRoleId('');
     setExistingUser(null);
     setIsChecking(false);
@@ -126,13 +128,14 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
       email: email.trim().toLowerCase(),
       role_id: roleId || undefined,
       display_name: displayName.trim() || undefined,
+      last_name: lastName.trim() || undefined,
     });
 
     if (!success) return;
 
     resetForm();
     onOpenChange(false);
-  }, [email, displayName, roleId, inviteUser, onOpenChange, existingUser, isChecking, resetForm]);
+  }, [email, displayName, lastName, roleId, inviteUser, onOpenChange, existingUser, isChecking, resetForm]);
 
   const handleGoToUser = useCallback(() => {
     if (existingUser?.userId) {
@@ -191,17 +194,31 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="invite-name">Display Name</Label>
-            <Input
-              id="invite-name"
-              type="text"
-              placeholder="Jane Doe"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              maxLength={255}
-              autoComplete="off"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="invite-name">First Name</Label>
+              <Input
+                id="invite-name"
+                type="text"
+                placeholder="Jane"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                maxLength={255}
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="invite-lastname">Last Name</Label>
+              <Input
+                id="invite-lastname"
+                type="text"
+                placeholder="Doe"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                maxLength={255}
+                autoComplete="off"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
