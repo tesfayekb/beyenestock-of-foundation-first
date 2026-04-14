@@ -318,7 +318,7 @@ If any field is missing → the decision is **INVALID**.
 
 ---
 
-### DEC-026: Static Permission Model — Permissions Are System-Defined
+### DEC-027: Static Permission Model — Permissions Are System-Defined
 - **Plan Section:** PLAN-RBAC-001
 - **Decision Type:** architecture
 - **Date Approved:** 2026-04-11
