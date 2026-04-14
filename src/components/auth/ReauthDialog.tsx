@@ -2,7 +2,7 @@
  * ReauthDialog — requires the user to verify identity before sensitive actions.
  *
  * Supports two methods:
- * 1. Email OTP (supabase.auth.reauthenticate → verifyOtp)
+ * 1. Email sign-in OTP (supabase.auth.signInWithOtp → verifyOtp)
  * 2. TOTP Authenticator App (if user has enrolled MFA factor)
  *
  * Features:
@@ -41,6 +41,10 @@ interface ReauthDialogProps {
   onVerified: () => void;
 }
 
+function normalizeOtp(value: string, maxLength: number) {
+  return value.replace(/\D/g, '').slice(0, maxLength);
+}
+
 export function ReauthDialog({
   open,
   onOpenChange,
@@ -56,12 +60,11 @@ export function ReauthDialog({
   const [totpFactorId, setTotpFactorId] = useState<string | null>(null);
   const [isTokenError, setIsTokenError] = useState(false);
 
-  // Check if user has TOTP enrolled
   useEffect(() => {
     if (!open) return;
     (async () => {
       const { data } = await supabase.auth.mfa.listFactors();
-      const verified = data?.totp?.filter(f => f.status === 'verified') ?? [];
+      const verified = data?.totp?.filter((factor) => factor.status === 'verified') ?? [];
       setHasTotpFactor(verified.length > 0);
       setTotpFactorId(verified[0]?.id ?? null);
     })();
@@ -75,22 +78,43 @@ export function ReauthDialog({
     setIsTokenError(false);
   };
 
-  const handleOpenChange = (open: boolean) => {
-    if (!open) resetState();
-    onOpenChange(open);
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) resetState();
+    onOpenChange(nextOpen);
+  };
+
+  const getCurrentUserEmail = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.email ?? null;
   };
 
   const handleSendCode = async () => {
     setError(null);
     setIsTokenError(false);
     setStep('sending');
+
     try {
-      const { error: reauthError } = await supabase.auth.reauthenticate();
-      if (reauthError) {
-        setError(reauthError.message);
+      const email = await getCurrentUserEmail();
+      if (!email) {
+        setError('Unable to determine your email address.');
         setStep('idle');
         return;
       }
+
+      const { error: sendError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (sendError) {
+        setError(sendError.message);
+        setStep('idle');
+        return;
+      }
+
       setStep('awaiting_code');
     } catch {
       setError('Failed to send verification code. Please try again.');
@@ -106,22 +130,24 @@ export function ReauthDialog({
   };
 
   const handleVerifyEmail = async () => {
-    if (!otp.trim()) return;
+    const code = otp.trim();
+    if (!code) return;
+
     setError(null);
     setIsTokenError(false);
     setStep('verifying');
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.email) {
+      const email = await getCurrentUserEmail();
+      if (!email) {
         setError('Unable to determine your email address.');
         setStep('awaiting_code');
         return;
       }
 
       const { error: verifyError } = await supabase.auth.verifyOtp({
-        email: user.email,
-        token: otp.trim(),
+        email,
+        token: code,
         type: 'email',
       });
 
@@ -145,13 +171,15 @@ export function ReauthDialog({
   };
 
   const handleVerifyTotp = async () => {
-    if (!otp.trim() || !totpFactorId) return;
+    const code = otp.trim();
+    if (!code || !totpFactorId) return;
+
     setError(null);
+    setIsTokenError(false);
     setStep('verifying');
 
     try {
-      const { data: challenge, error: challengeError } =
-        await supabase.auth.mfa.challenge({ factorId: totpFactorId });
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: totpFactorId });
       if (challengeError) {
         setError(challengeError.message);
         setStep('awaiting_code');
@@ -161,7 +189,7 @@ export function ReauthDialog({
       const { error: verifyError } = await supabase.auth.mfa.verify({
         factorId: totpFactorId,
         challengeId: challenge.id,
-        code: otp.trim(),
+        code,
       });
 
       if (verifyError) {
@@ -221,7 +249,6 @@ export function ReauthDialog({
             </Alert>
           )}
 
-          {/* Method selector — only show if TOTP is available */}
           {hasTotpFactor && (step === 'idle' || step === 'awaiting_code') && (
             <div className="flex gap-2">
               <Button
@@ -245,14 +272,12 @@ export function ReauthDialog({
             </div>
           )}
 
-          {/* Email method — idle state */}
           {method === 'email' && (step === 'idle' || step === 'sending') && (
             <p className="text-sm text-muted-foreground">
-              Click below to receive a one-time code at your registered email address.
+              Click below to receive a one-time verification code at your registered email address.
             </p>
           )}
 
-          {/* Email method — code entry */}
           {method === 'email' && (step === 'awaiting_code' || step === 'verifying') && (
             <div className="space-y-2">
               <Label htmlFor="reauth-otp">Verification Code</Label>
@@ -262,18 +287,17 @@ export function ReauthDialog({
                 inputMode="numeric"
                 placeholder="Enter the code from your email"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                onChange={(e) => setOtp(normalizeOtp(e.target.value, 8))}
                 maxLength={8}
                 autoComplete="one-time-code"
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
-                Check your email for the verification code.
+                Check your email for the latest verification code.
               </p>
             </div>
           )}
 
-          {/* TOTP method — code entry (no send step needed) */}
           {method === 'totp' && (step === 'awaiting_code' || step === 'verifying') && (
             <div className="space-y-2">
               <Label htmlFor="reauth-totp">Authenticator Code</Label>
@@ -283,7 +307,7 @@ export function ReauthDialog({
                 inputMode="numeric"
                 placeholder="Enter 6-digit code from your app"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                onChange={(e) => setOtp(normalizeOtp(e.target.value, 6))}
                 maxLength={6}
                 autoComplete="one-time-code"
                 autoFocus
