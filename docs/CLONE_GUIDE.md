@@ -82,7 +82,7 @@ supabase db push
 After running all SQL, confirm in SQL Editor:
 
 ```sql
--- Should return 5+ roles (superadmin, admin, moderator, user, viewer)
+-- Should return 3 roles (superadmin, admin, user)
 SELECT key, name, is_base, is_immutable FROM public.roles ORDER BY key;
 
 -- Should return 20+ permissions
