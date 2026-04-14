@@ -9,6 +9,7 @@ export interface UserRoleSummary {
 export interface UserListItem {
   id: string;
   display_name: string | null;
+  last_name: string | null;
   avatar_url: string | null;
   email: string | null;
   email_verified: boolean | null;

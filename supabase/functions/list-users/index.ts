@@ -46,7 +46,7 @@ Deno.serve(createHandler(async (req: Request) => {
   // Query profiles — email is now a materialized column (MIG-034)
   let query = supabaseAdmin
     .from('profiles')
-    .select('id, display_name, avatar_url, email, email_verified, status, created_at, updated_at', { count: 'exact' })
+    .select('id, display_name, last_name, avatar_url, email, email_verified, status, created_at, updated_at', { count: 'exact' })
     .order('created_at', { ascending: false })
 
   if (status) {
