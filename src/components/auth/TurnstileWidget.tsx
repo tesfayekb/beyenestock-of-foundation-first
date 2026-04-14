@@ -18,6 +18,9 @@ import {
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '';
 const TURNSTILE_SCRIPT_ID = 'cf-turnstile-script';
 
+/** When true, Turnstile is not configured — skip CAPTCHA silently. */
+export const TURNSTILE_DISABLED = !TURNSTILE_SITE_KEY;
+
 interface TurnstileWidgetProps {
   onVerify: (token: string) => void;
   onExpire?: () => void;
@@ -144,6 +147,8 @@ const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetProps>(
   }, [clearPending, rejectPending]);
 
   const execute = useCallback(async (): Promise<string> => {
+    if (TURNSTILE_DISABLED) return '__turnstile_disabled__';
+
     await renderWidget();
 
     if (tokenRef.current) {
@@ -183,6 +188,7 @@ const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetProps>(
   );
 
   useEffect(() => {
+    if (TURNSTILE_DISABLED) return;
     renderWidget().catch(() => {
       onErrorRef.current?.();
     });
@@ -195,6 +201,8 @@ const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetProps>(
       }
     };
   }, [rejectPending, renderWidget]);
+
+  if (TURNSTILE_DISABLED) return null;
 
   return (
     <div className="space-y-2">
