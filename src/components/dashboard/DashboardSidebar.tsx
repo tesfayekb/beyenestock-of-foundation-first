@@ -203,16 +203,16 @@ export const DashboardSidebar = React.memo(function DashboardSidebar({ sections,
               ) : (
                 <DropdownMenuTrigger asChild>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="default"
-                    className="w-full justify-between text-left font-normal"
+                    className="w-full justify-between text-left font-normal border-sidebar-border bg-sidebar-accent/30 hover:bg-sidebar-accent/60 text-sidebar-foreground"
                     aria-label="Switch dashboard"
                   >
                     {activeDashboard ? (
                       <>
                         <activeDashboard.icon className="h-4 w-4 shrink-0" />
                         <span className="ml-2 flex-1 truncate text-sm">{activeDashboard.label}</span>
-                        <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
+                        <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 opacity-70" />
                       </>
                     ) : (
                       <span className="h-4 w-4 rounded bg-muted animate-pulse" />
