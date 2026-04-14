@@ -31,7 +31,7 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
   const { inviteUser, isInviting } = useInviteUser();
   const { data: rolesData } = useRoles();
 
-  const roles = (rolesData as RoleListItem[] | undefined)?.filter(r => r.key !== 'superadmin') ?? [];
+  const roles = (rolesData as RoleListItem[] | undefined)?.filter(r => r.key !== 'superadmin' && r.key !== 'user') ?? [];
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();

@@ -39,7 +39,7 @@ export function BulkInviteDialog({ open, onOpenChange }: BulkInviteDialogProps) 
   const { bulkInvite, isBulkInviting } = useInviteUser();
   const { data: rolesData } = useRoles();
 
-  const roles = (rolesData as RoleListItem[] | undefined)?.filter(r => r.key !== 'superadmin') ?? [];
+  const roles = (rolesData as RoleListItem[] | undefined)?.filter(r => r.key !== 'superadmin' && r.key !== 'user') ?? [];
 
   const emails = emailsText
     .split(/[\n,;]+/)
