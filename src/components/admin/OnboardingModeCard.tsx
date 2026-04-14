@@ -102,7 +102,7 @@ export function OnboardingModeCard() {
               <Button variant="outline" size="sm" onClick={handleCancel} disabled={isUpdating}>
                 Cancel
               </Button>
-              <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={isUpdating}>
+              <Button size="sm" onClick={() => setReauthOpen(true)} disabled={isUpdating}>
                 Save Changes
               </Button>
             </div>
@@ -110,14 +110,12 @@ export function OnboardingModeCard() {
         </CardContent>
       </Card>
 
-      <ConfirmActionDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title="Update Onboarding Mode"
-        description="This will change how users can access the platform. Are you sure?"
-        confirmLabel="Confirm"
-        onConfirm={handleSave}
-        loading={isUpdating}
+      <ReauthDialog
+        open={reauthOpen}
+        onOpenChange={setReauthOpen}
+        title="Re-authenticate to Update Config"
+        description="Changing onboarding settings is a sensitive action. Please verify your identity."
+        onVerified={handleSave}
       />
     </>
   );
