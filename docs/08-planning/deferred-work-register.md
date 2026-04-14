@@ -355,6 +355,9 @@ At each phase boundary (before advancing to the next phase):
 | DW-038 | Bulk Invite CSV Upload | PLAN-INVITE-001 | `unassigned` (v2) | `deferred (v2)` |
 | DW-039 | Invitation Expiry Cleanup Cron | PLAN-INVITE-001 | `unassigned` (v2) | `deferred (v2)` |
 | DW-040 | Automated Invitation Follow-up Cron | PLAN-INVITE-001 | `unassigned` (v2) | `deferred (v2)` |
+| DW-041 | Cursor-based Pagination (list-users, list-invitations) | Performance review | `unassigned` (v2) | `deferred (v2)` |
+| DW-042 | Trigram Index for ILIKE Search | Performance review | `unassigned` (v2) | `deferred (v2)` |
+| DW-043 | HTTP Cache Headers on Edge Functions | Performance review | `unassigned` (v2) | `deferred (v2)` |
 
 ### DW-011: Distributed Rate Limiting
 
