@@ -16,6 +16,9 @@ Authoritative list of manual actions and deferred items that **must** be complet
 | PP-002 | Configure custom SMTP (Resend) | Supabase Dashboard → Auth → Settings → SMTP. Required for branded auth emails and invitation delivery. | `pending` |
 | PP-006 | Remove `VITE_DEV_MODE=true` from `.env` | Disabling dev mode restores: Turnstile CAPTCHA, reauth dialog, email verification gate, 30-min inactivity timeout, 12-char password minimum. | `pending` |
 | PP-007 | Replace Turnstile test keys with real keys | `.env`: swap `1x00000000000000000000AA` → real site key. Supabase secrets: swap `1x0000000000000000000000000000000AA` → real secret key. | `pending` |
+| PP-008 | Add auth/cron-secret gate to `health-check` | Public endpoint writes to `system_health_snapshots` on every request — abuse vector for disk/cost. Add cron-secret auth or split read-only public probe from write path. | `pending` |
+| PP-009 | Set `ALLOWED_ORIGINS` secret on Supabase | All edge functions fall back to `Access-Control-Allow-Origin: *` without it. Set to production domain(s). | `pending` |
+| PP-010 | Sanitize search input in `list-users` | `query.or()` interpolates search string directly. Escape PostgREST filter metacharacters (`,`, `.`, `(`, `)`) before interpolation. Admin-only, low severity. | `pending` |
 
 ---
 
