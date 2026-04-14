@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { useSystemConfig, type OnboardingConfig } from '@/hooks/useSystemConfig';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
-import { ConfirmActionDialog } from '@/components/dashboard/ConfirmActionDialog';
+import { ReauthDialog } from '@/components/auth/ReauthDialog';
 import { Settings } from 'lucide-react';
 
 export function OnboardingModeCard() {
