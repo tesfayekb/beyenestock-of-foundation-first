@@ -177,8 +177,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       emitSignedIn(data.user.id, 'password');
     }
 
-    // After sign-in, use SDK for authoritative MFA state
-    const status = await getMfaStatusFromSdk();
+    // Derive MFA status from the session JWT — no extra network call
+    const status = deriveMfaStatusFromSession(data.session);
     setState(prev => ({ ...prev, mfaStatus: status }));
     return { error: null, mfaChallengeRequired: status === 'challenge_required' };
   }, []);
