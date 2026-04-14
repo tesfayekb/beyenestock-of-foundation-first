@@ -173,6 +173,7 @@ export default function UserDetailPage() {
             <AdminEditProfileCard
               userId={id!}
               displayName={profile.display_name}
+              lastName={profile.last_name}
               avatarUrl={profile.avatar_url}
               canEdit={canEditProfile}
               isSelf={isSelf}
