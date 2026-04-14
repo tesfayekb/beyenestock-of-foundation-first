@@ -12,7 +12,7 @@
  *
  * Owner: auth module
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { invalidateTokenCache } from '@/lib/api-client';
 import {
@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, ShieldCheck, Mail, Smartphone, RefreshCw } from 'lucide-react';
+import TurnstileWidget, { type TurnstileWidgetHandle } from '@/components/auth/TurnstileWidget';
 
 type ReauthStep = 'idle' | 'sending' | 'awaiting_code' | 'verifying';
 type ReauthMethod = 'email' | 'totp';
