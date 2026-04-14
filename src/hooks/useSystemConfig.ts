@@ -12,14 +12,6 @@ export interface OnboardingConfig {
   invite_enabled: boolean;
 }
 
-interface SystemConfigResponse {
-  data: OnboardingConfig;
-}
-
-interface UpdateConfigResponse {
-  data: { updated: boolean };
-}
-
 const SYSTEM_CONFIG_KEY = ['system-config', 'onboarding'] as const;
 
 export function useSystemConfig() {
@@ -29,15 +21,15 @@ export function useSystemConfig() {
   const query = useQuery({
     queryKey: [...SYSTEM_CONFIG_KEY],
     queryFn: async (): Promise<OnboardingConfig> => {
-      const res = await apiClient.get<SystemConfigResponse>('get-system-config');
-      return res.data;
+      // get-system-config returns { signup_enabled, invite_enabled } directly
+      return apiClient.get<OnboardingConfig>('get-system-config');
     },
     staleTime: 60_000,
   });
 
   const mutation = useMutation({
     mutationFn: async (config: OnboardingConfig) => {
-      return apiClient.patch<UpdateConfigResponse>('update-system-config', config);
+      return apiClient.patch('update-system-config', config);
     },
     onSuccess: (_data, variables) => {
       queryClient.setQueryData([...SYSTEM_CONFIG_KEY], variables);
