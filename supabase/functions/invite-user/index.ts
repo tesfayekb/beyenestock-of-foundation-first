@@ -104,17 +104,9 @@ Deno.serve(createHandler(async (req: Request) => {
     }
   }
 
-  // Check for existing auth user
-  const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({
-    page: 1,
-    perPage: 1,
-  })
-
-  const existingUser = existingUsers?.users?.find(
-    u => u.email?.toLowerCase() === email.toLowerCase()
-  )
-
-  if (existingUser) {
+  // Check for existing auth user (direct email lookup — no pagination issues)
+  const { data: existingUserData } = await supabaseAdmin.auth.admin.getUserByEmail(email.toLowerCase())
+  if (existingUserData?.user) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(409, 'A user with this email already exists. Use role assignment instead.', {
       code: 'USER_ALREADY_EXISTS',
