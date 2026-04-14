@@ -1368,6 +1368,142 @@ Key event chains showing upstream triggers and downstream effects:
 | **Idempotency** | event_id |
 | **Lifecycle** | active |
 
+### User Onboarding Events (PLAN-INVITE-001)
+
+#### `user.invited` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | audit |
+| **Severity** | MEDIUM |
+| **Owner module** | user-onboarding |
+| **Consumers** | audit-logging |
+| **Description** | Single invitation sent to a new user |
+| **Payload schema** | `{ email: string, role_id: uuid | null, display_name: string | null, invitation_id: uuid }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Log warning |
+| **Observability** | Logged, traced (correlation_id) |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 3 |
+
+#### `user.bulk_invited` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | audit |
+| **Severity** | MEDIUM |
+| **Owner module** | user-onboarding |
+| **Consumers** | audit-logging |
+| **Description** | Bulk invitation batch processed |
+| **Payload schema** | `{ total_requested: number, succeeded_count: number, failed_count: number, skipped_existing_count: number, role_id: uuid | null }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Log warning |
+| **Observability** | Logged, traced (correlation_id) |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 3 |
+
+#### `user.invitation_accepted` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | audit |
+| **Severity** | MEDIUM |
+| **Owner module** | user-onboarding |
+| **Consumers** | audit-logging |
+| **Description** | Invitation consumed during user signup (emitted by `accept_invitation_on_confirm` trigger) |
+| **Payload schema** | `{ email: string, invited_role_id: uuid | null }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | N/A (trigger-emitted) |
+| **Failure handling** | Trigger logs error |
+| **Observability** | Logged in audit_logs table |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 1 (trigger) |
+
+#### `user.invitation_revoked` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | audit |
+| **Severity** | MEDIUM |
+| **Owner module** | user-onboarding |
+| **Consumers** | audit-logging |
+| **Description** | Pending invitation revoked by admin |
+| **Payload schema** | `{ invitation_id: uuid, email: string }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Log warning |
+| **Observability** | Logged, traced (correlation_id) |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 3 |
+
+#### `user.invitation_resent` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | audit |
+| **Severity** | LOW |
+| **Owner module** | user-onboarding |
+| **Consumers** | audit-logging |
+| **Description** | Invitation resent with new token and TTL |
+| **Payload schema** | `{ invitation_id: uuid, email: string, new_expires_at: datetime }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Log warning |
+| **Observability** | Logged, traced (correlation_id) |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 3 |
+
+#### `user.signup_nudge_sent` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | audit |
+| **Severity** | LOW |
+| **Owner module** | user-onboarding |
+| **Consumers** | audit-logging |
+| **Description** | Signup reminder sent when invite system is disabled |
+| **Payload schema** | `{ email: string, user_id: uuid }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | best-effort |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Log warning |
+| **Observability** | Logged, traced (correlation_id) |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 3 |
+
+#### `system.config_changed` — v1
+
+| Field | Value |
+|-------|-------|
+| **Classification** | audit |
+| **Severity** | HIGH |
+| **Owner module** | user-onboarding |
+| **Consumers** | audit-logging, admin-panel |
+| **Description** | System configuration changed (onboarding mode) |
+| **Payload schema** | `{ key: string, before: object, after: object }` |
+| **Delivery guarantee** | at-least-once |
+| **Ordering** | strict |
+| **Idempotency** | event_id |
+| **Retry policy** | 3× exponential backoff |
+| **Failure handling** | Alert on failure |
+| **Observability** | Logged, traced (correlation_id) |
+| **Action tracker** | Yes — config change requiring audit trail |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 2 |
+
 ---
 
 ## Dependencies

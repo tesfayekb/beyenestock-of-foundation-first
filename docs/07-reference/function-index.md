@@ -1277,6 +1277,152 @@ When changing any indexed function:
 | **Lifecycle** | active |
 | **Added by** | Stage 6A (DW-008) |
 
+### User Onboarding Functions (PLAN-INVITE-001)
+
+### `auth-hook-pre-signup` — Edge Function (Auth Hook)
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/auth-hook-pre-signup/index.ts` |
+| **Classification** | security-critical |
+| **Owner module** | user-onboarding |
+| **Consumers** | Supabase Auth (server-to-server) |
+| **Signature** | `POST` (hook protocol: `{ event, user }`) |
+| **Description** | Pre-signup hook. If `signup_enabled = false` → reject. If true → continue. Fails open on missing config. Not called for `inviteUserByEmail()`. |
+| **Side effects** | DB read (system_config) |
+| **Error behavior** | Fail-open — returns `continue` on error to prevent lockout |
+| **Security** | No JWT — called by Supabase Auth server. No CORS. |
+| **Lifecycle** | active |
+| **Added by** | PLAN-INVITE-001 Phase 2 |
+
+### `get-system-config` — Edge Function
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/get-system-config/index.ts` |
+| **Classification** | api-standard |
+| **Owner module** | user-onboarding |
+| **Consumers** | SignUp page, AdminOnboardingPage |
+| **Signature** | `GET` (no body, no auth) |
+| **Description** | Returns public onboarding mode config. No sensitive data. |
+| **Side effects** | DB read (system_config) |
+| **Error behavior** | Returns safe defaults on missing config |
+| **Security** | Public — no auth required |
+| **Lifecycle** | active |
+| **Added by** | PLAN-INVITE-001 Phase 2 |
+
+### `update-system-config` — Edge Function
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/update-system-config/index.ts` |
+| **Classification** | security-critical |
+| **Owner module** | user-onboarding |
+| **Consumers** | AdminOnboardingPage |
+| **Signature** | `PATCH { key, value }` |
+| **Description** | Updates system config. Validates at least one mode is true. Emits `system.config_changed` audit event. |
+| **Side effects** | DB write (system_config), audit event |
+| **Error behavior** | Fail-fast — 400 on invalid input |
+| **Security** | Bearer JWT + `admin.config` (SUPERADMIN_ONLY) + `requireRecentAuth(30min)`. Strict rate limit. |
+| **Lifecycle** | active |
+| **Added by** | PLAN-INVITE-001 Phase 2 |
+
+### `invite-user` — Edge Function
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/invite-user/index.ts` |
+| **Classification** | security-critical |
+| **Owner module** | user-onboarding |
+| **Consumers** | AdminOnboardingPage (InviteUserDialog) |
+| **Signature** | `POST { email, role_id?, display_name?, last_name? }` |
+| **Description** | Sends single invitation. Generates 32-byte token, SHA-256 hashes, inserts invitation, calls `inviteUserByEmail()`. Returns 409 if user exists. |
+| **Side effects** | DB write (invitations), Supabase Auth invite email, audit event `user.invited` |
+| **Error behavior** | Rollback invitation row on email send failure |
+| **Security** | Bearer JWT + `users.invite` + `requireRecentAuth(30min)`. Strict rate limit. |
+| **Lifecycle** | active |
+| **Added by** | PLAN-INVITE-001 Phase 3 |
+
+### `invite-users-bulk` — Edge Function
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/invite-users-bulk/index.ts` |
+| **Classification** | security-critical |
+| **Owner module** | user-onboarding |
+| **Consumers** | AdminOnboardingPage (BulkInviteDialog) |
+| **Signature** | `POST { entries: [{ email, display_name?, last_name? }], role_id? }` (max 50) |
+| **Description** | Sends up to 50 invitations. Sequential processing. Returns `{ succeeded, failed, skipped_existing }`. |
+| **Side effects** | DB writes (invitations), Supabase Auth invite emails, audit event `user.bulk_invited` |
+| **Error behavior** | Per-entry error isolation — one failure doesn't block others |
+| **Security** | Bearer JWT + `users.invite` + `requireRecentAuth(30min)`. Strict rate limit. |
+| **Lifecycle** | active |
+| **Added by** | PLAN-INVITE-001 Phase 3 |
+
+### `list-invitations` — Edge Function
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/list-invitations/index.ts` |
+| **Classification** | data-access |
+| **Owner module** | user-onboarding |
+| **Consumers** | AdminOnboardingPage (InvitationsTable) |
+| **Signature** | `GET ?status=&page=&page_size=` |
+| **Description** | Lists invitations with pagination and status filter. Resolves `invited_by` → display name, `role_id` → role name. Computes virtual expired status. |
+| **Side effects** | DB read (invitations, profiles, roles) |
+| **Error behavior** | Fail-fast |
+| **Security** | Bearer JWT + `users.invite.manage`. Standard rate limit. |
+| **Lifecycle** | active |
+| **Added by** | PLAN-INVITE-001 Phase 3 |
+
+### `revoke-invitation` — Edge Function
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/revoke-invitation/index.ts` |
+| **Classification** | security-critical |
+| **Owner module** | user-onboarding |
+| **Consumers** | AdminOnboardingPage (InvitationsTable) |
+| **Signature** | `POST { invitation_id }` |
+| **Description** | Marks invitation as revoked. |
+| **Side effects** | DB write (invitations), audit event `user.invitation_revoked` |
+| **Error behavior** | Fail-fast |
+| **Security** | Bearer JWT + `users.invite.manage` + `requireRecentAuth(30min)`. Strict rate limit. |
+| **Lifecycle** | active |
+| **Added by** | PLAN-INVITE-001 Phase 3 |
+
+### `resend-invitation` — Edge Function
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/resend-invitation/index.ts` |
+| **Classification** | security-critical |
+| **Owner module** | user-onboarding |
+| **Consumers** | AdminOnboardingPage (InvitationsTable) |
+| **Signature** | `POST { invitation_id }` |
+| **Description** | Generates new token, resets TTL, resends invite email. Rate limited 3/email/24h via audit log query. |
+| **Side effects** | DB write (invitations), Supabase Auth invite email, audit event `user.invitation_resent` |
+| **Error behavior** | Fail-fast |
+| **Security** | Bearer JWT + `users.invite.manage` + `requireRecentAuth(30min)`. Strict rate limit. |
+| **Lifecycle** | active |
+| **Added by** | PLAN-INVITE-001 Phase 3 |
+
+### `send-signup-nudge` — Edge Function
+
+| Field | Value |
+|-------|-------|
+| **Location** | `supabase/functions/send-signup-nudge/index.ts` |
+| **Classification** | security-critical |
+| **Owner module** | user-onboarding |
+| **Consumers** | AdminOnboardingPage |
+| **Signature** | `POST { email }` |
+| **Description** | Sends signup reminder when invite system is disabled. Rate limited 3/email/24h. Checks `signup_enabled` first. |
+| **Side effects** | Supabase Auth invite email (with `signup_nudge: true` metadata), audit event `user.signup_nudge_sent` |
+| **Error behavior** | Fail-fast |
+| **Security** | Bearer JWT + `users.invite.manage` + `requireRecentAuth(30min)`. Strict rate limit. |
+| **Lifecycle** | active |
+| **Added by** | PLAN-INVITE-001 Phase 3 |
+
 ---
 
 ## Dependencies

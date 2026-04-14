@@ -911,6 +911,54 @@ The following must create Action Tracker entries:
 | Permission semantics changed | Entry with consumer impact review |
 | Undocumented permission discovered | Entry with investigation + remediation |
 
+### User Onboarding Permissions (PLAN-INVITE-001)
+
+#### `users.invite`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-users-invite` (actual UUID assigned at DB creation) |
+| **Module** | user-onboarding |
+| **Description** | Allows sending individual and bulk invitations to new users. Does not include invitation lifecycle management (revoke, resend). |
+| **Classification** | admin-critical |
+| **Scope** | system-wide |
+| **Default roles** | admin, superadmin |
+| **Used by** | admin-panel (invite user dialog, bulk invite), `invite-user` and `invite-users-bulk` edge functions |
+| **Blast radius** | large |
+| **Approval required** | Yes — Lead |
+| **Audit required** | Yes |
+| **Reauth required** | Yes (30-minute window) |
+| **Related routes** | `/admin/onboarding`, `POST /invite-user`, `POST /invite-users-bulk` |
+| **Related functions** | `checkPermission()` |
+| **Related events** | `user.invited`, `user.bulk_invited` |
+| **Related tests** | Invitation send allow/deny suite, RW-013 |
+| **Depends on** | `users.view_all`, `admin.access` |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 1 |
+
+#### `users.invite.manage`
+
+| Field | Value |
+|-------|-------|
+| **Permission UUID** | `perm-uuid-users-invite-manage` (actual UUID assigned at DB creation) |
+| **Module** | user-onboarding |
+| **Description** | Allows full invitation lifecycle management: list, revoke, resend invitations, and send signup nudges. Requires `users.invite` as a dependency. |
+| **Classification** | admin-critical |
+| **Scope** | system-wide |
+| **Default roles** | admin, superadmin |
+| **Used by** | admin-panel (invitations table, revoke/resend actions), `list-invitations`, `revoke-invitation`, `resend-invitation`, `send-signup-nudge` edge functions |
+| **Blast radius** | large |
+| **Approval required** | Yes — Lead |
+| **Audit required** | Yes |
+| **Reauth required** | Yes (30-minute window) |
+| **Related routes** | `/admin/onboarding`, `GET /list-invitations`, `POST /revoke-invitation`, `POST /resend-invitation`, `POST /send-signup-nudge` |
+| **Related functions** | `checkPermission()` |
+| **Related events** | `user.invitation_revoked`, `user.invitation_resent`, `user.signup_nudge_sent` |
+| **Related tests** | Invitation management allow/deny suite, RW-013 |
+| **Depends on** | `users.invite`, `users.view_all`, `admin.access` |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 1 |
+
 ---
 
 ## Dependencies

@@ -1432,6 +1432,163 @@ Routes classified as `destructive` or `privileged` with system-wide scope:
 | **Lifecycle** | active |
 | **Added By** | Stage 6A (DW-008) |
 
+### User Onboarding Routes (PLAN-INVITE-001)
+
+#### `/admin/onboarding` — Invitation Management
+
+| Field | Value |
+|-------|-------|
+| **Page** | Admin Onboarding / Invitations |
+| **Module** | admin-panel / user-onboarding |
+| **Classification** | privileged |
+| **Auth required** | Yes |
+| **Permission required** | `admin.access` + `users.invite` |
+| **Scope** | system-wide |
+| **Panel** | admin-panel |
+| **Related functions** | `useSystemConfig()`, `useInvitations()`, `useInviteUser()` |
+| **Related events** | `user.invited`, `user.bulk_invited`, `user.invitation_revoked`, `user.invitation_resent`, `system.config_changed` |
+| **Related tests** | Invitation management allow/deny tests |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 4 |
+
+### User Onboarding API Routes (PLAN-INVITE-001)
+
+### GET /get-system-config — Public Onboarding Mode
+
+| Field | Value |
+|-------|-------|
+| **Path** | `GET /get-system-config` |
+| **Classification** | public |
+| **Owner Module** | user-onboarding |
+| **Auth** | None (public) |
+| **Permission** | None |
+| **Rate Limit** | standard |
+| **Request Body** | None |
+| **Response** | `{ signup_enabled: boolean, invite_enabled: boolean, followup_days: number, max_followups: number }` |
+| **Audit** | No |
+| **Idempotent** | Yes |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 2 |
+
+### PATCH /update-system-config — Update Onboarding Mode
+
+| Field | Value |
+|-------|-------|
+| **Path** | `PATCH /update-system-config` |
+| **Classification** | privileged, destructive |
+| **Owner Module** | user-onboarding |
+| **Auth** | Bearer JWT + reauth (30min) |
+| **Permission** | `admin.config` (SUPERADMIN_ONLY) |
+| **Rate Limit** | strict |
+| **Request Body** | `{ key: "onboarding_mode", value: { signup_enabled?: boolean, invite_enabled?: boolean, followup_days?: number, max_followups?: number } }` |
+| **Response** | `{ key, value, updated_by, updated_at }` |
+| **Audit** | Yes — `system.config_changed` |
+| **Idempotent** | Yes |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 2 |
+
+### POST /invite-user — Send Single Invitation
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /invite-user` |
+| **Classification** | privileged |
+| **Owner Module** | user-onboarding |
+| **Auth** | Bearer JWT + reauth (30min) |
+| **Permission** | `users.invite` |
+| **Rate Limit** | strict |
+| **Request Body** | `{ email: string, role_id?: uuid, display_name?: string, last_name?: string }` |
+| **Response** | `{ invitation_id: uuid, email: string, status: "pending" }` |
+| **Audit** | Yes — `user.invited` |
+| **Idempotent** | No |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 3 |
+
+### POST /invite-users-bulk — Send Bulk Invitations
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /invite-users-bulk` |
+| **Classification** | privileged |
+| **Owner Module** | user-onboarding |
+| **Auth** | Bearer JWT + reauth (30min) |
+| **Permission** | `users.invite` |
+| **Rate Limit** | strict |
+| **Request Body** | `{ entries: [{ email, display_name?, last_name? }], role_id?: uuid }` (max 50) |
+| **Response** | `{ succeeded: string[], failed: [{ email, reason }], skipped_existing: string[] }` |
+| **Audit** | Yes — `user.bulk_invited` |
+| **Idempotent** | No |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 3 |
+
+### GET /list-invitations — List Invitations
+
+| Field | Value |
+|-------|-------|
+| **Path** | `GET /list-invitations` |
+| **Classification** | privileged |
+| **Owner Module** | user-onboarding |
+| **Auth** | Bearer JWT |
+| **Permission** | `users.invite.manage` |
+| **Rate Limit** | standard |
+| **Request Body** | Query params: `status`, `page`, `page_size` |
+| **Response** | `{ invitations: [...], total, page, page_size }` |
+| **Audit** | No |
+| **Idempotent** | Yes |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 3 |
+
+### POST /revoke-invitation — Revoke Invitation
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /revoke-invitation` |
+| **Classification** | privileged |
+| **Owner Module** | user-onboarding |
+| **Auth** | Bearer JWT + reauth (30min) |
+| **Permission** | `users.invite.manage` |
+| **Rate Limit** | strict |
+| **Request Body** | `{ invitation_id: uuid }` |
+| **Response** | `{ invitation_id, status: "revoked" }` |
+| **Audit** | Yes — `user.invitation_revoked` |
+| **Idempotent** | Yes |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 3 |
+
+### POST /resend-invitation — Resend Invitation
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /resend-invitation` |
+| **Classification** | privileged |
+| **Owner Module** | user-onboarding |
+| **Auth** | Bearer JWT + reauth (30min) |
+| **Permission** | `users.invite.manage` |
+| **Rate Limit** | strict |
+| **Request Body** | `{ invitation_id: uuid }` |
+| **Response** | `{ invitation_id, new_expires_at }` |
+| **Audit** | Yes — `user.invitation_resent` |
+| **Idempotent** | No |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 3 |
+
+### POST /send-signup-nudge — Send Signup Reminder
+
+| Field | Value |
+|-------|-------|
+| **Path** | `POST /send-signup-nudge` |
+| **Classification** | privileged |
+| **Owner Module** | user-onboarding |
+| **Auth** | Bearer JWT + reauth (30min) |
+| **Permission** | `users.invite.manage` |
+| **Rate Limit** | strict |
+| **Request Body** | `{ email: string }` |
+| **Response** | `{ email, status: "nudge_sent" }` |
+| **Audit** | Yes — `user.signup_nudge_sent` |
+| **Idempotent** | No |
+| **Lifecycle** | active |
+| **Added By** | PLAN-INVITE-001 Phase 3 |
+
 ---
 
 ## Related Documents

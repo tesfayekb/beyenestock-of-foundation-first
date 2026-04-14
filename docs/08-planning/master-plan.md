@@ -209,7 +209,7 @@ Implement role-based access control.
 ---
 
 ### PLAN-INVITE-001: User Onboarding & Invitations
-**Status:** `approved`
+**Status:** `implemented`
 **Risk Level:** MEDIUM
 **Module Doc:** [user-onboarding.md](../04-modules/user-onboarding.md) *(created in Phase 6)*
 
