@@ -1075,6 +1075,75 @@ At each phase boundary (before advancing to the next phase):
 
 ---
 
+### DW-041: Cursor-based Pagination (list-users, list-invitations)
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-041 |
+| **Date Deferred** | 2026-04-14 |
+| **Source Plan Section** | Performance review findings |
+| **Source Phase** | Post-Phase 6 |
+| **Title** | Replace offset+exact-count pagination with cursor-based pagination |
+| **Reason Deferred** | Current `count: 'exact'` requires full table scan on every request. At current scale (<1K users) this is negligible. Becomes expensive at 10K+ rows. |
+| **Blocking Dependencies** | None — pure optimization |
+| **Impact on Source Phase** | None — current pagination is functional |
+| **Future Owner Phase** | `unassigned` (v2) |
+| **Future Owner Module** | PLAN-API-001 |
+| **Required Plan Realignment** | Affected endpoints: `list-users`, `list-invitations`. Client hooks (`useUsers`, `useInvitations`) must switch to cursor-based params. UI pagination components must support cursor model. |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Cursor pagination returns correct results; no full table scan in EXPLAIN; backward compatibility or migration path for existing UI |
+| **Status** | `deferred (v2)` |
+| **Trigger** | When user table exceeds ~1,000 rows or page load latency exceeds 200ms |
+
+---
+
+### DW-042: Trigram Index for ILIKE Search
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-042 |
+| **Date Deferred** | 2026-04-14 |
+| **Source Plan Section** | Performance review findings |
+| **Source Phase** | Post-Phase 6 |
+| **Title** | Add pg_trgm trigram index on profiles.display_name and profiles.email for ILIKE search |
+| **Reason Deferred** | `list-users` search uses `display_name.ilike.%search%` — leading wildcard prevents B-tree index usage. A GIN trigram index would allow indexed leading-wildcard search. At current scale the sequential scan is fast enough. |
+| **Blocking Dependencies** | `CREATE EXTENSION IF NOT EXISTS pg_trgm` must be enabled in Supabase project |
+| **Impact on Source Phase** | None — search works correctly, just not index-optimized |
+| **Future Owner Phase** | `unassigned` (v2) |
+| **Future Owner Module** | PLAN-API-001 |
+| **Required Plan Realignment** | Migration: enable pg_trgm extension, create GIN index on `profiles(display_name gin_trgm_ops, email gin_trgm_ops)` |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | EXPLAIN shows index scan for ILIKE queries; search latency improvement measurable at 1K+ rows |
+| **Status** | `deferred (v2)` |
+| **Trigger** | When admin search feels slow or user table exceeds ~5,000 rows |
+
+---
+
+### DW-043: HTTP Cache Headers on Edge Functions
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-043 |
+| **Date Deferred** | 2026-04-14 |
+| **Source Plan Section** | Performance review findings |
+| **Source Phase** | Post-Phase 6 |
+| **Title** | Add Cache-Control headers to stable read endpoints |
+| **Reason Deferred** | No edge function returns HTTP cache headers. Client-side React Query caching provides adequate deduplication at current scale. Adding `Cache-Control: private, max-age=30` to stable reads (list-roles, list-permissions, health-check) would reduce redundant edge function invocations. |
+| **Blocking Dependencies** | None — pure optimization |
+| **Impact on Source Phase** | None — React Query handles client-side caching |
+| **Future Owner Phase** | `unassigned` (v2) |
+| **Future Owner Module** | PLAN-API-001 |
+| **Required Plan Realignment** | Add `Cache-Control` header to `apiSuccess()` responses for read endpoints. Must not cache authenticated user-specific data without `private` directive. |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Read endpoints return appropriate Cache-Control headers; no caching of user-specific mutable data; CDN respects directives |
+| **Status** | `deferred (v2)` |
+| **Trigger** | When edge function invocation costs or latency warrant reduction |
+
+---
+
 ## Used By / Affects
 
 - Phase gate closure decisions
