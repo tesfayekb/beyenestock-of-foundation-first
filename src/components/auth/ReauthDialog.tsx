@@ -288,9 +288,17 @@ export function ReauthDialog({
           )}
 
           {method === 'email' && (step === 'idle' || step === 'sending') && (
-            <p className="text-sm text-muted-foreground">
-              Click below to receive a one-time verification code at your registered email address.
-            </p>
+            <>
+              <p className="text-sm text-muted-foreground">
+                Click below to receive a one-time verification code at your registered email address.
+              </p>
+              <TurnstileWidget
+                ref={turnstileRef}
+                onVerify={() => {}}
+                onError={() => setError('Captcha verification failed. Please try again.')}
+                onExpire={() => turnstileRef.current?.reset()}
+              />
+            </>
           )}
 
           {method === 'email' && (step === 'awaiting_code' || step === 'verifying') && (
