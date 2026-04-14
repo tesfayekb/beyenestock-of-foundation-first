@@ -61,35 +61,35 @@ export function InvitationsTable() {
       {
         key: 'email',
         header: 'Email',
-        render: (row) => (
+        cell: (row) => (
           <span className="font-medium text-sm">{row.email}</span>
         ),
       },
       {
         key: 'status',
         header: 'Status',
-        render: (row) => (
+        cell: (row) => (
           <InvitationStatusBadge status={row.status} expiresAt={row.expires_at} />
         ),
       },
       {
         key: 'role',
         header: 'Role',
-        render: (row) => (
+        cell: (row) => (
           <span className="text-sm text-muted-foreground">{row.role_name ?? 'Default'}</span>
         ),
       },
       {
         key: 'invited_by',
         header: 'Invited By',
-        render: (row) => (
+        cell: (row) => (
           <span className="text-sm text-muted-foreground">{row.invited_by_name ?? 'Unknown'}</span>
         ),
       },
       {
         key: 'created_at',
         header: 'Sent',
-        render: (row) => (
+        cell: (row) => (
           <span className="text-sm text-muted-foreground">
             {format(new Date(row.created_at), 'MMM d, yyyy')}
           </span>
@@ -98,7 +98,7 @@ export function InvitationsTable() {
       {
         key: 'expires_at',
         header: 'Expires',
-        render: (row) => (
+        cell: (row) => (
           <span className="text-sm text-muted-foreground">
             {format(new Date(row.expires_at), 'MMM d, yyyy HH:mm')}
           </span>
@@ -110,7 +110,7 @@ export function InvitationsTable() {
       cols.push({
         key: 'actions',
         header: '',
-        render: (row) => {
+        cell: (row) => {
           const isPending = row.status === 'pending' && new Date(row.expires_at) >= new Date();
           const isExpiredPending = row.status === 'pending' && new Date(row.expires_at) < new Date();
 
@@ -147,7 +147,7 @@ export function InvitationsTable() {
     return cols;
   }, [canManage]);
 
-  if (isLoading) return <LoadingSkeleton lines={8} />;
+  if (isLoading) return <LoadingSkeleton rows={8} />;
   if (error) return <ErrorState message="Failed to load invitations" onRetry={refetch} />;
 
   return (
@@ -172,8 +172,8 @@ export function InvitationsTable() {
         <DataTable
           columns={columns}
           data={invitations}
-          totalItems={total}
-          currentPage={page}
+          total={total}
+          page={page}
           pageSize={PAGE_SIZE}
           onPageChange={setPage}
         />
@@ -191,7 +191,7 @@ export function InvitationsTable() {
         confirmLabel={confirmAction?.type === 'revoke' ? 'Revoke' : 'Resend'}
         onConfirm={handleConfirmAction}
         loading={isRevoking || isResending}
-        variant={confirmAction?.type === 'revoke' ? 'destructive' : 'default'}
+        destructive={confirmAction?.type === 'revoke'}
       />
     </div>
   );

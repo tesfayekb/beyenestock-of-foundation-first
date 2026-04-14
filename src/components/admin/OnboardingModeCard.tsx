@@ -47,7 +47,7 @@ export function OnboardingModeCard() {
     setDraft(null);
   }, []);
 
-  if (isLoading) return <LoadingSkeleton lines={4} />;
+  if (isLoading) return <LoadingSkeleton rows={4} />;
   if (error || !config) return <ErrorState message="Failed to load onboarding config" onRetry={() => window.location.reload()} />;
 
   return (
