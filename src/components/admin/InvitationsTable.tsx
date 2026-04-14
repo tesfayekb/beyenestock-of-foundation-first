@@ -30,8 +30,8 @@ export function InvitationsTable() {
 
   const params = useMemo(() => ({
     status: statusFilter,
-    limit: PAGE_SIZE,
-    offset: (page - 1) * PAGE_SIZE,
+    page,
+    perPage: PAGE_SIZE,
   }), [statusFilter, page]);
 
   const {
