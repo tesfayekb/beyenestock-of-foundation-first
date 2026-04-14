@@ -37,16 +37,21 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
     e.preventDefault();
     if (!email) return;
 
-    await inviteUser({
-      email: email.trim().toLowerCase(),
-      role_id: roleId || undefined,
-      display_name: displayName.trim() || undefined,
-    });
+    try {
+      await inviteUser({
+        email: email.trim().toLowerCase(),
+        role_id: roleId || undefined,
+        display_name: displayName.trim() || undefined,
+      });
 
-    setEmail('');
-    setDisplayName('');
-    setRoleId('');
-    onOpenChange(false);
+      setEmail('');
+      setDisplayName('');
+      setRoleId('');
+      onOpenChange(false);
+    } catch {
+      // Error is already handled by useInviteUser's onError (toast).
+      // Catch here to prevent unhandled rejection → ErrorBoundary.
+    }
   }, [email, displayName, roleId, inviteUser, onOpenChange]);
 
   return (
