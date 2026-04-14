@@ -66,7 +66,7 @@ export default function SignUp() {
     }
   }, [email, password, displayName, lastName, getTurnstileToken, signUp, toast]);
 
-  const handleOAuthSignIn = useCallback(async (provider: 'google' | 'apple') => {
+  const handleOAuthSignIn = useCallback(async (provider: 'google') => {
     setOauthLoading(provider);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,

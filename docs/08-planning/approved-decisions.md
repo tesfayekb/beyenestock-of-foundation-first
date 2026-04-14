@@ -307,7 +307,7 @@ If any field is missing → the decision is **INVALID**.
 
 ---
 
-### DEC-025: Audit Export Format — CSV v1
+### DEC-026: Audit Export Format — CSV v1
 - **Plan Section:** PLAN-AUDIT-001
 - **Decision Type:** feature
 - **Date Approved:** 2026-04-10
