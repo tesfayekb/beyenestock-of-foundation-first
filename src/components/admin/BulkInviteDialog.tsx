@@ -116,17 +116,33 @@ export function BulkInviteDialog({ open, onOpenChange }: BulkInviteDialogProps) 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="bulk-emails">Email Addresses *</Label>
-              <Textarea
-                id="bulk-emails"
-                placeholder="user1@example.com&#10;user2@example.com&#10;user3@example.com"
-                value={emailsText}
-                onChange={(e) => setEmailsText(e.target.value)}
-                rows={6}
-                className="font-mono text-sm"
-              />
+              <p className="text-xs text-muted-foreground">
+                Enter one email per line (up to 50).
+              </p>
+              <div className="relative rounded-md border border-input bg-background">
+                <div className="flex">
+                  {/* Line numbers */}
+                  <div
+                    className="select-none border-r border-border bg-muted/50 px-2 py-2 text-right font-mono text-xs text-muted-foreground leading-[1.625rem]"
+                    aria-hidden="true"
+                  >
+                    {(emailsText || ' ').split('\n').map((_, i) => (
+                      <div key={i}>{i + 1}</div>
+                    ))}
+                  </div>
+                  <Textarea
+                    id="bulk-emails"
+                    placeholder={"user1@example.com\nuser2@example.com\nuser3@example.com"}
+                    value={emailsText}
+                    onChange={(e) => setEmailsText(e.target.value)}
+                    rows={8}
+                    className="border-0 font-mono text-sm leading-[1.625rem] resize-none focus-visible:ring-0 focus-visible:ring-offset-0 rounded-l-none"
+                  />
+                </div>
+              </div>
               <p className="text-xs text-muted-foreground">
                 {emails.length} valid email{emails.length !== 1 ? 's' : ''} detected
-                {emails.length > 50 && ' (only first 50 will be sent)'}
+                {emails.length > 50 && ' — only first 50 will be sent'}
               </p>
             </div>
             <div className="space-y-2">
