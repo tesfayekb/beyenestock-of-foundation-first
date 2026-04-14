@@ -217,6 +217,27 @@ Each watchlist item must include:
 | **Last Verified** | 2026-04-12 (all 3 copies confirmed identical — 23 entries each) |
 | **Status** | Active |
 
+### RW-011: Empty CAPTCHA Payload Breaks Password Auth
+
+| Field | Value |
+|-------|-------|
+| **Area** | Auth / CAPTCHA |
+| **Risk Description** | Password auth forwards an empty or placeholder CAPTCHA payload to Supabase Auth, causing `captcha verification process failed` even when CAPTCHA is disabled or bypassed in development |
+| **Regression Class** | Functional / Security |
+| **Priority** | High |
+| **Affected Modules** | auth, user-panel, admin-panel |
+| **Trigger Conditions** | Any change to sign-in/sign-up auth payload shaping, Turnstile integration, dev-mode bypass logic, or CAPTCHA configuration handling |
+| **Detection** | Password sign-in runtime verification, network payload inspection, auth error monitoring |
+| **Required Checks** | 1) Password sign-in request omits `gotrue_meta_security` when no real CAPTCHA token exists. 2) Real CAPTCHA tokens are still forwarded when present. 3) Password sign-in succeeds with CAPTCHA disabled in Supabase. |
+| **Verification Type** | Runtime + manual |
+| **Related Tests** | `e2e/sign-in-flow.spec.ts` |
+| **Related Risk** | — |
+| **Recurrence Count** | 1 |
+| **Owner** | Project Lead |
+| **Added Date** | 2026-04-14 |
+| **Last Verified** | — |
+| **Status** | Active |
+
 ---
 
 ## Pre-Change Verification Workflow
