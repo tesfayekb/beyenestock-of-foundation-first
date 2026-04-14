@@ -186,8 +186,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     const userId = state.user?.id;
     queryClient.clear();
-    // GAP 5: Global session termination — revokes all refresh tokens across all devices
-    await supabase.auth.signOut({ scope: 'global' });
+    // Local sign-out only — clears this browser's session without a server round-trip.
+    // "Sign out everywhere" (global revocation) is handled by SecurityPage → revoke-sessions edge function.
+    await supabase.auth.signOut({ scope: 'local' });
     if (userId) {
       emitSignedOut(userId);
     }
