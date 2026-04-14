@@ -64,28 +64,24 @@ export function BulkInviteDialog({ open, onOpenChange }: BulkInviteDialogProps) 
 
   const roles = (rolesData as RoleListItem[] | undefined)?.filter(r => r.key !== 'superadmin' && r.key !== 'user') ?? [];
 
-  const emails = emailsText
-    .split(/[\n,;]+/)
-    .map(e => e.trim().toLowerCase())
-    .filter(e => e && e.includes('@'));
+  const entries = useMemo(() => parseEntries(emailsText), [emailsText]);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (emails.length === 0) return;
+    if (entries.length === 0) return;
 
     try {
       const res = await bulkInvite({
-        emails: emails.slice(0, 50),
+        entries: entries.slice(0, 50),
         role_id: roleId || undefined,
       });
 
-      // The API returns the result directly (apiClient unwraps the response)
       const data = res as unknown as BulkResult;
       setResult(data);
     } catch {
       // Error handled by useInviteUser's onError (toast).
     }
-  }, [emails, roleId, bulkInvite]);
+  }, [entries, roleId, bulkInvite]);
 
   const handleClose = useCallback(() => {
     setEmailsText('');
@@ -100,7 +96,7 @@ export function BulkInviteDialog({ open, onOpenChange }: BulkInviteDialogProps) 
         <DialogHeader>
           <DialogTitle>Bulk Invite</DialogTitle>
           <DialogDescription>
-            Enter up to 50 email addresses, one per line. Each will receive an invitation email.
+            Enter one entry per line: email, first name, last name. Only email is required.
           </DialogDescription>
         </DialogHeader>
 
