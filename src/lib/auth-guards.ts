@@ -12,6 +12,32 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
+interface FactorLike {
+  status?: string;
+  last_challenged_at?: string | null;
+}
+
+function getMostRecentAuthAt(user: User | null): number | null {
+  if (!user) return null;
+
+  const timestamps: number[] = [];
+
+  if (user.last_sign_in_at) {
+    const signInAt = new Date(user.last_sign_in_at).getTime();
+    if (Number.isFinite(signInAt)) timestamps.push(signInAt);
+  }
+
+  const factors = ((user.factors ?? []) as FactorLike[])
+    .filter((factor) => factor.status === 'verified' && factor.last_challenged_at);
+
+  for (const factor of factors) {
+    const challengedAt = new Date(factor.last_challenged_at as string).getTime();
+    if (Number.isFinite(challengedAt)) timestamps.push(challengedAt);
+  }
+
+  return timestamps.length > 0 ? Math.max(...timestamps) : null;
+}
+
 // ─── getSessionContext ───────────────────────────────────────────────
 
 export interface SessionContext {
@@ -63,6 +89,7 @@ const RECENT_AUTH_THRESHOLD_MS = 30 * 60 * 1000;
 
 /**
  * Checks if user authenticated recently enough for sensitive actions.
+ * Accepts either a fresh sign-in or a recent verified MFA challenge.
  * Fail-secure: returns false if unable to determine.
  * 
  * Used by: admin-panel, user-panel (password change, email change, MFA disable, account deletion).
@@ -71,17 +98,15 @@ export function isRecentlyAuthenticated(
   user: User | null,
   thresholdMs: number = RECENT_AUTH_THRESHOLD_MS
 ): boolean {
-  if (!user?.last_sign_in_at) return false;
+  const mostRecentAuthAt = getMostRecentAuthAt(user);
+  if (!mostRecentAuthAt) return false;
 
-  const lastSignIn = new Date(user.last_sign_in_at).getTime();
-  const now = Date.now();
-
-  return (now - lastSignIn) < thresholdMs;
+  return (Date.now() - mostRecentAuthAt) < thresholdMs;
 }
 
 /**
- * Prompts re-authentication via Supabase reauthentication flow.
- * Returns true if user should be prompted to re-authenticate.
+ * Prompts re-authentication when the user has not recently signed in or
+ * completed a recent verified MFA challenge.
  */
 export function requiresReauthentication(
   user: User | null,

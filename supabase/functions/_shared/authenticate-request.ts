@@ -9,9 +9,38 @@
 import { supabaseAdmin } from './supabase-admin.ts'
 import { AuthError } from './errors.ts'
 
+interface FactorLike {
+  status?: string
+  last_challenged_at?: string | null
+}
+
+function getMostRecentAuthTimestamp(user: {
+  last_sign_in_at?: string | null
+  factors?: unknown[]
+}): string | undefined {
+  const timestamps: number[] = []
+
+  if (user.last_sign_in_at) {
+    const signInAt = new Date(user.last_sign_in_at).getTime()
+    if (Number.isFinite(signInAt)) timestamps.push(signInAt)
+  }
+
+  const factors = ((user.factors ?? []) as FactorLike[])
+    .filter((factor) => factor.status === 'verified' && factor.last_challenged_at)
+
+  for (const factor of factors) {
+    const challengedAt = new Date(factor.last_challenged_at as string).getTime()
+    if (Number.isFinite(challengedAt)) timestamps.push(challengedAt)
+  }
+
+  if (timestamps.length === 0) return undefined
+  return new Date(Math.max(...timestamps)).toISOString()
+}
+
 export interface AuthenticatedUser {
   id: string
   email: string | undefined
+  /** Most recent high-assurance auth timestamp: sign-in or verified MFA challenge. */
   lastSignInAt: string | undefined
 }
 
@@ -44,7 +73,7 @@ export async function authenticateRequest(req: Request): Promise<AuthenticatedCo
     user: {
       id: user.id,
       email: user.email,
-      lastSignInAt: user.last_sign_in_at ?? undefined,
+      lastSignInAt: getMostRecentAuthTimestamp(user),
     },
     token,
     ipAddress: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
