@@ -14,6 +14,8 @@ Authoritative list of manual actions and deferred items that **must** be complet
 |---|------|---------|--------|
 | PP-001 | Register pre-signup hook in Supabase Dashboard | Auth → Hooks → "Before user is created" → select `auth-hook-pre-signup`. Required for signup gating to function. | `pending` |
 | PP-002 | Configure custom SMTP (Resend) | Supabase Dashboard → Auth → Settings → SMTP. Required for branded auth emails and invitation delivery. | `pending` |
+| PP-006 | Remove `VITE_DEV_MODE=true` from `.env` | Disabling dev mode restores: Turnstile CAPTCHA, reauth dialog, email verification gate, 30-min inactivity timeout, 12-char password minimum. | `pending` |
+| PP-007 | Replace Turnstile test keys with real keys | `.env`: swap `1x00000000000000000000AA` → real site key. Supabase secrets: swap `1x0000000000000000000000000000000AA` → real secret key. | `pending` |
 
 ---
 
