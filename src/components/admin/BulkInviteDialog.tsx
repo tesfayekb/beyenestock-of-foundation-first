@@ -126,10 +126,13 @@ export function BulkInviteDialog({ open, onOpenChange }: BulkInviteDialogProps) 
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="bulk-role">Role for all invitees</Label>
+              <Label htmlFor="bulk-role">Additional role for all invitees</Label>
+              <p className="text-xs text-muted-foreground">
+                All users automatically receive the "User" role. Select an additional role to assign.
+              </p>
               <Select value={roleId} onValueChange={setRoleId}>
                 <SelectTrigger id="bulk-role">
-                  <SelectValue placeholder="Default (user)" />
+                  <SelectValue placeholder="None (user role only)" />
                 </SelectTrigger>
                 <SelectContent>
                   {roles.map((role) => (

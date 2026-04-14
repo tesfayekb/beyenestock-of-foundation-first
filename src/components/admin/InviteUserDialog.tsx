@@ -84,10 +84,13 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="invite-role">Role</Label>
+            <Label htmlFor="invite-role">Additional Role</Label>
+            <p className="text-xs text-muted-foreground">
+              All users automatically receive the "User" role. Select an additional role to assign.
+            </p>
             <Select value={roleId} onValueChange={setRoleId}>
               <SelectTrigger id="invite-role">
-                <SelectValue placeholder="Default (user)" />
+                <SelectValue placeholder="None (user role only)" />
               </SelectTrigger>
               <SelectContent>
                 {roles.map((role) => (

@@ -2,7 +2,13 @@
  * AdminOnboardingPage — Manages onboarding modes and invitations.
  *
  * Route: /admin/onboarding
- * Permission: users.invite
+ * Permission: users.invite (page-level gate in App.tsx)
+ *
+ * Sub-permissions:
+ * - admin.config: onboarding mode switches (superadmin only)
+ * - users.invite: send invitations (invite buttons)
+ * - users.invite.manage: revoke/resend actions (table actions, gated in InvitationsTable)
+ *
  * Owner: user-onboarding module
  */
 import { useState } from 'react';
@@ -26,16 +32,18 @@ export default function AdminOnboardingPage() {
         title="Invitations"
         subtitle="Manage user onboarding and send invitations"
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setBulkOpen(true)}>
-              <Users className="mr-2 h-4 w-4" />
-              Bulk Invite
-            </Button>
-            <Button onClick={() => setInviteOpen(true)}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Invite User
-            </Button>
-          </div>
+          <RequirePermission permission="users.invite" fallback={null}>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setBulkOpen(true)}>
+                <Users className="mr-2 h-4 w-4" />
+                Bulk Invite
+              </Button>
+              <Button onClick={() => setInviteOpen(true)}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Invite User
+              </Button>
+            </div>
+          </RequirePermission>
         }
       />
 
@@ -46,6 +54,8 @@ export default function AdminOnboardingPage() {
 
       <Separator />
 
+      {/* Invitations table — visible to anyone with users.invite.
+          Manage actions (revoke/resend) gated internally by users.invite.manage */}
       <InvitationsTable />
 
       <InviteUserDialog open={inviteOpen} onOpenChange={setInviteOpen} />
