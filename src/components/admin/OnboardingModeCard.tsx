@@ -18,7 +18,7 @@ import { Settings } from 'lucide-react';
 export function OnboardingModeCard() {
   const { config, isLoading, error, updateConfig, isUpdating } = useSystemConfig();
   const [draft, setDraft] = useState<OnboardingConfig | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reauthOpen, setReauthOpen] = useState(false);
 
   const current = draft ?? config;
   const isDirty = draft !== null && config && (
