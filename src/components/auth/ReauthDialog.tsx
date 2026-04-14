@@ -118,7 +118,6 @@ export function ReauthDialog({
         email,
         options: {
           shouldCreateUser: false,
-          emailRedirectTo: window.location.origin,
           captchaToken,
         },
       });
