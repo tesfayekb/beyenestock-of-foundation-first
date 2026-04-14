@@ -1657,6 +1657,23 @@ Each action must include:
 
 ---
 
+### ACT-065: Revoked-Session Local Cleanup Hardening
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-065 |
+| **Date** | 2026-04-14 |
+| **Action** | Hardened revoked-session handling so `Sign out everywhere` clears the current browser session immediately after the `revoke-sessions` edge function succeeds; added centralized 401 recovery in `api-client.ts` so revoked/invalid tokens force a best-effort local sign-out and redirect to `/sign-in` instead of leaving the dashboard shell mounted with failing child requests. Added regression coverage (`RW-015`) and reconciled auth/user-panel SSOT documents plus phase-gate evidence. |
+| **Type** | Security |
+| **Impact Classification** | High |
+| **Modules Affected** | auth, user-panel, admin-panel |
+| **Files Changed** | src/lib/api-client.ts, src/pages/user/SecurityPage.tsx, src/test/rw015-session-revocation-cleanup.test.ts, docs/04-modules/auth.md, docs/04-modules/user-panel.md, docs/00-governance/system-state.md, docs/08-planning/master-plan.md |
+| **Related Tests** | src/test/rw015-session-revocation-cleanup.test.ts |
+| **Evidence** | `src/pages/user/SecurityPage.tsx` now invalidates the cached token, performs `supabase.auth.signOut({ scope: 'local' })`, and hard-redirects to `/sign-in` after successful global revocation. `src/lib/api-client.ts` now performs best-effort local logout on missing local session or protected edge-function `401` responses. |
+| **Status** | Verified |
+
+---
+
 - Regression fix actions must reference the original regression
 - Repeated failures in same area → tracked via recurrence in watchlist, referenced here
 

@@ -35,6 +35,7 @@ User-facing UI for:
 - RLS enforced on all queries
 - MFA enrollment and management UI included
 - Session listing available with revocation controls
+- `Sign out everywhere` must clear the current browser session immediately after server-side revocation so the shell cannot remain mounted with unauthorized child requests
 - Sensitive changes require secure validation and audit logging
 
 ## Sensitive User Actions
@@ -51,6 +52,7 @@ The following require enhanced controls:
 - Recent authentication where appropriate
 - Audit logging required
 - Validation and sanitization required
+- Global revocation must end with an explicit redirect to `/sign-in`
 
 ## Shell & Component Rules
 

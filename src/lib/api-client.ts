@@ -23,11 +23,29 @@ class ApiError extends Error {
  */
 let _cachedToken: string | null = null;
 let _tokenExpiry = 0;
+let _unauthorizedRecoveryInProgress = false;
 
 /** Force the next API call to fetch a fresh session token. */
 export function invalidateTokenCache() {
   _cachedToken = null;
   _tokenExpiry = 0;
+}
+
+async function forceLocalLogout() {
+  if (_unauthorizedRecoveryInProgress) return;
+  _unauthorizedRecoveryInProgress = true;
+
+  invalidateTokenCache();
+
+  try {
+    await supabase.auth.signOut({ scope: 'local' });
+  } catch {
+    // Best-effort local cleanup only — redirect still proceeds.
+  }
+
+  if (typeof window !== 'undefined' && window.location.pathname !== '/sign-in') {
+    window.location.replace('/sign-in');
+  }
 }
 
 // Clear cache on auth state change (sign-out, token refresh)
@@ -38,6 +56,7 @@ const { data: { subscription: _authSubscription } } = supabase.auth.onAuthStateC
   } else {
     _cachedToken = null;
     _tokenExpiry = 0;
+    _unauthorizedRecoveryInProgress = false;
   }
 });
 
@@ -56,7 +75,10 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   }
 
   const session = (await supabase.auth.getSession()).data.session;
-  if (!session) throw new ApiError('Not authenticated', 401);
+  if (!session) {
+    await forceLocalLogout();
+    throw new ApiError('Not authenticated', 401);
+  }
 
   _cachedToken = session.access_token;
   _tokenExpiry = (session.expires_at ?? 0) * 1000 - 60_000;
@@ -91,6 +113,11 @@ async function handleResponse<T>(res: Response): Promise<T> {
       res.status,
       body.code,
     );
+
+    if (res.status === 401) {
+      await forceLocalLogout();
+    }
+
     if (res.status >= 500) {
       Sentry.captureException(error, {
         contexts: {
@@ -102,6 +129,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
         },
       });
     }
+
     throw error;
   }
   const json = await res.json();

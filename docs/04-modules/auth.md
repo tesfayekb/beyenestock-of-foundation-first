@@ -49,7 +49,8 @@ Authentication flows only. Authorization (permissions) is handled by the RBAC mo
 - Unauthenticated users may only access public routes
 - Unverified email blocks access to protected features
 - MFA challenge must be completed before session is fully active (admin roles)
-- Expired or invalid sessions require re-authentication
+- Expired, revoked, or invalid sessions must trigger local session cleanup and redirect to `/sign-in`
+- Global session revocation (`Sign out everywhere`) must revoke server sessions **and** clear the current browser session immediately — no half-authenticated shell state is allowed
 - `onAuthStateChange` subscribers must never await other Supabase Auth APIs directly; defer follow-up auth reads outside the callback to avoid auth-lock deadlocks and post-login blank screens
 
 ## Shared Functions
@@ -67,7 +68,7 @@ Authentication flows only. Authorization (permissions) is handled by the RBAC mo
 
 | Failure | System Response |
 |---------|-----------------|
-| Invalid or expired session | Redirect to sign-in |
+| Invalid, expired, or revoked session | Clear local session state and redirect to sign-in |
 | Unverified email | Block protected access, prompt verification |
 | MFA challenge required | Present MFA input before completing sign-in |
 | Existing MFA factor or incomplete MFA setup | `/mfa-enroll` must detect verified vs incomplete factors, avoid blind duplicate enrollment, and route user to continue or recover |
