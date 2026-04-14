@@ -1,5 +1,6 @@
 /**
  * InvitationsTable — Data table with status filter tabs and actions.
+ * When invite system is disabled, resend becomes "Send Signup Reminder".
  *
  * Owner: user-onboarding module
  */
@@ -15,17 +16,25 @@ import { ConfirmActionDialog } from '@/components/dashboard/ConfirmActionDialog'
 import { useInvitations, type Invitation } from '@/hooks/useInvitations';
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { checkPermission } from '@/lib/rbac';
+import { apiClient } from '@/lib/api-client';
+import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { RotateCw, Ban, Mail } from 'lucide-react';
+import { RotateCw, Ban, Mail, Send } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 const STATUS_TABS = ['all', 'pending', 'accepted', 'expired', 'revoked'] as const;
 
-export function InvitationsTable() {
+interface InvitationsTableProps {
+  inviteEnabled: boolean;
+}
+
+export function InvitationsTable({ inviteEnabled }: InvitationsTableProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
-  const [confirmAction, setConfirmAction] = useState<{ type: 'revoke' | 'resend'; id: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ type: 'revoke' | 'resend' | 'nudge'; id: string; email?: string } | null>(null);
+  const [isNudging, setIsNudging] = useState(false);
   const { context } = useUserRoles();
+  const { toast } = useToast();
   const canManage = checkPermission(context, 'users.invite.manage');
 
   const params = useMemo(() => ({
@@ -46,15 +55,30 @@ export function InvitationsTable() {
     isResending,
   } = useInvitations(params);
 
+  const handleSendNudge = useCallback(async (invitationId: string) => {
+    setIsNudging(true);
+    try {
+      await apiClient.post('send-signup-nudge', { invitation_id: invitationId });
+      toast({ title: 'Signup reminder sent', description: 'The user will receive an email encouraging them to sign up.' });
+      refetch();
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Failed to send reminder', description: err instanceof Error ? err.message : 'Unknown error' });
+    } finally {
+      setIsNudging(false);
+    }
+  }, [toast, refetch]);
+
   const handleConfirmAction = useCallback(async () => {
     if (!confirmAction) return;
     if (confirmAction.type === 'revoke') {
       await revokeInvitation(confirmAction.id);
-    } else {
+    } else if (confirmAction.type === 'resend') {
       await resendInvitation(confirmAction.id);
+    } else if (confirmAction.type === 'nudge') {
+      await handleSendNudge(confirmAction.id);
     }
     setConfirmAction(null);
-  }, [confirmAction, revokeInvitation, resendInvitation]);
+  }, [confirmAction, revokeInvitation, resendInvitation, handleSendNudge]);
 
   const columns: DataTableColumn<Invitation>[] = useMemo(() => {
     const cols: DataTableColumn<Invitation>[] = [
@@ -118,15 +142,30 @@ export function InvitationsTable() {
 
           return (
             <div className="flex items-center gap-1 justify-end">
-              {(isPending || isExpiredPending) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'resend', id: row.id }); }}
-                  title="Resend invitation"
-                >
-                  <RotateCw className="h-4 w-4" />
-                </Button>
+              {inviteEnabled ? (
+                // Invite enabled: normal resend
+                (isPending || isExpiredPending) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'resend', id: row.id }); }}
+                    title="Resend invitation"
+                  >
+                    <RotateCw className="h-4 w-4" />
+                  </Button>
+                )
+              ) : (
+                // Invite disabled: send signup reminder instead
+                (isPending || isExpiredPending) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'nudge', id: row.id, email: row.email }); }}
+                    title="Send signup reminder"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                )
               )}
               {isPending && (
                 <Button
@@ -145,10 +184,22 @@ export function InvitationsTable() {
     }
 
     return cols;
-  }, [canManage]);
+  }, [canManage, inviteEnabled]);
 
   if (isLoading) return <LoadingSkeleton rows={8} />;
   if (error) return <ErrorState message="Failed to load invitations" onRetry={refetch} />;
+
+  const confirmTitle = confirmAction?.type === 'revoke'
+    ? 'Revoke Invitation'
+    : confirmAction?.type === 'nudge'
+      ? 'Send Signup Reminder'
+      : 'Resend Invitation';
+
+  const confirmDescription = confirmAction?.type === 'revoke'
+    ? 'This will permanently revoke this invitation. The recipient will no longer be able to use it.'
+    : confirmAction?.type === 'nudge'
+      ? 'Since the invite system is disabled, this will send a signup reminder email encouraging the user to create an account directly via open signup.'
+      : 'This will send a new invitation email with a fresh token and reset the expiry timer.';
 
   return (
     <div className="space-y-4">
@@ -182,15 +233,11 @@ export function InvitationsTable() {
       <ConfirmActionDialog
         open={!!confirmAction}
         onOpenChange={(open) => !open && setConfirmAction(null)}
-        title={confirmAction?.type === 'revoke' ? 'Revoke Invitation' : 'Resend Invitation'}
-        description={
-          confirmAction?.type === 'revoke'
-            ? 'This will permanently revoke this invitation. The recipient will no longer be able to use it.'
-            : 'This will send a new invitation email with a fresh token and reset the expiry timer.'
-        }
-        confirmLabel={confirmAction?.type === 'revoke' ? 'Revoke' : 'Resend'}
+        title={confirmTitle}
+        description={confirmDescription}
+        confirmLabel={confirmAction?.type === 'revoke' ? 'Revoke' : confirmAction?.type === 'nudge' ? 'Send Reminder' : 'Resend'}
         onConfirm={handleConfirmAction}
-        loading={isRevoking || isResending}
+        loading={isRevoking || isResending || isNudging}
         destructive={confirmAction?.type === 'revoke'}
       />
     </div>

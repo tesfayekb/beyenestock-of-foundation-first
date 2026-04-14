@@ -10,6 +10,8 @@ import { useToast } from '@/hooks/use-toast';
 export interface OnboardingConfig {
   signup_enabled: boolean;
   invite_enabled: boolean;
+  followup_days: number;
+  max_followups: number;
 }
 
 const SYSTEM_CONFIG_KEY = ['system-config', 'onboarding'] as const;
@@ -21,7 +23,6 @@ export function useSystemConfig() {
   const query = useQuery({
     queryKey: [...SYSTEM_CONFIG_KEY],
     queryFn: async (): Promise<OnboardingConfig> => {
-      // get-system-config returns { signup_enabled, invite_enabled } directly
       return apiClient.get<OnboardingConfig>('get-system-config');
     },
     staleTime: 60_000,

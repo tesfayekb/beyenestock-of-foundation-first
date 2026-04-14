@@ -1,5 +1,6 @@
 /**
- * OnboardingModeCard — Two switches to control signup/invite modes.
+ * OnboardingModeCard — Two switches to control signup/invite modes,
+ * plus follow-up settings for pending invitations.
  * Prevents disabling both. Requires reauth confirmation.
  *
  * Owner: user-onboarding module
@@ -9,11 +10,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 import { useSystemConfig, type OnboardingConfig } from '@/hooks/useSystemConfig';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
 import { ReauthDialog } from '@/components/auth/ReauthDialog';
-import { Settings } from 'lucide-react';
+import { Settings, Clock } from 'lucide-react';
 
 export function OnboardingModeCard() {
   const { config, isLoading, error, updateConfig, isUpdating } = useSystemConfig();
@@ -23,7 +26,9 @@ export function OnboardingModeCard() {
   const current = draft ?? config;
   const isDirty = draft !== null && config && (
     draft.signup_enabled !== config.signup_enabled ||
-    draft.invite_enabled !== config.invite_enabled
+    draft.invite_enabled !== config.invite_enabled ||
+    draft.followup_days !== config.followup_days ||
+    draft.max_followups !== config.max_followups
   );
 
   const handleToggle = useCallback((field: keyof OnboardingConfig, value: boolean) => {
@@ -34,6 +39,17 @@ export function OnboardingModeCard() {
     // Prevent disabling both
     if (!next.signup_enabled && !next.invite_enabled) return;
     setDraft(next);
+  }, [draft, config]);
+
+  const handleNumberChange = useCallback((field: 'followup_days' | 'max_followups', value: string) => {
+    const base = draft ?? config;
+    if (!base) return;
+    const num = parseInt(value, 10);
+    if (isNaN(num) || num < 0) return;
+    const clamped = field === 'followup_days'
+      ? Math.min(Math.max(num, 1), 30)
+      : Math.min(Math.max(num, 0), 10);
+    setDraft({ ...base, [field]: clamped });
   }, [draft, config]);
 
   const handleSave = useCallback(async () => {
@@ -95,6 +111,55 @@ export function OnboardingModeCard() {
               onCheckedChange={(v) => handleToggle('invite_enabled', v)}
               disabled={isUpdating}
             />
+          </div>
+
+          <Separator />
+
+          {/* Follow-up settings */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm font-medium">Invitation Follow-up</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Automatically follow up on pending invitations. If invitations are disabled, a signup reminder email is sent instead.
+            </p>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="followup-days" className="text-xs text-muted-foreground">
+                  Days before follow-up
+                </Label>
+                <Input
+                  id="followup-days"
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={current?.followup_days ?? 3}
+                  onChange={(e) => handleNumberChange('followup_days', e.target.value)}
+                  disabled={isUpdating}
+                  className="h-9"
+                />
+                <p className="text-[11px] text-muted-foreground">Industry standard: 3–7 days</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="max-followups" className="text-xs text-muted-foreground">
+                  Maximum follow-ups
+                </Label>
+                <Input
+                  id="max-followups"
+                  type="number"
+                  min={0}
+                  max={10}
+                  value={current?.max_followups ?? 2}
+                  onChange={(e) => handleNumberChange('max_followups', e.target.value)}
+                  disabled={isUpdating}
+                  className="h-9"
+                />
+                <p className="text-[11px] text-muted-foreground">0 = disabled. Standard: 2–3</p>
+              </div>
+            </div>
           </div>
 
           {isDirty && (

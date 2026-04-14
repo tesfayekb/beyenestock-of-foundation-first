@@ -20,11 +20,15 @@ import { InvitationsTable } from '@/components/admin/InvitationsTable';
 import { RequirePermission } from '@/components/auth/RequirePermission';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { UserPlus, Users } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useSystemConfig } from '@/hooks/useSystemConfig';
+import { UserPlus, Users, AlertTriangle } from 'lucide-react';
 
 export default function AdminOnboardingPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const { config } = useSystemConfig();
+  const inviteEnabled = config?.invite_enabled ?? true;
 
   return (
     <div className="space-y-6">
@@ -32,18 +36,20 @@ export default function AdminOnboardingPage() {
         title="Invitations"
         subtitle="Manage user onboarding and send invitations"
         actions={
-          <RequirePermission permission="users.invite" fallback={null}>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setBulkOpen(true)}>
-                <Users className="mr-2 h-4 w-4" />
-                Bulk Invite
-              </Button>
-              <Button onClick={() => setInviteOpen(true)}>
-                <UserPlus className="mr-2 h-4 w-4" />
-                Invite User
-              </Button>
-            </div>
-          </RequirePermission>
+          inviteEnabled ? (
+            <RequirePermission permission="users.invite" fallback={null}>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={() => setBulkOpen(true)}>
+                  <Users className="mr-2 h-4 w-4" />
+                  Bulk Invite
+                </Button>
+                <Button onClick={() => setInviteOpen(true)}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Invite User
+                </Button>
+              </div>
+            </RequirePermission>
+          ) : null
         }
       />
 
@@ -52,14 +58,29 @@ export default function AdminOnboardingPage() {
         <OnboardingModeCard />
       </RequirePermission>
 
+      {!inviteEnabled && (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            The invitation system is currently disabled. New invitations cannot be sent.
+            Existing pending invitations are frozen — recipients can still accept them if they have a valid link.
+            You can send signup reminder emails to pending invitees instead.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Separator />
 
       {/* Invitations table — visible to anyone with users.invite.
           Manage actions (revoke/resend) gated internally by users.invite.manage */}
-      <InvitationsTable />
+      <InvitationsTable inviteEnabled={inviteEnabled} />
 
-      <InviteUserDialog open={inviteOpen} onOpenChange={setInviteOpen} />
-      <BulkInviteDialog open={bulkOpen} onOpenChange={setBulkOpen} />
+      {inviteEnabled && (
+        <>
+          <InviteUserDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+          <BulkInviteDialog open={bulkOpen} onOpenChange={setBulkOpen} />
+        </>
+      )}
     </div>
   );
 }

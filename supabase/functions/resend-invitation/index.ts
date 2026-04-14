@@ -9,6 +9,7 @@
  * Body: { invitation_id: string (UUID) }
  *
  * Authorization: users.invite.manage + recent auth (30min)
+ * Pre-check: invite_enabled must be true (use send-signup-nudge when disabled)
  * Rate limit: 3 resends per email per 24h (enforced by DB query)
  * Flow: revoke old invitation → create new one → send new invite email
  * Emits user.invitation_resent audit event.
@@ -51,6 +52,22 @@ Deno.serve(createHandler(async (req: Request) => {
   const ctx = await authenticateRequest(req)
   await checkPermissionOrThrow(ctx.user.id, 'users.invite.manage')
   requireRecentAuth(ctx.user.lastSignInAt, 30 * 60 * 1000, ctx.user.id)
+
+  // Check invite_enabled — resend requires invite system to be active
+  const { data: configRow } = await supabaseAdmin
+    .from('system_config')
+    .select('value')
+    .eq('key', 'onboarding_mode')
+    .single()
+
+  const sysConfig = configRow?.value as { invite_enabled?: boolean } | null
+  if (sysConfig && sysConfig.invite_enabled === false) {
+    const { apiError } = await import('../_shared/api-error.ts')
+    return apiError(400, 'Invitations are currently disabled. Use "Send Signup Reminder" instead.', {
+      code: 'INVITES_DISABLED',
+      correlationId: ctx.correlationId,
+    })
+  }
 
   const body = await req.json()
   const { invitation_id } = validateRequest(BodySchema, body)

@@ -6,7 +6,7 @@
  * Lifecycle: active
  *
  * PATCH /update-system-config
- * Body: { signup_enabled?: boolean, invite_enabled?: boolean }
+ * Body: { signup_enabled?: boolean, invite_enabled?: boolean, followup_days?: number, max_followups?: number }
  *
  * Authorization: admin.config (SUPERADMIN_ONLY) + recent auth required.
  * Validation: At least one mode must remain true (cannot disable both).
@@ -23,8 +23,11 @@ import { validateRequest } from '../_shared/validate-request.ts'
 const BodySchema = z.object({
   signup_enabled: z.boolean().optional(),
   invite_enabled: z.boolean().optional(),
+  followup_days: z.number().int().min(1).max(30).optional(),
+  max_followups: z.number().int().min(0).max(10).optional(),
 }).refine(
-  (d) => d.signup_enabled !== undefined || d.invite_enabled !== undefined,
+  (d) => d.signup_enabled !== undefined || d.invite_enabled !== undefined ||
+         d.followup_days !== undefined || d.max_followups !== undefined,
   { message: 'At least one field to update is required' }
 )
 
@@ -55,12 +58,19 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(500, 'Failed to read current config', { correlationId: ctx.correlationId })
   }
 
-  const before = currentRow.value as { signup_enabled: boolean; invite_enabled: boolean }
+  const before = currentRow.value as {
+    signup_enabled: boolean
+    invite_enabled: boolean
+    followup_days?: number
+    max_followups?: number
+  }
 
   // Merge: only override provided fields
   const after = {
     signup_enabled: input.signup_enabled ?? before.signup_enabled,
     invite_enabled: input.invite_enabled ?? before.invite_enabled,
+    followup_days: input.followup_days ?? (before.followup_days ?? 3),
+    max_followups: input.max_followups ?? (before.max_followups ?? 2),
   }
 
   // Safety: at least one mode must be true
@@ -72,8 +82,13 @@ Deno.serve(createHandler(async (req: Request) => {
     })
   }
 
-  // No-op check: if nothing changed, skip write
-  if (after.signup_enabled === before.signup_enabled && after.invite_enabled === before.invite_enabled) {
+  // No-op check
+  if (
+    after.signup_enabled === before.signup_enabled &&
+    after.invite_enabled === before.invite_enabled &&
+    after.followup_days === (before.followup_days ?? 3) &&
+    after.max_followups === (before.max_followups ?? 2)
+  ) {
     return apiSuccess({ config: after, changed: false })
   }
 
@@ -92,7 +107,7 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(500, 'Failed to update config', { correlationId: ctx.correlationId })
   }
 
-  // Audit: system.config_changed (high-risk — check result)
+  // Audit
   const auditResult = await logAuditEvent({
     actorId: ctx.user.id,
     action: 'system.config_changed',
@@ -104,6 +119,8 @@ Deno.serve(createHandler(async (req: Request) => {
       fields_changed: [
         ...(input.signup_enabled !== undefined ? ['signup_enabled'] : []),
         ...(input.invite_enabled !== undefined ? ['invite_enabled'] : []),
+        ...(input.followup_days !== undefined ? ['followup_days'] : []),
+        ...(input.max_followups !== undefined ? ['max_followups'] : []),
       ],
     },
     ipAddress: ctx.ipAddress,
