@@ -9,6 +9,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import TurnstileWidget, { type TurnstileWidgetHandle } from '@/components/auth/TurnstileWidget';
+import { InviteOnlyMessage } from '@/components/auth/InviteOnlyMessage';
+import { useOnboardingMode } from '@/hooks/useOnboardingMode';
+import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 
 export default function SignUp() {
   const [email, setEmail] = useState('');
@@ -21,12 +24,10 @@ export default function SignUp() {
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
   const { signUp } = useAuth();
   const { toast } = useToast();
+  const { data: onboardingMode, isLoading: modeLoading } = useOnboardingMode();
 
   const getTurnstileToken = useCallback(async (): Promise<string | null> => {
-    if (turnstileToken) {
-      return turnstileToken;
-    }
-
+    if (turnstileToken) return turnstileToken;
     try {
       return await turnstileRef.current?.execute() ?? null;
     } catch (error) {
@@ -42,21 +43,11 @@ export default function SignUp() {
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     const token = await getTurnstileToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-
+    if (!token) { setLoading(false); return; }
     const { error } = await signUp(email, password, displayName, token);
-
     if (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Sign up failed',
-        description: error.message,
-      });
+      toast({ variant: 'destructive', title: 'Sign up failed', description: error.message });
       turnstileRef.current?.reset();
       setTurnstileToken(null);
       setLoading(false);
@@ -70,22 +61,29 @@ export default function SignUp() {
     setOauthLoading(provider);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo: window.location.origin },
     });
     if (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Sign up failed',
-        description: error.message,
-      });
+      toast({ variant: 'destructive', title: 'Sign up failed', description: error.message });
       setOauthLoading(null);
     }
   }, [toast]);
 
   const handleExpire = useCallback(() => setTurnstileToken(null), []);
   const handleError = useCallback(() => setTurnstileToken(null), []);
+
+  // Check onboarding mode
+  if (modeLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <LoadingSkeleton variant="card" rows={1} />
+      </div>
+    );
+  }
+
+  if (onboardingMode && !onboardingMode.signup_enabled) {
+    return <InviteOnlyMessage />;
+  }
 
   if (submitted) {
     return (
