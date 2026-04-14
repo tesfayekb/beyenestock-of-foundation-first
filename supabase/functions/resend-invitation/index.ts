@@ -21,7 +21,6 @@ import { logAuditEvent } from '../_shared/audit.ts'
 import { supabaseAdmin } from '../_shared/supabase-admin.ts'
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
 import { validateRequest } from '../_shared/validate-request.ts'
-import * as bcrypt from 'https://deno.land/x/bcrypt@v0.4.1/mod.ts'
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -39,7 +38,10 @@ async function generateTokenPair(): Promise<{ rawToken: string; tokenHash: strin
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '')
-  const tokenHash = await bcrypt.hash(rawToken, 10)
+  const encoder = new TextEncoder()
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(rawToken))
+  const hashArray = new Uint8Array(hashBuffer)
+  const tokenHash = Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('')
   return { rawToken, tokenHash }
 }
 
