@@ -15,6 +15,8 @@ import {
   useRef,
 } from 'react';
 
+import { DEV_MODE } from '@/lib/dev-mode';
+
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '';
 const TURNSTILE_SCRIPT_ID = 'cf-turnstile-script';
 
@@ -144,6 +146,14 @@ const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetProps>(
   }, [clearPending, rejectPending]);
 
   const execute = useCallback(async (): Promise<string> => {
+    // DEV_MODE: skip Turnstile entirely, return dummy token
+    if (DEV_MODE) {
+      const dummyToken = 'dev-mode-bypass-token';
+      tokenRef.current = dummyToken;
+      onVerifyRef.current(dummyToken);
+      return dummyToken;
+    }
+
     await renderWidget();
 
     if (tokenRef.current) {
@@ -183,6 +193,9 @@ const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetProps>(
   );
 
   useEffect(() => {
+    // DEV_MODE: don't load Turnstile script at all
+    if (DEV_MODE) return;
+
     renderWidget().catch(() => {
       onErrorRef.current?.();
     });
@@ -195,6 +208,14 @@ const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidgetProps>(
       }
     };
   }, [rejectPending, renderWidget]);
+
+  if (DEV_MODE) {
+    return (
+      <div className="text-center text-xs text-muted-foreground py-1">
+        🔓 Dev mode — CAPTCHA bypassed
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">

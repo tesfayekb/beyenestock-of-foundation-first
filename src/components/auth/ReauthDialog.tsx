@@ -29,6 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, ShieldCheck, Mail, Smartphone, RefreshCw } from 'lucide-react';
 import TurnstileWidget, { type TurnstileWidgetHandle } from '@/components/auth/TurnstileWidget';
+import { DEV_MODE } from '@/lib/dev-mode';
 
 type ReauthStep = 'idle' | 'sending' | 'awaiting_code' | 'verifying';
 type ReauthMethod = 'email' | 'totp';
@@ -84,6 +85,18 @@ export function ReauthDialog({
     if (!nextOpen) resetState();
     onOpenChange(nextOpen);
   };
+
+  // DEV_MODE: auto-verify immediately when dialog opens
+  useEffect(() => {
+    if (DEV_MODE && open) {
+      console.warn('[ReauthDialog] Dev mode — auto-verifying');
+      const timer = setTimeout(() => {
+        onOpenChange(false);
+        onVerified();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [open, onOpenChange, onVerified]);
 
   const getCurrentUserEmail = async () => {
     const { data: { user } } = await supabase.auth.getUser();

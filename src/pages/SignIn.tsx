@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { safeRedirectPath } from '@/lib/safe-redirect';
 import TurnstileWidget, { type TurnstileWidgetHandle } from '@/components/auth/TurnstileWidget';
+import { DEV_MODE, DEV_PASSWORD_MIN_LENGTH } from '@/lib/dev-mode';
 
 
 export default function SignIn() {
@@ -135,7 +136,7 @@ export default function SignIn() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={12}
+                minLength={DEV_MODE ? DEV_PASSWORD_MIN_LENGTH : 12}
                 autoComplete="current-password"
               />
             </div>

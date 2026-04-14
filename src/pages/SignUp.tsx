@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import TurnstileWidget, { type TurnstileWidgetHandle } from '@/components/auth/TurnstileWidget';
+import { DEV_MODE, DEV_PASSWORD_MIN_LENGTH } from '@/lib/dev-mode';
 import { InviteOnlyMessage } from '@/components/auth/InviteOnlyMessage';
 import { useOnboardingMode } from '@/hooks/useOnboardingMode';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
@@ -159,8 +160,8 @@ export default function SignUp() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={12}
-                placeholder="Minimum 12 characters"
+                minLength={DEV_MODE ? DEV_PASSWORD_MIN_LENGTH : 12}
+                placeholder={DEV_MODE ? "Minimum 6 characters" : "Minimum 12 characters"}
                 autoComplete="new-password"
               />
             </div>

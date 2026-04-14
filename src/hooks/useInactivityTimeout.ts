@@ -6,8 +6,9 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { DEV_MODE, DEV_INACTIVITY_TIMEOUT_MS } from '@/lib/dev-mode';
 
-const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const DEFAULT_TIMEOUT_MS = DEV_MODE ? DEV_INACTIVITY_TIMEOUT_MS : 30 * 60 * 1000;
 const ACTIVITY_EVENTS: (keyof DocumentEventMap)[] = ['mousemove', 'keydown', 'touchstart', 'scroll', 'visibilitychange'];
 // Throttle activity detection to avoid excessive timer resets
 const THROTTLE_MS = 30_000; // 30 seconds

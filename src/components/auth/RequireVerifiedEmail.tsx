@@ -1,5 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { isEmailVerified } from '@/lib/auth-guards';
+import { DEV_MODE } from '@/lib/dev-mode';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,7 +25,7 @@ export function RequireVerifiedEmail({ children }: { children: React.ReactNode }
     );
   }
 
-  if (!isEmailVerified(user)) {
+  if (!DEV_MODE && !isEmailVerified(user)) {
     const handleResend = async () => {
       if (!user?.email) return;
       setResending(true);
