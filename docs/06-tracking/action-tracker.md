@@ -1640,6 +1640,23 @@ Each action must include:
 
 ---
 
+### ACT-064: Google OAuth Account-Picker Hardening
+
+| Field | Value |
+|-------|-------|
+| **ID** | ACT-064 |
+| **Date** | 2026-04-14 |
+| **Action** | Restored `queryParams.prompt = 'select_account'` on the Google OAuth entry points in `SignIn.tsx` and `SignUp.tsx` so local app sign-out cannot silently reuse an existing Google browser session; added regression coverage (`RW-014`) and reconciled auth SSOT documents and phase-gate evidence to reflect Google OAuth implementation + hardening. |
+| **Type** | Security |
+| **Impact Classification** | High |
+| **Modules Affected** | auth |
+| **Files Changed** | src/pages/SignIn.tsx, src/pages/SignUp.tsx, src/test/rw014-google-oauth-account-picker.test.ts, docs/04-modules/auth.md, docs/02-security/auth-security.md, docs/08-planning/master-plan.md, docs/00-governance/system-state.md |
+| **Related Tests** | src/test/rw010-mfa-enrollment-redirect.test.ts, src/test/rw014-google-oauth-account-picker.test.ts |
+| **Evidence** | `npx vitest run src/test/rw010-mfa-enrollment-redirect.test.ts src/test/rw014-google-oauth-account-picker.test.ts` passed (7/7). `npm run build` passed. Browser OAuth authorize URL runtime-verified with `prompt=select_account` present before redirect to Google Accounts. |
+| **Status** | Verified |
+
+---
+
 - Regression fix actions must reference the original regression
 - Repeated failures in same area → tracked via recurrence in watchlist, referenced here
 
@@ -1668,7 +1685,7 @@ Each action must include:
 | Feature | 14 | 14 |
 | Documentation | 14 | 13 |
 | Fix | 6 | 4 |
-| Security | 12 | 12 |
+| Security | 13 | 13 |
 | Performance | 2 | 2 |
 | Regression | 0 | 0 |
 
@@ -1676,7 +1693,7 @@ Each action must include:
 
 | Status | Count |
 |--------|-------|
-| Verified | 46 |
+| Verified | 47 |
 | Superseded | 2 (ACT-027, ACT-028) |
 | In Progress | 0 |
 | Rolled Back | 0 |
@@ -1686,7 +1703,7 @@ Each action must include:
 - Regressions introduced: 0
 - Regressions resolved: 1 (reactivation auth-unban gap — ACT-029)
 - Open (unverified) actions: 0
-- High-impact actions this period: 44
+- High-impact actions this period: 45
 
 _Updated as actions are added._
 
