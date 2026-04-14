@@ -76,7 +76,11 @@ Deno.serve(createHandler(async (req: Request) => {
     .eq('key', 'onboarding_mode')
     .single()
 
-  const config = configRow?.value as { invite_enabled?: boolean } | null
+  const config = configRow?.value as {
+    invite_enabled?: boolean
+    followup_days?: number
+    max_followups?: number
+  } | null
   if (config && config.invite_enabled === false) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(400, 'Invitations are currently disabled', {
@@ -148,6 +152,12 @@ Deno.serve(createHandler(async (req: Request) => {
   // Generate token
   const { rawToken, tokenHash } = await generateTokenPair()
 
+  // Calculate dynamic expiry from followup settings
+  const followupDays = config?.followup_days ?? 3
+  const maxFollowups = config?.max_followups ?? 2
+  const totalDays = followupDays * (maxFollowups + 1)
+  const expiresAt = new Date(Date.now() + totalDays * 24 * 60 * 60 * 1000).toISOString()
+
   // Create invitation row
   const invitationId = crypto.randomUUID()
   const { error: insertError } = await supabaseAdmin
@@ -159,6 +169,7 @@ Deno.serve(createHandler(async (req: Request) => {
       role_id: role_id ?? null,
       invited_by: ctx.user.id,
       status: 'pending',
+      expires_at: expiresAt,
     })
 
   if (insertError) {
