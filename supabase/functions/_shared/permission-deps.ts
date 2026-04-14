@@ -27,4 +27,6 @@ export const PERMISSION_DEPS: Record<string, string[]> = {
   "jobs.emergency":          ["admin.access"],
   "jobs.view":               ["admin.access"],
   "admin.config":            ["admin.access"],
+  "users.invite":            ["users.view_all", "admin.access"],
+  "users.invite.manage":     ["users.invite", "users.view_all", "admin.access"],
 }

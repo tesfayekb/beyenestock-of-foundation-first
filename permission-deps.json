@@ -21,5 +21,7 @@
   "jobs.deadletter.manage":  ["jobs.view", "admin.access"],
   "jobs.emergency":          ["admin.access"],
   "jobs.view":               ["admin.access"],
-  "admin.config":            ["admin.access"]
+  "admin.config":            ["admin.access"],
+  "users.invite":            ["users.view_all", "admin.access"],
+  "users.invite.manage":     ["users.invite", "users.view_all", "admin.access"]
 }
