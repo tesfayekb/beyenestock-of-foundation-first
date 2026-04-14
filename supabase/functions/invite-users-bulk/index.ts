@@ -106,9 +106,27 @@ Deno.serve(createHandler(async (req: Request) => {
   // Process sequentially to respect Supabase rate limits
   for (const email of emails) {
     try {
-      // Check existing auth user (direct email lookup — no pagination issues)
-      const { data: userData } = await supabaseAdmin.auth.admin.getUserByEmail(email)
-      if (userData?.user) {
+      // Check existing auth user
+      const { data: listData } = await supabaseAdmin.auth.admin.listUsers({
+        page: 1,
+        perPage: 1,
+      })
+      const existingUser = listData?.users?.find(
+        (u: { email?: string }) => u.email?.toLowerCase() === email
+      )
+
+      // Fallback: also check by direct filter if list didn't match
+      let userExists = !!existingUser
+      if (!userExists) {
+        const { data: profileData } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .eq('email', email)
+          .maybeSingle()
+        userExists = !!profileData
+      }
+
+      if (userExists) {
         result.skipped_existing.push(email)
         continue
       }

@@ -56,7 +56,9 @@ export function BulkInviteDialog({ open, onOpenChange }: BulkInviteDialogProps) 
         role_id: roleId || undefined,
       });
 
-      setResult((res as { data: BulkResult }).data);
+      // The API returns the result directly (apiClient unwraps the response)
+      const data = res as unknown as BulkResult;
+      setResult(data);
     } catch {
       // Error handled by useInviteUser's onError (toast).
     }
