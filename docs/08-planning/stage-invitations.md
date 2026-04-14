@@ -167,9 +167,10 @@ No token validation — invited users bypass the hook entirely via `inviteUserBy
 |----------|--------|------------|-------|
 | `invite-user` | POST | `users.invite` | Single invite. Checks `invite_enabled`. Detects existing accounts → 409. |
 | `invite-users-bulk` | POST | `users.invite` | Max 50/call. Sequential. Returns `{ succeeded, failed, skipped_existing }`. |
-| `list-invitations` | GET | `users.invite.manage` | Paginated. Status filter. Computes virtual `expired` status for pending + past-TTL. |
+| `list-invitations` | GET | `users.invite.manage` | Paginated. Status filter. Computes virtual `expired` status for pending + past-TTL. Resolves invited_by → display name, role_id → role name. |
 | `revoke-invitation` | POST | `users.invite.manage` | Marks revoked. Optionally deletes pending auth user. |
 | `resend-invitation` | POST | `users.invite.manage` | Revokes old token, generates new, resets TTL. Rate limit: 3/email/24h. |
+| `send-signup-nudge` | POST | `users.invite.manage` | Sends signup reminder when invite system is disabled. Rate limited 3/email/24h. Checks `signup_enabled` first. |
 
 ### Token Generation (invite-user)
 
@@ -195,12 +196,13 @@ No token validation — invited users bypass the hook entirely via `inviteUserBy
 - `user.bulk_invited` — bulk invite with count
 - `user.invitation_revoked` — invitation revoked
 - `user.invitation_resent` — invitation resent
-- `user.invitation_accepted` — invitation consumed during signup (emitted by `handle_new_user_role` trigger in Phase 1, not an edge function)
+- `user.signup_nudge_sent` — signup reminder sent when invite system disabled
+- `user.invitation_accepted` — invitation consumed during signup (emitted by `accept_invitation_on_confirm` trigger, not an edge function)
 
 ### Deliverables
 
-- 5 edge functions
-- 4 audit events
+- 6 edge functions
+- 5 audit events
 
 ---
 
@@ -334,6 +336,7 @@ These are one-time manual steps required after code is deployed:
 |----|-------|--------|
 | DW-038 | Bulk invite CSV upload | Textarea sufficient for v1. CSV adds dep + mapping UI. |
 | DW-039 | Invitation expiry cleanup cron | Lazy check sufficient at expected scale. Add when >1,000 expired rows accumulate. |
+| DW-040 | Automated invitation follow-up cron job | Config (`followup_days`, `max_followups`) stored in `system_config` and settable via UI, but cron implementation deferred. Expiry is calculated dynamically from these values. |
 
 ---
 

@@ -9,6 +9,7 @@
  *
  * Authorization: users.invite.manage
  * Virtual status: pending invitations past expires_at are returned as "expired"
+ * Enrichment: resolves invited_by → display_name, role_id → role name
  */
 import { createHandler, apiSuccess } from '../_shared/handler.ts'
 import { authenticateRequest } from '../_shared/authenticate-request.ts'
@@ -49,7 +50,6 @@ Deno.serve(createHandler(async (req: Request) => {
 
   // For "expired" filter, we need to get pending ones past TTL + actual expired
   if (statusFilter === 'expired') {
-    // Get both DB-expired and virtually-expired (pending + past TTL)
     query = query.or(`status.eq.expired,and(status.eq.pending,expires_at.lt.${new Date().toISOString()})`)
   } else if (statusFilter !== 'all') {
     query = query.eq('status', statusFilter)
@@ -65,14 +65,46 @@ Deno.serve(createHandler(async (req: Request) => {
     return apiError(500, 'Failed to list invitations', { correlationId: ctx.correlationId })
   }
 
-  // Compute virtual expired status for pending invitations past TTL
+  const rows = data ?? []
+
+  // Collect unique invited_by UUIDs and role_ids for batch lookup
+  const inviterIds = [...new Set(rows.map(r => r.invited_by).filter(Boolean))]
+  const roleIds = [...new Set(rows.map(r => r.role_id).filter(Boolean))]
+
+  // Batch resolve inviter names
+  const inviterMap = new Map<string, string>()
+  if (inviterIds.length > 0) {
+    const { data: profiles } = await supabaseAdmin
+      .from('profiles')
+      .select('id, display_name, last_name, email')
+      .in('id', inviterIds)
+    for (const p of profiles ?? []) {
+      const name = [p.display_name, p.last_name].filter(Boolean).join(' ') || p.email || 'Unknown'
+      inviterMap.set(p.id, name)
+    }
+  }
+
+  // Batch resolve role names
+  const roleMap = new Map<string, string>()
+  if (roleIds.length > 0) {
+    const { data: roles } = await supabaseAdmin
+      .from('roles')
+      .select('id, name')
+      .in('id', roleIds as string[])
+    for (const r of roles ?? []) {
+      roleMap.set(r.id, r.name)
+    }
+  }
+
+  // Compute virtual expired status and enrich
   const now = new Date()
-  const invitations = (data ?? []).map(inv => ({
+  const invitations = rows.map(inv => ({
     ...inv,
-    // Virtual status: if pending and past expires_at, show as "expired"
     status: inv.status === 'pending' && new Date(inv.expires_at) < now
       ? 'expired'
       : inv.status,
+    invited_by_name: inviterMap.get(inv.invited_by) ?? 'Unknown',
+    role_name: inv.role_id ? (roleMap.get(inv.role_id) ?? null) : null,
   }))
 
   // If filtering for "pending", exclude virtually expired ones

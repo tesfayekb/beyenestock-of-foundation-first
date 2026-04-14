@@ -354,7 +354,7 @@ At each phase boundary (before advancing to the next phase):
 | DW-037 | Remove .env from Git Tracking | Post-Phase 6 | Immediate | `implemented` |
 | DW-038 | Bulk Invite CSV Upload | PLAN-INVITE-001 | `unassigned` (v2) | `deferred (v2)` |
 | DW-039 | Invitation Expiry Cleanup Cron | PLAN-INVITE-001 | `unassigned` (v2) | `deferred (v2)` |
-
+| DW-040 | Automated Invitation Follow-up Cron | PLAN-INVITE-001 | `unassigned` (v2) | `deferred (v2)` |
 
 ### DW-011: Distributed Rate Limiting
 
@@ -1000,6 +1000,30 @@ At each phase boundary (before advancing to the next phase):
 | **Related Decisions** | Q5 (stage-invitations.md) |
 | **Related Actions** | — |
 | **Required Tests for Closure** | Cron marks expired invitations; old revoked/expired records cleaned up; pending valid invitations not affected |
+| **Status** | `deferred (v2)` |
+| **Implemented by Action** | — |
+| **Implemented in Plan Version** | — |
+
+---
+
+### DW-040: Automated Invitation Follow-up Cron
+
+| Field | Value |
+|-------|-------|
+| **ID** | DW-040 |
+| **Date Deferred** | 2026-04-14 |
+| **Source Plan Section** | PLAN-INVITE-001 Phase 3 |
+| **Source Phase** | Phase 7 (PLAN-INVITE-001) |
+| **Title** | Cron job to send automated follow-up emails for pending invitations |
+| **Reason Deferred** | `followup_days` and `max_followups` config values are stored in `system_config` and settable via admin UI, but the cron job that would automatically send follow-up emails does not yet exist. Manual nudge via `send-signup-nudge` covers the use case until automation is built. |
+| **Blocking Dependencies** | PLAN-INVITE-001 implementation complete; Jobs & Scheduler module operational |
+| **Impact on Source Phase** | None — manual nudge covers the workflow; config is forward-compatible |
+| **Future Owner Phase** | `unassigned` (v2) |
+| **Future Owner Module** | Jobs & Scheduler |
+| **Required Plan Realignment** | Add `job-invitation-followup` to job registry; schedule based on `followup_days`; track follow-up count per invitation; respect `max_followups` limit |
+| **Related Decisions** | — |
+| **Related Actions** | — |
+| **Required Tests for Closure** | Cron sends follow-up at correct interval; respects max_followups; does not send to accepted/revoked/expired invitations; audit event emitted per follow-up |
 | **Status** | `deferred (v2)` |
 | **Implemented by Action** | — |
 | **Implemented in Plan Version** | — |
