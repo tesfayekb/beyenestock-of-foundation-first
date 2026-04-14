@@ -27,7 +27,6 @@ import { supabaseAdmin } from '../_shared/supabase-admin.ts'
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
 import { validateRequest } from '../_shared/validate-request.ts'
 import { normalizeRequest } from '../_shared/normalize-request.ts'
-import { normalizeRequest } from '../_shared/normalize-request.ts'
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
