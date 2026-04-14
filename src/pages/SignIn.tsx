@@ -91,7 +91,7 @@ export default function SignIn() {
       provider,
       options: {
         redirectTo: window.location.origin,
-        queryParams: { prompt: 'select_account' },
+        queryParams: { prompt: 'consent', access_type: 'offline' },
       },
     });
     if (error) {
