@@ -25,6 +25,7 @@ Authentication flows only. Authorization (permissions) is handled by the RBAC mo
 - MFA required for admin roles, optional for others
 - Social login: Google and Apple
 - Email verification required before full access
+- CAPTCHA tokens must be omitted entirely when unavailable; placeholder or empty tokens must never be forwarded to Supabase Auth
 
 ## User Flows
 
