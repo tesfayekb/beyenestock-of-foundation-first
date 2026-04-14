@@ -14,6 +14,7 @@ import { UserCircle, ShieldCheck, LogOut, LayoutDashboard, Shield } from 'lucide
 import { useUserRoles } from '@/hooks/useUserRoles';
 import { checkPermission } from '@/lib/rbac';
 import { ROUTES } from '@/config/routes';
+import { formatFullName, getInitials } from '@/lib/format-name';
 
 export function UserMenu() {
   const { user, signOut } = useAuth();
@@ -24,13 +25,10 @@ export function UserMenu() {
   const isInAdmin = location.pathname.startsWith('/admin');
   const hasAdminAccess = checkPermission(context, 'admin.access');
 
-  const displayName = user?.user_metadata?.display_name || user?.email || 'User';
-  const initials = displayName
-    .split(' ')
-    .map((n: string) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  const firstName = user?.user_metadata?.display_name;
+  const lastName = user?.user_metadata?.last_name;
+  const displayName = formatFullName(firstName, lastName, user?.email || 'User');
+  const initials = getInitials(firstName, lastName);
 
   return (
     <DropdownMenu>
