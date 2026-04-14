@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 export interface UserProfile {
   id: string;
   display_name: string | null;
+  last_name: string | null;
   avatar_url: string | null;
   email: string | null;
   email_verified: boolean | null;
@@ -24,6 +25,7 @@ interface ProfileResponse {
 
 interface UpdateProfilePayload {
   display_name?: string | null;
+  last_name?: string | null;
   avatar_url?: string | null;
 }
 
