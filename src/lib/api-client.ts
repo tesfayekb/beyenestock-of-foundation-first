@@ -70,7 +70,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   if (_cachedToken && Date.now() < _tokenExpiry) {
     return {
       'Authorization': `Bearer ${_cachedToken}`,
-      'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      'apikey': SUPABASE_PUBLISHABLE_KEY,
     };
   }
 
@@ -85,12 +85,12 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
   return {
     'Authorization': `Bearer ${session.access_token}`,
-    'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    'apikey': SUPABASE_PUBLISHABLE_KEY,
   };
 }
 
 function getBaseUrl(): string {
-  return `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+  return `${SUPABASE_URL}/functions/v1`;
 }
 
 function buildUrl(path: string, params?: Record<string, string | number | undefined | null>): string {
