@@ -5,21 +5,19 @@
  * Owner: user-onboarding module
  */
 import { useQuery } from '@tanstack/react-query';
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
 
 interface OnboardingMode {
   signup_enabled: boolean;
   invite_enabled: boolean;
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
 export function useOnboardingMode() {
   return useQuery({
     queryKey: ['public', 'onboarding-mode'],
     queryFn: async (): Promise<OnboardingMode> => {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/get-system-config`, {
-        headers: { 'apikey': ANON_KEY },
+        headers: { 'apikey': SUPABASE_PUBLISHABLE_KEY },
       });
       if (!res.ok) {
         // Default to allowing signup if config can't be fetched
