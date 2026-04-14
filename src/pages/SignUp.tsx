@@ -68,20 +68,36 @@ export default function SignUp() {
 
   const handleOAuthSignIn = useCallback(async (provider: 'google') => {
     setOauthLoading(provider);
-    // Clear any stale session before starting OAuth to prevent
-    // the app from redirecting to MFA with old credentials
-    await supabase.auth.signOut({ scope: 'local' });
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: window.location.origin,
-        queryParams: {
-          prompt: 'select_account',
+
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: window.location.origin,
+          skipBrowserRedirect: true,
+          queryParams: {
+            prompt: 'select_account',
+          },
         },
-      },
-    });
-    if (error) {
-      toast({ variant: 'destructive', title: 'Sign up failed', description: error.message });
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data?.url) {
+        throw new Error('Could not start Google sign up.');
+      }
+
+      window.location.assign(data.url);
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Sign up failed',
+        description: error instanceof Error ? error.message : 'Could not start Google sign up.',
+      });
       setOauthLoading(null);
     }
   }, [toast]);

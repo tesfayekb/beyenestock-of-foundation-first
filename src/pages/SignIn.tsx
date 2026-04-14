@@ -18,9 +18,10 @@ export default function SignIn() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+  const [oauthStarting, setOauthStarting] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
-  const { signIn, user, mfaStatus } = useAuth();
+  const { signIn, user, loading: authLoading, mfaStatus } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -31,6 +32,10 @@ export default function SignIn() {
   );
 
   useEffect(() => {
+    if (authLoading || oauthStarting) {
+      return;
+    }
+
     if (user) {
       if (mfaStatus === 'challenge_required') {
         navigate('/mfa-challenge', { replace: true });
@@ -38,7 +43,7 @@ export default function SignIn() {
         navigate(from, { replace: true });
       }
     }
-  }, [user, mfaStatus, from, navigate]);
+  }, [authLoading, oauthStarting, user, mfaStatus, from, navigate]);
 
   const getTurnstileToken = useCallback(async (): Promise<string | null> => {
     if (!TURNSTILE_ACTIVE) {
@@ -87,24 +92,38 @@ export default function SignIn() {
 
   const handleOAuthSignIn = useCallback(async (provider: 'google') => {
     setOauthLoading(provider);
-    // Clear any stale session before starting OAuth to prevent
-    // the app from redirecting to MFA with old credentials
-    await supabase.auth.signOut({ scope: 'local' });
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: window.location.origin,
-        queryParams: {
-          prompt: 'select_account',
+    setOauthStarting(true);
+
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: window.location.origin,
+          skipBrowserRedirect: true,
+          queryParams: {
+            prompt: 'select_account',
+          },
         },
-      },
-    });
-    if (error) {
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data?.url) {
+        throw new Error('Could not start Google sign-in.');
+      }
+
+      window.location.assign(data.url);
+    } catch (error) {
       toast({
         variant: 'destructive',
         title: 'Sign in failed',
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Could not start Google sign-in.',
       });
+      setOauthStarting(false);
       setOauthLoading(null);
     }
   }, [toast]);
