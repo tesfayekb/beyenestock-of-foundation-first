@@ -35,6 +35,7 @@ const AdminPermissionsPage = lazy(() => import("./pages/admin/AdminPermissionsPa
 const AdminAuditPage = lazy(() => import("./pages/admin/AdminAuditPage"));
 const AdminHealthPage = lazy(() => import("./pages/admin/AdminHealthPage"));
 const AdminJobsPage = lazy(() => import("./pages/admin/AdminJobsPage"));
+const AdminOnboardingPage = lazy(() => import("./pages/admin/AdminOnboardingPage"));
 const UserDetailPage = lazy(() => import("./pages/admin/UserDetailPage"));
 const RoleDetailPage = lazy(() => import("./pages/admin/RoleDetailPage"));
 
@@ -152,6 +153,11 @@ const App = () => (
                 <Route path="jobs" element={
                   <PermissionGate permission="jobs.view">
                     <AdminJobsPage />
+                  </PermissionGate>
+                } />
+                <Route path="onboarding" element={
+                  <PermissionGate permission="users.invite">
+                    <AdminOnboardingPage />
                   </PermissionGate>
                 } />
                 <Route path="*" element={<DashboardNotFound />} />
