@@ -138,10 +138,10 @@ export function ReauthDialog({
                 id="reauth-otp"
                 type="text"
                 inputMode="numeric"
-                placeholder="Enter the 6-digit code"
+                placeholder="Enter the code from your email"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
-                maxLength={6}
+                maxLength={8}
                 autoComplete="one-time-code"
                 autoFocus
               />
