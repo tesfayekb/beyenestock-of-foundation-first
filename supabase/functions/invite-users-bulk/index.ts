@@ -200,7 +200,7 @@ Deno.serve(createHandler(async (req: Request) => {
     action: 'user.bulk_invited',
     targetType: 'invitations',
     metadata: {
-      total_requested: emails.length,
+      total_requested: entries.length,
       succeeded_count: result.succeeded.length,
       failed_count: result.failed.length,
       skipped_existing_count: result.skipped_existing.length,
