@@ -336,6 +336,7 @@ These are one-time manual steps required after code is deployed:
 |----|-------|--------|
 | DW-038 | Bulk invite CSV upload | Textarea sufficient for v1. CSV adds dep + mapping UI. |
 | DW-039 | Invitation expiry cleanup cron | Lazy check sufficient at expected scale. Add when >1,000 expired rows accumulate. |
+| DW-040 | Automated invitation follow-up cron job | Config (`followup_days`, `max_followups`) stored in `system_config` and settable via UI, but cron implementation deferred. Expiry is calculated dynamically from these values. |
 
 ---
 
