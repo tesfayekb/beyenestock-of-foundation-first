@@ -14,16 +14,663 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      alert_configs: {
+        Row: {
+          comparison: string
+          cooldown_seconds: number
+          created_at: string
+          created_by: string
+          enabled: boolean
+          id: string
+          metric_key: string
+          severity: string
+          threshold_value: number
+          updated_at: string
+        }
+        Insert: {
+          comparison: string
+          cooldown_seconds?: number
+          created_at?: string
+          created_by: string
+          enabled?: boolean
+          id?: string
+          metric_key: string
+          severity: string
+          threshold_value: number
+          updated_at?: string
+        }
+        Update: {
+          comparison?: string
+          cooldown_seconds?: number
+          created_at?: string
+          created_by?: string
+          enabled?: boolean
+          id?: string
+          metric_key?: string
+          severity?: string
+          threshold_value?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      alert_history: {
+        Row: {
+          alert_config_id: string
+          created_at: string
+          id: string
+          metric_key: string
+          metric_value: number
+          resolved_at: string | null
+          severity: string
+          threshold_value: number
+        }
+        Insert: {
+          alert_config_id: string
+          created_at?: string
+          id?: string
+          metric_key: string
+          metric_value: number
+          resolved_at?: string | null
+          severity: string
+          threshold_value: number
+        }
+        Update: {
+          alert_config_id?: string
+          created_at?: string
+          id?: string
+          metric_key?: string
+          metric_value?: number
+          resolved_at?: string | null
+          severity?: string
+          threshold_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_history_alert_config_id_fkey"
+            columns: ["alert_config_id"]
+            isOneToOne: false
+            referencedRelation: "alert_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          correlation_id: string | null
+          created_at: string
+          id: string
+          ip_address: unknown
+          metadata: Json | null
+          target_id: string | null
+          target_type: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: unknown
+          metadata?: Json | null
+          target_id?: string | null
+          target_type?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: unknown
+          metadata?: Json | null
+          target_id?: string | null
+          target_type?: string | null
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
+      invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string | null
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string
+          role_id: string | null
+          status: string
+          token_hash: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string | null
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by: string
+          role_id?: string | null
+          status?: string
+          token_hash: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string
+          role_id?: string | null
+          status?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invitations_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_executions: {
+        Row: {
+          affected_records: number | null
+          attempt: number
+          completed_at: string | null
+          correlation_id: string | null
+          created_at: string
+          duration_ms: number | null
+          error: Json | null
+          execution_id: string
+          failure_type: string | null
+          id: string
+          job_id: string
+          job_version: string
+          metadata: Json | null
+          parent_execution_id: string | null
+          queue_delay_ms: number | null
+          resource_usage: Json | null
+          root_execution_id: string | null
+          schedule_window_id: string | null
+          scheduled_time: string | null
+          started_at: string | null
+          state: string
+        }
+        Insert: {
+          affected_records?: number | null
+          attempt?: number
+          completed_at?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: Json | null
+          execution_id?: string
+          failure_type?: string | null
+          id?: string
+          job_id: string
+          job_version?: string
+          metadata?: Json | null
+          parent_execution_id?: string | null
+          queue_delay_ms?: number | null
+          resource_usage?: Json | null
+          root_execution_id?: string | null
+          schedule_window_id?: string | null
+          scheduled_time?: string | null
+          started_at?: string | null
+          state?: string
+        }
+        Update: {
+          affected_records?: number | null
+          attempt?: number
+          completed_at?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: Json | null
+          execution_id?: string
+          failure_type?: string | null
+          id?: string
+          job_id?: string
+          job_version?: string
+          metadata?: Json | null
+          parent_execution_id?: string | null
+          queue_delay_ms?: number | null
+          resource_usage?: Json | null
+          root_execution_id?: string | null
+          schedule_window_id?: string | null
+          scheduled_time?: string | null
+          started_at?: string | null
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_executions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_idempotency_keys: {
+        Row: {
+          created_at: string
+          execution_id: string
+          expires_at: string
+          id: string
+          idempotency_key: string
+          job_id: string
+          result_hash: string | null
+        }
+        Insert: {
+          created_at?: string
+          execution_id: string
+          expires_at?: string
+          id?: string
+          idempotency_key: string
+          job_id: string
+          result_hash?: string | null
+        }
+        Update: {
+          created_at?: string
+          execution_id?: string
+          expires_at?: string
+          id?: string
+          idempotency_key?: string
+          job_id?: string
+          result_hash?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_idempotency_keys_execution_id_fkey"
+            columns: ["execution_id"]
+            isOneToOne: false
+            referencedRelation: "job_executions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_idempotency_keys_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      job_registry: {
+        Row: {
+          circuit_breaker_threshold: number | null
+          class: string
+          concurrency_policy: string
+          created_at: string
+          description: string | null
+          enabled: boolean
+          execution_guarantee: string
+          id: string
+          max_retries: number
+          owner_module: string
+          priority: string
+          replay_safe: boolean
+          retry_policy: string
+          schedule: string
+          status: string
+          timeout_seconds: number
+          trigger_type: string
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          circuit_breaker_threshold?: number | null
+          class?: string
+          concurrency_policy?: string
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          execution_guarantee?: string
+          id: string
+          max_retries?: number
+          owner_module: string
+          priority?: string
+          replay_safe?: boolean
+          retry_policy?: string
+          schedule?: string
+          status?: string
+          timeout_seconds?: number
+          trigger_type?: string
+          updated_at?: string
+          version?: string
+        }
+        Update: {
+          circuit_breaker_threshold?: number | null
+          class?: string
+          concurrency_policy?: string
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          execution_guarantee?: string
+          id?: string
+          max_retries?: number
+          owner_module?: string
+          priority?: string
+          replay_safe?: boolean
+          retry_policy?: string
+          schedule?: string
+          status?: string
+          timeout_seconds?: number
+          trigger_type?: string
+          updated_at?: string
+          version?: string
+        }
+        Relationships: []
+      }
+      mfa_recovery_attempts: {
+        Row: {
+          failed_count: number
+          last_attempt_at: string
+          locked_until: string | null
+          user_id: string
+        }
+        Insert: {
+          failed_count?: number
+          last_attempt_at?: string
+          locked_until?: string | null
+          user_id: string
+        }
+        Update: {
+          failed_count?: number
+          last_attempt_at?: string
+          locked_until?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      mfa_recovery_codes: {
+        Row: {
+          code_hash: string
+          created_at: string
+          id: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          code_hash: string
+          created_at?: string
+          id?: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          code_hash?: string
+          created_at?: string
+          id?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      permissions: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          email: string | null
+          email_verified: boolean | null
+          id: string
+          last_name: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          email_verified?: boolean | null
+          id: string
+          last_name?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          email_verified?: boolean | null
+          id?: string
+          last_name?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      role_permissions: {
+        Row: {
+          id: string
+          permission_id: string
+          role_id: string
+        }
+        Insert: {
+          id?: string
+          permission_id: string
+          role_id: string
+        }
+        Update: {
+          id?: string
+          permission_id?: string
+          role_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_permission_id_fkey"
+            columns: ["permission_id"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_permissions_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roles: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_base: boolean
+          is_immutable: boolean
+          is_permission_locked: boolean
+          key: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_base?: boolean
+          is_immutable?: boolean
+          is_permission_locked?: boolean
+          key: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_base?: boolean
+          is_immutable?: boolean
+          is_permission_locked?: boolean
+          key?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      system_config: {
+        Row: {
+          description: string | null
+          key: string
+          updated_at: string | null
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          description?: string | null
+          key: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          description?: string | null
+          key?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
+      system_health_snapshots: {
+        Row: {
+          checks: Json
+          created_at: string
+          id: string
+          status: string
+        }
+        Insert: {
+          checks?: Json
+          created_at?: string
+          id?: string
+          status: string
+        }
+        Update: {
+          checks?: Json
+          created_at?: string
+          id?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      system_metrics: {
+        Row: {
+          id: string
+          metadata: Json | null
+          metric_key: string
+          recorded_at: string
+          value: number
+        }
+        Insert: {
+          id?: string
+          metadata?: Json | null
+          metric_key: string
+          recorded_at?: string
+          value: number
+        }
+        Update: {
+          id?: string
+          metadata?: Json | null
+          metric_key?: string
+          recorded_at?: string
+          value?: number
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          id: string
+          role_id: string
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          id?: string
+          role_id: string
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          id?: string
+          role_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      cleanup_mfa_recovery_codes: { Args: never; Returns: undefined }
+      get_my_authorization_context: { Args: never; Returns: Json }
+      has_permission: {
+        Args: { _permission_key: string; _user_id: string }
+        Returns: boolean
+      }
+      has_role:
+        | {
+            Args: {
+              _role: Database["public"]["Enums"]["app_role"]
+              _user_id: string
+            }
+            Returns: boolean
+          }
+        | { Args: { _role_key: string; _user_id: string }; Returns: boolean }
+      is_superadmin: { Args: { _user_id: string }; Returns: boolean }
+      rpc_batch_delete_audit_logs: {
+        Args: { batch_size?: number; cutoff: string }
+        Returns: number
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +797,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const
