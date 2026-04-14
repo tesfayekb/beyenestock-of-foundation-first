@@ -70,7 +70,12 @@ export default function SignUp() {
     setOauthLoading(provider);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: window.location.origin,
+        queryParams: {
+          prompt: 'select_account',
+        },
+      },
     });
     if (error) {
       toast({ variant: 'destructive', title: 'Sign up failed', description: error.message });

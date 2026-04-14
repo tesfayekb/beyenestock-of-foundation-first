@@ -24,6 +24,7 @@ Authentication flows only. Authorization (permissions) is handled by the RBAC mo
 - No custom JWT generation
 - MFA required for admin roles, optional for others
 - Social login: Google only (Apple removed per DEC-025)
+- Google OAuth entry points must send `queryParams.prompt = 'select_account'` so local app sign-out cannot silently reuse an existing Google browser session
 - Email verification required before full access
 - CAPTCHA tokens must be omitted entirely when unavailable; placeholder or empty tokens must never be forwarded to Supabase Auth
 - Client-side Turnstile challenge is optional and must only render when a public `VITE_TURNSTILE_SITE_KEY` is configured for the current environment

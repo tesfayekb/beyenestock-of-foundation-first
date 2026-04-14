@@ -27,7 +27,7 @@ All authentication flows:
 | Method | Priority | Status |
 |--------|----------|--------|
 | Email + Password | Required | Implemented (Phase 1) |
-| Google OAuth | Required | Deferred (awaiting credentials — PLAN-AUTH-001-B) |
+| Google OAuth | Required | Implemented (PLAN-AUTH-001-B) |
 | Apple Sign-In | Removed | Cancelled (DEC-025) |
 | MFA (TOTP) | Required | Implemented (Phase 1) |
 
@@ -99,6 +99,7 @@ Recent authentication is required for:
 - Validate OAuth tokens server-side
 - Never trust client-provided OAuth data
 - Only link accounts using verified identity data
+- Google sign-in initiation must force `prompt=select_account` to prevent silent browser-session reuse after local sign-out
 - Prevent unsafe account merging or takeover on ambiguous identity claims
 
 ## Audit Requirements
