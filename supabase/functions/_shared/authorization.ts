@@ -85,7 +85,7 @@ export async function requireRole(
 
 // ─── requireRecentAuth ──────────────────────────────────────────────
 
-const DEFAULT_RECENT_AUTH_THRESHOLD_MS = 5 * 60 * 1000
+const DEFAULT_RECENT_AUTH_THRESHOLD_MS = 30 * 60 * 1000
 
 /**
  * Verifies user authenticated recently enough for sensitive actions.
