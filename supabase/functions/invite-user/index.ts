@@ -27,7 +27,7 @@ import { supabaseAdmin } from '../_shared/supabase-admin.ts'
 import { z } from 'https://deno.land/x/zod@v3.22.4/mod.ts'
 import { validateRequest } from '../_shared/validate-request.ts'
 import { normalizeRequest } from '../_shared/normalize-request.ts'
-import * as bcrypt from 'https://deno.land/x/bcrypt@v0.4.1/mod.ts'
+import { normalizeRequest } from '../_shared/normalize-request.ts'
 
 const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -38,17 +38,20 @@ const BodySchema = z.object({
 })
 
 /**
- * Generate a cryptographically secure token and its bcrypt hash.
+ * Generate a cryptographically secure token and its SHA-256 hash.
  */
 async function generateTokenPair(): Promise<{ rawToken: string; tokenHash: string }> {
   const bytes = new Uint8Array(32)
   crypto.getRandomValues(bytes)
-  // Base64url encode
   const rawToken = btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '')
-  const tokenHash = await bcrypt.hash(rawToken, 10)
+  // SHA-256 hash (Web Crypto API — available in edge runtime)
+  const encoder = new TextEncoder()
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(rawToken))
+  const hashArray = new Uint8Array(hashBuffer)
+  const tokenHash = Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('')
   return { rawToken, tokenHash }
 }
 
