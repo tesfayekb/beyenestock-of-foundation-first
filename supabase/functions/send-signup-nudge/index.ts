@@ -90,8 +90,9 @@ Deno.serve(createHandler(async (req: Request) => {
   }
 
   // Check if user already signed up
-  const { data: existingUser } = await supabaseAdmin.auth.admin.getUserByEmail(invitation.email)
-  if (existingUser?.user?.email_confirmed_at) {
+  const { data: userList } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  const existingUser = userList?.users?.find(u => u.email === invitation.email)
+  if (existingUser?.email_confirmed_at) {
     const { apiError } = await import('../_shared/api-error.ts')
     return apiError(409, 'User has already signed up.', {
       code: 'USER_ALREADY_EXISTS',

@@ -175,7 +175,6 @@ Deno.serve(createHandler(async (req: Request) => {
           return apiError(409, `Cannot revoke ${permission.key}: required by ${blockers.join(', ')}`, {
             correlationId: ctx.correlationId,
             code: 'DEPENDENCY_VIOLATION',
-            blocked_by: blockers,
           })
         }
       }
