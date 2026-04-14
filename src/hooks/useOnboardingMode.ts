@@ -5,14 +5,12 @@
  * Owner: user-onboarding module
  */
 import { useQuery } from '@tanstack/react-query';
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from '@/integrations/supabase/client';
 
 interface OnboardingMode {
   signup_enabled: boolean;
   invite_enabled: boolean;
 }
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 export function useOnboardingMode() {
   return useQuery({

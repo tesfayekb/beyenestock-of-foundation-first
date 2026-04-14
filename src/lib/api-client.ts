@@ -3,7 +3,7 @@
  * Single source of truth for auth, error handling, and response normalization.
  */
 import * as Sentry from '@sentry/react';
-import { supabase } from '@/integrations/supabase/client';
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, supabase } from '@/integrations/supabase/client';
 
 class ApiError extends Error {
   constructor(
