@@ -21,20 +21,21 @@ export interface Invitation {
 }
 
 interface InvitationsResponse {
-  data: {
-    invitations: Invitation[];
+  invitations: Invitation[];
+  pagination: {
+    page: number;
+    per_page: number;
     total: number;
-    limit: number;
-    offset: number;
   };
+  correlation_id: string;
 }
 
 export const INVITATIONS_KEY = ['admin', 'invitations'] as const;
 
 export function useInvitations(params?: {
   status?: string;
-  limit?: number;
-  offset?: number;
+  page?: number;
+  perPage?: number;
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -44,10 +45,9 @@ export function useInvitations(params?: {
     queryFn: async () => {
       const queryParams: Record<string, string | number | undefined> = {};
       if (params?.status && params.status !== 'all') queryParams.status = params.status;
-      if (params?.limit) queryParams.limit = params.limit;
-      if (params?.offset) queryParams.offset = params.offset;
-      const res = await apiClient.get<InvitationsResponse>('list-invitations', queryParams);
-      return res.data;
+      if (params?.page) queryParams.page = params.page;
+      if (params?.perPage) queryParams.per_page = params.perPage;
+      return apiClient.get<InvitationsResponse>('list-invitations', queryParams);
     },
     staleTime: 30_000,
   });
@@ -80,7 +80,7 @@ export function useInvitations(params?: {
 
   return {
     invitations: query.data?.invitations ?? [],
-    total: query.data?.total ?? 0,
+    total: query.data?.pagination?.total ?? 0,
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,
