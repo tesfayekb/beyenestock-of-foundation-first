@@ -24,6 +24,12 @@ class ApiError extends Error {
 let _cachedToken: string | null = null;
 let _tokenExpiry = 0;
 
+/** Force the next API call to fetch a fresh session token. */
+export function invalidateTokenCache() {
+  _cachedToken = null;
+  _tokenExpiry = 0;
+}
+
 // Clear cache on auth state change (sign-out, token refresh)
 const { data: { subscription: _authSubscription } } = supabase.auth.onAuthStateChange((_event, session) => {
   if (session) {
