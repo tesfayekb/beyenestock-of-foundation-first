@@ -40,7 +40,7 @@ export function OnboardingModeCard() {
     if (!draft) return;
     await updateConfig(draft);
     setDraft(null);
-    setConfirmOpen(false);
+    setReauthOpen(false);
   }, [draft, updateConfig]);
 
   const handleCancel = useCallback(() => {
