@@ -51,4 +51,16 @@ import "@fontsource/jetbrains-mono/500.css";
 
 import "./index.css";
 
+/**
+ * Suppress unhandled promise rejections for expected API errors (4xx).
+ * These are already handled by React Query's onError callbacks and displayed
+ * as toasts — they must NOT trigger Lovable's runtime error overlay.
+ */
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  if (reason && typeof reason === 'object' && reason.name === 'ApiError' && reason.status < 500) {
+    event.preventDefault();
+  }
+});
+
 createRoot(document.getElementById("root")!).render(<App />);
