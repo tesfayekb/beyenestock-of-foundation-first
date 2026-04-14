@@ -87,6 +87,9 @@ export default function SignIn() {
 
   const handleOAuthSignIn = useCallback(async (provider: 'google') => {
     setOauthLoading(provider);
+    // Clear any stale session before starting OAuth to prevent
+    // the app from redirecting to MFA with old credentials
+    await supabase.auth.signOut({ scope: 'local' });
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
