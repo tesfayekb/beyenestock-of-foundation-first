@@ -95,7 +95,6 @@ export default function SecurityPage() {
   const identities = user?.identities ?? [];
   const linkedProviders = identities.map(i => i.provider);
   const hasGoogle = linkedProviders.includes('google');
-  const hasApple = linkedProviders.includes('apple');
   const canUnlink = identities.length > 1; // must keep at least one auth method
 
   const handleLinkProvider = useCallback(async (provider: 'google' | 'apple') => {
