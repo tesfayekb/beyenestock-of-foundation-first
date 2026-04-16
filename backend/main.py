@@ -15,6 +15,7 @@ from polygon_feed import PolygonFeed
 from prediction_engine import PredictionEngine
 from session_manager import get_or_create_session
 from tradier_feed import TradierFeed
+from trading_cycle import run_trading_cycle
 
 logger = get_logger("main")
 app = FastAPI()
@@ -49,14 +50,10 @@ def load_jobs_from_registry() -> Dict[str, str]:
 
 
 def run_prediction_cycle() -> None:
-    """Runs every 5 minutes. Core prediction loop."""
-    try:
-        prediction_engine.run_cycle()
-    except Exception as exc:
-        logger.error("prediction_cycle_error", error=str(exc))
-        write_health_status(
-            "prediction_engine", "error", last_error_message=str(exc)
-        )
+    """Runs every 5 minutes. Full prediction -> strategy -> execution cycle."""
+    result = run_trading_cycle(account_value=100_000.0, sizing_phase=1)
+    if result.get("skipped_reason"):
+        logger.info("cycle_skipped", reason=result["skipped_reason"])
 
 
 def gex_heartbeat_keepalive() -> None:

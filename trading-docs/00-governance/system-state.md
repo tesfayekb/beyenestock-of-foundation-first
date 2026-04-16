@@ -76,9 +76,9 @@ sentinel_deployed: false
 | Trading Database Schema | Lovable | `implemented` | Supabase |
 | Data Ingestor | Cursor | `in_progress` | Python/Railway |
 | Prediction Engine | Cursor | `in_progress` | Python/Railway |
-| Strategy Selector | Cursor | `not_started` | Python/Railway |
-| Risk Engine | Cursor | `not_started` | Python/Railway |
-| Execution Engine | Cursor | `not_started` | Python/Railway |
+| Strategy Selector | Cursor | `in_progress` | Python/Railway |
+| Risk Engine | Cursor | `in_progress` | Python/Railway |
+| Execution Engine | Cursor | `in_progress` | Python/Railway |
 | Learning Engine | Cursor | `not_started` | Python/Railway |
 | Sentinel | Cursor | `not_started` | Python/GCP |
 | War Room Page | Lovable | `not_started` | React/TypeScript |

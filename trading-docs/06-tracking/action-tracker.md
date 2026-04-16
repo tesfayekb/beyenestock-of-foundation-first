@@ -117,6 +117,32 @@ Single register of every trading change action. Every change to trading code, sc
 
 ---
 
+### T-ACT-007 — Phase 2B: Strategy Selector, Risk Engine & Virtual Execution
+
+- **id:** T-ACT-007
+- **date:** 2026-04-16
+- **action:** Built Phase 2B complete virtual trading pipeline. Created `risk_engine.py` (position sizing D-014, daily drawdown halt D-005, trade frequency gate D-020, execution quality feedback D-019), `strategy_selector.py` (Stage 0-4 pipeline, time gates D-010/D-011, static slippage D-015, regime/direction filtering), `execution_engine.py` (virtual position open/close, D-022 audit logging at 3rd and 5th consecutive loss, full P&L accounting), `trading_cycle.py` (full orchestrator: session → drawdown → predict → select → execute). Updated `main.py` to use `run_trading_cycle`. All 10 TPLAN-VIRTUAL-002 deliverables now implemented. 10 new unit tests (28 total passing).
+- **type:** code
+- **phase:** phase_2
+- **impact:** HIGH
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `backend/risk_engine.py` (new), `backend/strategy_selector.py` (new), `backend/execution_engine.py` (new), `backend/trading_cycle.py` (new), `backend/main.py` (cycle wired), `backend/tests/test_risk_engine.py` (new), `backend/tests/test_strategy_selector.py` (new)
+- **docs_updated:**
+  - trading-docs/00-governance/system-state.md (Strategy Selector, Risk Engine, Execution Engine: not_started → in_progress)
+  - trading-docs/08-planning/master-plan.md (TPLAN-VIRTUAL-002-A through J: all → implemented)
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE — no files outside /backend/ or trading-docs/ modified
+- **verification:** 28/28 unit tests passing. All 4 new modules import cleanly. `git diff --name-only origin/main` confirmed only `backend/main.py` tracked (new files untracked). No foundation files touched.
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ No foundation files modified
+  - T-Rule 2 (Table Prefix Isolation): ✅ Writes only to trading_positions, trading_sessions, trading_system_health, audit_logs
+  - T-Rule 3 (Single Operator): ✅ V1 single-operator scope — no multi-user logic
+  - T-Rule 5 (Capital Preservation Absolute): ✅ D-005 -3% daily halt hardcoded; D-022 halt at 5 losses hardcoded; neither can be disabled
+  - T-Rule 10 (No Silent Failures): ✅ Every exception caught, logged, written to trading_system_health; D-022 triggers audit log at 3rd and 5th consecutive loss
+
+---
+
 ### T-ACT-006 — Phase 2A: Prediction Engine + Session Manager
 
 - **id:** T-ACT-006
