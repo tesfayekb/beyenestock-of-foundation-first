@@ -6,6 +6,7 @@
 
 ```yaml
 trading_phase: phase_1_not_started
+trading_schema_migration: T-MIG-001_applied
 code_generation: allowed
 live_trading: blocked
 paper_trading: blocked
@@ -72,7 +73,7 @@ sentinel_deployed: false
 
 | Module | Owner | Status | Platform |
 |--------|-------|--------|----------|
-| Trading Database Schema | Lovable | `not_started` | Supabase |
+| Trading Database Schema | Lovable | `implemented` | Supabase |
 | Data Ingestor | Cursor | `not_started` | Python/Railway |
 | Prediction Engine | Cursor | `not_started` | Python/Railway |
 | Strategy Selector | Cursor | `not_started` | Python/Railway |
