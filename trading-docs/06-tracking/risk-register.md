@@ -11,7 +11,7 @@ Active risks that could compromise the trading system's profitability, capital p
 - **Likelihood:** 1 (rare) – 5 (almost certain)
 - **Impact:** 1 (negligible) – 5 (catastrophic)
 - **Score:** Likelihood × Impact (max 25)
-- **Severity:** LOW (1–6), MEDIUM (7–12), HIGH (13–19), CRITICAL (20–25)
+- **Severity:** LOW (1–6), MEDIUM (7–12), HIGH (13–19), CRITICAL (20–25) — Impact-5 risks are elevated to CRITICAL regardless of score
 
 ---
 
@@ -87,7 +87,7 @@ Active risks that could compromise the trading system's profitability, capital p
 
 ### T-RISK-006 — Live Tradier API Key Exposure
 - **Type:** Security / Catastrophic
-- **Likelihood:** 2 | **Impact:** 5 | **Score:** 10 | **Severity:** CRITICAL (impact-driven)
+- **Likelihood:** 2 | **Impact:** 5 | **Score:** 10 | **Severity:** CRITICAL (impact-driven override)
 - **Description:** Tradier API key leaked via client-side code, logs, screenshots, or audit metadata. Attacker gains live trading access to operator account.
 - **Detection Method:**
   - Code review on every PR touching `trading_operator_config` or `execution_engine`
