@@ -61,12 +61,12 @@ Authoritative registry of all trading frontend routes. No trading route may exis
 
 ### ADMIN_TRADING_HEALTH
 - **Path:** `/admin/trading/health`
-- **Page Component:** `AdminTradingHealthPage`
+- **Page Component:** `TradingHealthPage` (file: `src/pages/admin/trading/HealthPage.tsx`)
 - **Required Permission:** `trading.view`
 - **Classification:** Privileged (admin-only)
 - **Refetch Interval:** 10s (always)
 - **Note:** SEPARATE from foundation `/admin/health`. Uses `trading_system_health` table, NOT `system_health_snapshots`.
-- **Status:** `planned`
+- **Status:** `implemented` (T-ACT-002, 2026-04-16)
 
 ### ADMIN_TRADING_CONFIG
 - **Path:** `/admin/trading/config`
@@ -88,5 +88,5 @@ Authoritative registry of all trading frontend routes. No trading route may exis
 | ADMIN_TRADING_POSITIONS | `/admin/trading/positions` | `trading.view` | `planned` |
 | ADMIN_TRADING_SIGNALS | `/admin/trading/signals` | `trading.view` | `planned` |
 | ADMIN_TRADING_PERFORMANCE | `/admin/trading/performance` | `trading.view` | `planned` |
-| ADMIN_TRADING_HEALTH | `/admin/trading/health` | `trading.view` | `planned` |
+| ADMIN_TRADING_HEALTH | `/admin/trading/health` | `trading.view` | `implemented` |
 | ADMIN_TRADING_CONFIG | `/admin/trading/config` | `trading.configure` | `planned` |
