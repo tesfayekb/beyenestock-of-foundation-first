@@ -28,4 +28,13 @@ export const ROUTES = {
   ADMIN_HEALTH: '/admin/health',
   ADMIN_JOBS: '/admin/jobs',
   ADMIN_ONBOARDING: '/admin/onboarding',
+
+  // Trading (Phase 1+) — privileged, separate from foundation /admin/health
+  ADMIN_TRADING: '/admin/trading',
+  ADMIN_TRADING_WARROOM: '/admin/trading/warroom',
+  ADMIN_TRADING_POSITIONS: '/admin/trading/positions',
+  ADMIN_TRADING_SIGNALS: '/admin/trading/signals',
+  ADMIN_TRADING_PERFORMANCE: '/admin/trading/performance',
+  ADMIN_TRADING_HEALTH: '/admin/trading/health',
+  ADMIN_TRADING_CONFIG: '/admin/trading/config',
 } as const;
