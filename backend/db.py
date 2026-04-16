@@ -30,6 +30,9 @@ def write_health_status(service_name: str, status: str, **kwargs) -> bool:
             "last_heartbeat_at": datetime.now(timezone.utc).isoformat(),
             **kwargs,
         }
+        # Always clear last_error_message when status is healthy — do not persist stale errors
+        if status == "healthy" and "last_error_message" not in kwargs:
+            payload["last_error_message"] = None
         get_client().table("trading_system_health").upsert(
             payload, on_conflict="service_name"
         ).execute()

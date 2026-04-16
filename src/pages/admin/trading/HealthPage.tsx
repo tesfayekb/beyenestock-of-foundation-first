@@ -150,7 +150,7 @@ function TradingServiceCard({ serviceName, row }: TradingServiceCardProps) {
                 {row.error_count_1h ?? 0}
               </span>
             </p>
-            {row.last_error_message && (
+            {row.last_error_message && row.status !== 'healthy' && (
               <p className="mt-2 truncate text-destructive" title={row.last_error_message}>
                 {row.last_error_message}
               </p>

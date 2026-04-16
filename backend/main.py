@@ -115,11 +115,11 @@ def heartbeat_check() -> None:
             heartbeat = datetime.fromisoformat(
                 row["last_heartbeat_at"].replace("Z", "+00:00")
             )
-            if (now - heartbeat).total_seconds() > 120:
+            if (now - heartbeat).total_seconds() > 360:
                 write_health_status(
                     row["service_name"],
-                    "offline",
-                    last_error_message="heartbeat_stale_over_120s",
+                    "degraded",
+                    last_error_message=None,
                 )
     except Exception as exc:
         logger.critical("heartbeat_check_failed", error=str(exc))
