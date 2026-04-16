@@ -45,6 +45,19 @@ def load_jobs_from_registry() -> Dict[str, str]:
     return {row["id"]: row["schedule"] for row in rows}
 
 
+def gex_heartbeat_keepalive() -> None:
+    """Keep GEX engine health status alive during market-closed periods."""
+    try:
+        write_health_status(
+            "gex_engine",
+            "healthy",
+            gex_confidence=0.0,
+            gex_staleness_seconds=0,
+        )
+    except Exception as exc:
+        logger.error("gex_heartbeat_keepalive_failed", error=str(exc))
+
+
 def pre_market_scan() -> None:
     logger.info("pre_market_scan not yet implemented")
 
@@ -105,6 +118,12 @@ async def on_startup() -> None:
                 hour=9,
                 minute=0,
             )
+        scheduler.add_job(
+            gex_heartbeat_keepalive,
+            trigger="interval",
+            id="gex_heartbeat_keepalive",
+            seconds=30,
+        )
         scheduler.start()
 
         background_tasks.extend(

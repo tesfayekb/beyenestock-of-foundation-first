@@ -114,3 +114,27 @@ Single register of every trading change action. Every change to trading code, sc
   - T-Rule 2 (Table Prefix Isolation): ✅ Only writes to trading_* tables
   - T-Rule 7 (Security Inheritance): ✅ Service role key, no keys in code
   - T-Rule 10 (No Silent Failures): ✅ Every exception logged, health status updated
+
+---
+
+### T-ACT-005 — Phase 1 Complete + GEX Heartbeat Keepalive Fix
+
+- **id:** T-ACT-005
+- **date:** 2026-04-16
+- **action:** Closed Phase 1 — Python backend deployed to Railway on Python 3.11, all 4 data feeds connected (Tradier, Databento, Polygon/VVIX, GEX), Engine Health page showing live data, all Phase 1 gate criteria met. Added `gex_heartbeat_keepalive()` scheduled job (30s interval, always-on) to ensure GEX engine reports healthy during market-closed periods when no computation is running.
+- **type:** code
+- **phase:** phase_1
+- **impact:** MEDIUM
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `backend/main.py` (new `gex_heartbeat_keepalive` function + APScheduler registration)
+- **docs_updated:**
+  - trading-docs/00-governance/system-state.md (Phase 1: not_started → complete, Go/No-Go: ❌ Not evaluated → ✅ Passed)
+  - trading-docs/08-planning/master-plan.md (TPLAN-INFRA-001-C, D, F, G: in_progress → implemented)
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE — no files outside /backend/ or trading-docs/ modified
+- **verification:** All Phase 1 gate criteria met: Python 3.11 via .python-version + nixpacks.toml, all 4 feeds connected and writing to Supabase, Engine Health page live, GEX heartbeat keepalive prevents false-offline status during market-closed hours.
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ No foundation files modified
+  - T-Rule 2 (Table Prefix Isolation): ✅ Only writes to trading_system_health (trading_ prefix)
+  - T-Rule 10 (No Silent Failures): ✅ gex_heartbeat_keepalive logs exceptions, never swallows errors
