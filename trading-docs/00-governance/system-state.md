@@ -74,7 +74,7 @@ sentinel_deployed: false
 | Module | Owner | Status | Platform |
 |--------|-------|--------|----------|
 | Trading Database Schema | Lovable | `implemented` | Supabase |
-| Data Ingestor | Cursor | `not_started` | Python/Railway |
+| Data Ingestor | Cursor | `in_progress` | Python/Railway |
 | Prediction Engine | Cursor | `not_started` | Python/Railway |
 | Strategy Selector | Cursor | `not_started` | Python/Railway |
 | Risk Engine | Cursor | `not_started` | Python/Railway |
@@ -109,7 +109,7 @@ margin_enabled: false
 | Feed | Provider | Status | Monthly Cost |
 |------|----------|--------|-------------|
 | Streaming Quotes | Tradier | `not_connected` | Commission only |
-| OPRA Trade-by-Trade | Databento | `not_subscribed` | ~$150/mo |
+| OPRA Trade-by-Trade | Databento | `active` | ~$150/mo |
 | Option EOD Summary | CBOE DataShop | `pending_approval` | ~$40–60/mo |
 | VVIX / Breadth | Polygon.io | `active` | Already paid |
 | Options Flow | Unusual Whales | `active` | Already paid |
