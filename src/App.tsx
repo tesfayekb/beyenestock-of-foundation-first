@@ -161,6 +161,11 @@ const App = () => (
                     <AdminOnboardingPage />
                   </PermissionGate>
                 } />
+                <Route path="trading/health" element={
+                  <PermissionGate permission="trading.view">
+                    <TradingHealthPage />
+                  </PermissionGate>
+                } />
                 <Route path="*" element={<DashboardNotFound />} />
               </Route>
 

@@ -58,3 +58,36 @@ Single register of every trading change action. Every change to trading code, sc
   - T-Rule 4 (Locked Decisions): ✅ Schema implements D-005, D-006, D-010, D-011, D-013, D-014, D-018, D-022 storage requirements
   - T-Rule 7 (Security Inheritance): ✅ RLS on every table, service_role writes, authenticated reads (calibration log: service_role only)
   - T-Rule 10 (No Silent Failures): ✅ trading_system_health table created for heartbeat monitoring
+
+---
+
+### T-ACT-002 — Engine Health Page Implemented (TPLAN-INFRA-001-I)
+
+- **id:** T-ACT-002
+- **date:** 2026-04-16
+- **action:** Implemented `/admin/trading/health` (Engine Health). Added `ADMIN_TRADING_*` route constants, "Trading System" navigation section, lazy-loaded `TradingHealthPage` with `RequirePermission` (`trading.view`), 10s polling on `trading_system_health`, market-hours CRITICAL banner, and last-10 trading alerts panel.
+- **type:** code
+- **phase:** phase_1
+- **impact:** MEDIUM (new admin page, isolated trading namespace, no foundation logic touched)
+- **owner:** Lovable
+- **modules_affected:**
+  - Trading: `src/pages/admin/trading/HealthPage.tsx` (new)
+  - Foundation routing/nav (additive only): `src/config/routes.ts`, `src/config/admin-navigation.ts`, `src/App.tsx`
+- **docs_updated:**
+  - trading-docs/07-reference/route-index.md (ADMIN_TRADING_HEALTH: planned → implemented)
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** Additive only — appended trading route constants, appended a "Trading System" nav section, appended one nested route under `/admin`. No foundation routes, components, or behavior modified.
+- **verification:**
+  - Page queries `trading_system_health` (NOT `system_health_snapshots`) — confirmed in code
+  - `refetchInterval: 10_000` set unconditionally per route-index.md
+  - Empty state ("Services not yet reporting") shown when table is empty — not an error
+  - CRITICAL banner gated on `isMarketHoursET()` (9:30–16:00 America/New_York, weekdays) AND offline count > 0
+  - Permission gate `trading.view` enforced at route level via `PermissionGate`
+  - Single combined `Promise.all` query for health + alerts (matches existing pattern)
+  - PENDING: Operator E2E sign-in + visit `/admin/trading/health` to confirm empty state renders
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ Only additive changes to routes/nav/App; foundation pages untouched
+  - T-Rule 2 (Table Prefix Isolation): ✅ Reads from `trading_system_health` and filters `alert_history` by `trading.%` metric_key
+  - T-Rule 3 (Route Namespace Isolation): ✅ Lives under `/admin/trading/*`
+  - T-Rule 7 (Security Inheritance): ✅ Reuses `RequirePermission`, `AdminLayout`, `trading.view` permission from index
+  - T-Rule 10 (No Silent Failures): ✅ Empty state distinguishes "no backend yet" from errors; ErrorState shown on real failures
