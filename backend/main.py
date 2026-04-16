@@ -12,6 +12,8 @@ from db import get_client, write_health_status
 from gex_engine import GexEngine
 from logger import get_logger
 from polygon_feed import PolygonFeed
+from prediction_engine import PredictionEngine
+from session_manager import get_or_create_session
 from tradier_feed import TradierFeed
 
 logger = get_logger("main")
@@ -23,6 +25,7 @@ tradier_feed = TradierFeed()
 polygon_feed = PolygonFeed()
 databento_feed = DatabentoFeed()
 gex_engine = GexEngine()
+prediction_engine = PredictionEngine()
 background_tasks: List[asyncio.Task] = []
 
 
@@ -43,6 +46,17 @@ def load_jobs_from_registry() -> Dict[str, str]:
         .data
     )
     return {row["id"]: row["schedule"] for row in rows}
+
+
+def run_prediction_cycle() -> None:
+    """Runs every 5 minutes. Core prediction loop."""
+    try:
+        prediction_engine.run_cycle()
+    except Exception as exc:
+        logger.error("prediction_cycle_error", error=str(exc))
+        write_health_status(
+            "prediction_engine", "error", last_error_message=str(exc)
+        )
 
 
 def gex_heartbeat_keepalive() -> None:
@@ -124,7 +138,17 @@ async def on_startup() -> None:
             id="gex_heartbeat_keepalive",
             seconds=30,
         )
+        scheduler.add_job(
+            run_prediction_cycle,
+            trigger="interval",
+            minutes=5,
+            id="trading_prediction_cycle_local",
+            replace_existing=True,
+        )
         scheduler.start()
+
+        # Create today's trading session on startup
+        get_or_create_session()
 
         background_tasks.extend(
             [

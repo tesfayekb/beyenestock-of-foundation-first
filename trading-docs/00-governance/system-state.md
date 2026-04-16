@@ -75,7 +75,7 @@ sentinel_deployed: false
 |--------|-------|--------|----------|
 | Trading Database Schema | Lovable | `implemented` | Supabase |
 | Data Ingestor | Cursor | `in_progress` | Python/Railway |
-| Prediction Engine | Cursor | `not_started` | Python/Railway |
+| Prediction Engine | Cursor | `in_progress` | Python/Railway |
 | Strategy Selector | Cursor | `not_started` | Python/Railway |
 | Risk Engine | Cursor | `not_started` | Python/Railway |
 | Execution Engine | Cursor | `not_started` | Python/Railway |
