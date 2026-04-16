@@ -19,7 +19,7 @@ Active risks that could compromise the trading system's profitability, capital p
 
 ### T-RISK-001 — Silent Trading Engine Failure
 - **Type:** Operational / Reliability
-- **Likelihood:** 3 | **Impact:** 5 | **Score:** 15 | **Severity:** CRITICAL
+- **Likelihood:** 3 | **Impact:** 5 | **Score:** 15 | **Severity:** CRITICAL (impact-driven override)
 - **Description:** A module in the prediction, strategy, risk, or execution chain fails silently — no exception thrown, no alert raised, but the system stops generating valid signals or stops monitoring positions.
 - **Detection Method:**
   - `trading_system_health` heartbeat upsert every 10s — any service > 30s stale triggers alert
@@ -47,7 +47,7 @@ Active risks that could compromise the trading system's profitability, capital p
 
 ### T-RISK-003 — Slippage Model Cold Start
 - **Type:** Model / Execution quality
-- **Likelihood:** 5 | **Impact:** 3 | **Score:** 15 | **Severity:** HIGH
+- **Likelihood:** 5 | **Impact:** 3 | **Score:** 15 | **Severity:** HIGH (impact-driven override)
 - **Description:** Predictive LightGBM slippage model (D-015) requires ≥ 200 fill observations to be calibrated. During paper phase startup, the model is untrained and falls back to static slippage estimates.
 - **Detection Method:**
   - `trading_system_health.slippage_model_observations` tracks observation count
@@ -103,7 +103,7 @@ Active risks that could compromise the trading system's profitability, capital p
 
 ### T-RISK-007 — Foundation Module Regression
 - **Type:** Operational / Trust
-- **Likelihood:** 3 | **Impact:** 5 | **Score:** 15 | **Severity:** CRITICAL
+- **Likelihood:** 3 | **Impact:** 5 | **Score:** 15 | **Severity:** CRITICAL (impact-driven override)
 - **Description:** Trading work accidentally breaks a foundation feature (auth, RBAC, profile, audit, health, jobs). Foundation stability is compromised, blocking all users.
 - **Detection Method:**
   - Post-migration verification checklist (regression-strategy.md section 5)
