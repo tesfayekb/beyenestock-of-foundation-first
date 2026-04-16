@@ -14,10 +14,10 @@ from strategy_selector import StrategySelector
 
 logger = get_logger("trading_cycle")
 
-# Module-level singletons — initialized once, reused across calls
-_prediction_engine = PredictionEngine()
-_strategy_selector = StrategySelector()
-_execution_engine = ExecutionEngine()
+# Lazy-initialized singletons — created on first cycle to avoid startup race
+_prediction_engine = None
+_strategy_selector = None
+_execution_engine = None
 
 
 def run_trading_cycle(
@@ -29,6 +29,14 @@ def run_trading_cycle(
     Returns result dict with prediction, signal, position, and skip reason.
     Never raises.
     """
+    global _prediction_engine, _strategy_selector, _execution_engine
+    if _prediction_engine is None:
+        _prediction_engine = PredictionEngine()
+    if _strategy_selector is None:
+        _strategy_selector = StrategySelector()
+    if _execution_engine is None:
+        _execution_engine = ExecutionEngine()
+
     result: dict = {
         "prediction": None,
         "signal": None,
