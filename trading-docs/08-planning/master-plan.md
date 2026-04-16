@@ -17,13 +17,13 @@ The authoritative 7-phase build plan for the MarketMuse trading system. Each pha
 
 | ID | Deliverable | Platform | Status |
 |----|-------------|----------|--------|
-| TPLAN-INFRA-001-A | Subscribe to Databento OPRA | External | `not_started` |
+| TPLAN-INFRA-001-A | Subscribe to Databento OPRA | External | `implemented` |
 | TPLAN-INFRA-001-B | Subscribe to CBOE DataShop Option EOD Summary | External | `pending_approval` |
-| TPLAN-INFRA-001-C | Tradier WebSocket connection + heartbeat monitor | Python/Railway | `not_started` |
-| TPLAN-INFRA-001-D | Databento OPRA stream + Lee-Ready GEX synthesis | Python/Railway | `not_started` |
+| TPLAN-INFRA-001-C | Tradier WebSocket connection + heartbeat monitor | Python/Railway | `in_progress` |
+| TPLAN-INFRA-001-D | Databento OPRA stream + Lee-Ready GEX synthesis | Python/Railway | `in_progress` |
 | TPLAN-INFRA-001-E | CBOE DataShop SFTP file pickup + morning OI baseline | Python/Railway | `not_started` |
-| TPLAN-INFRA-001-F | VVIX 20-day baseline computation from Polygon | Python/Railway | `not_started` |
-| TPLAN-INFRA-001-G | Write all data to Supabase + trading_system_health heartbeats | Python/Railway | `not_started` |
+| TPLAN-INFRA-001-F | VVIX 20-day baseline computation from Polygon | Python/Railway | `in_progress` |
+| TPLAN-INFRA-001-G | Write all data to Supabase + trading_system_health heartbeats | Python/Railway | `in_progress` |
 | TPLAN-INFRA-001-H | Run Supabase migration (all trading tables from Part 4) | Lovable/Supabase | `not_started` |
 | TPLAN-INFRA-001-I | Engine Health page (`/admin/trading/health`) | Lovable/React | `implemented` |
 

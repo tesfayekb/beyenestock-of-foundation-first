@@ -91,3 +91,26 @@ Single register of every trading change action. Every change to trading code, sc
   - T-Rule 3 (Route Namespace Isolation): ✅ Lives under `/admin/trading/*`
   - T-Rule 7 (Security Inheritance): ✅ Reuses `RequirePermission`, `AdminLayout`, `trading.view` permission from index
   - T-Rule 10 (No Silent Failures): ✅ Empty state distinguishes "no backend yet" from errors; ErrorState shown on real failures
+
+---
+
+### T-ACT-003 — Phase 1 Python Backend Scaffold
+
+- **id:** T-ACT-003
+- **date:** 2026-04-16
+- **action:** Created Python backend data infrastructure: config.py, db.py,
+  logger.py, tradier_feed.py, polygon_feed.py, databento_feed.py, gex_engine.py,
+  main.py, requirements.txt, .env.example, unit tests
+- **type:** code
+- **phase:** phase_1
+- **impact:** HIGH
+- **owner:** Cursor
+- **modules_affected:** data_ingestor, gex_engine, tradier_websocket, databento_feed
+- **docs_updated:** system-state.md, master-plan.md, action-tracker.md
+- **foundation_impact:** NONE — no files outside /backend/ or .gitignore modified
+- **verification:** All unit tests pass. No hardcoded keys. No foundation files touched.
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ No foundation files modified
+  - T-Rule 2 (Table Prefix Isolation): ✅ Only writes to trading_* tables
+  - T-Rule 7 (Security Inheritance): ✅ Service role key, no keys in code
+  - T-Rule 10 (No Silent Failures): ✅ Every exception logged, health status updated
