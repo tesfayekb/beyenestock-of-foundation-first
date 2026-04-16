@@ -16,6 +16,7 @@ from prediction_engine import PredictionEngine
 from session_manager import get_or_create_session
 from tradier_feed import TradierFeed
 from trading_cycle import run_trading_cycle
+from criteria_evaluator import run_criteria_evaluation
 
 logger = get_logger("main")
 app = FastAPI()
@@ -95,6 +96,15 @@ def execution_engine_keepalive() -> None:
         write_health_status("execution_engine", "healthy")
     except Exception as exc:
         logger.error("execution_engine_keepalive_failed", error=str(exc))
+
+
+def run_eod_criteria_evaluation() -> None:
+    """Runs daily at 4:30 PM ET after market close."""
+    try:
+        summary = run_criteria_evaluation()
+        logger.info("eod_criteria_evaluation_done", **summary)
+    except Exception as exc:
+        logger.error("eod_criteria_evaluation_error", error=str(exc))
 
 
 def pre_market_scan() -> None:
@@ -192,6 +202,14 @@ async def on_startup() -> None:
             trigger="interval",
             minutes=5,
             id="trading_prediction_cycle_local",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            run_eod_criteria_evaluation,
+            trigger="cron",
+            hour=21,      # 4:30 PM ET = 21:30 UTC
+            minute=30,
+            id="trading_eod_criteria_evaluation",
             replace_existing=True,
         )
         scheduler.start()
