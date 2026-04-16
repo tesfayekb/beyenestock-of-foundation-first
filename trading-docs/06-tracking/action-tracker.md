@@ -29,6 +29,31 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-009 — Phase 3B: Positions, Signals, Performance & Config Pages
+
+- **id:** T-ACT-009
+- **date:** 2026-04-16
+- **action:** Built Phase 3B — replaced all 4 placeholder pages with full implementations. `PositionsPage.tsx`: filterable table (All/Open/Closed tabs), stat cards, complete position details with P&L coloring and status badges. `SignalsPage.tsx`: prediction engine output log with direction badges, RCS/CV_Stress coloring, no-trade signal indicators. `PerformancePage.tsx`: session history table (last 30 sessions), model performance metrics grid (5/20/60-day accuracy, drift status, profit factor, challenger active), stat summary cards. `ConfigPage.tsx`: Tradier connection status with sandbox warning, sizing phase visual indicator (4 steps), paper phase go-live criteria (3 pending items), danger zone kill switch wired to live session. Phase 3 complete.
+- **type:** code
+- **phase:** phase_3
+- **impact:** HIGH
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `src/pages/admin/trading/PositionsPage.tsx` (replaced), `src/pages/admin/trading/SignalsPage.tsx` (replaced), `src/pages/admin/trading/PerformancePage.tsx` (replaced), `src/pages/admin/trading/ConfigPage.tsx` (replaced)
+- **docs_updated:**
+  - trading-docs/08-planning/master-plan.md (TPLAN-CONSOLE-003-D, E, F, G: in_progress → implemented)
+  - trading-docs/00-governance/system-state.md (Phase 3: in_progress → complete ✅ Passed; module statuses updated)
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE — only trading page files modified; no foundation components or routes touched
+- **verification:** Zero TypeScript/linter errors across all 4 pages. Tab switching in PositionsPage changes displayed data. Direction badge colors correct (bull=green, bear=red, neutral=grey). PerformancePage shows empty states for both sections when no data. ConfigPage shows sandbox amber warning when is_sandbox=true. KillSwitchButton in ConfigPage uses existing component with confirmation dialog.
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ Only trading page files modified; no foundation components or pages touched
+  - T-Rule 3 (Route Namespace Isolation): ✅ All pages live under /admin/trading/*
+  - T-Rule 7 (Permission Gating): ✅ ConfigPage already gated with trading.configure in App.tsx; others with trading.view
+  - T-Rule 10 (No Silent Failures): ✅ All pages show ErrorState on query failure; EmptyState on no data
+
+---
+
 ### T-ACT-008 — Phase 3A: War Room + Navigation + Hooks + Shared Components
 
 - **id:** T-ACT-008

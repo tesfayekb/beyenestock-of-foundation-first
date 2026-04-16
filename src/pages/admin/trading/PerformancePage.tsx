@@ -1,12 +1,426 @@
+/**
+ * Performance — /admin/trading/performance
+ * Phase 3B deliverable TPLAN-CONSOLE-003F
+ *
+ * Session history, rolling model accuracy, and drift status.
+ */
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { BarChart2 } from 'lucide-react';
 import { PageHeader } from '@/components/dashboard/PageHeader';
+import { StatCard } from '@/components/dashboard/StatCard';
+import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
+import { ErrorState } from '@/components/dashboard/ErrorState';
+import { EmptyState } from '@/components/dashboard/EmptyState';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { supabase } from '@/integrations/supabase/client';
+
+interface TradingSessionSummaryRow {
+  session_date: string;
+  virtual_pnl: number | null;
+  virtual_wins: number | null;
+  virtual_losses: number | null;
+  virtual_trades_count: number | null;
+  regime: string | null;
+  session_status: string;
+}
+
+interface ModelPerformanceRow {
+  accuracy_5d: number | null;
+  accuracy_20d: number | null;
+  accuracy_60d: number | null;
+  drift_status: string | null;
+  drift_z_score: number | null;
+  profit_factor_20d: number | null;
+  preservation_triggers_this_week: number | null;
+  challenger_active: boolean | null;
+}
+
+function formatPnl(value: number | null): string {
+  if (value == null) return '—';
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}$${Math.abs(value).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function pnlClass(value: number | null): string {
+  if (value == null || value === 0) return 'text-muted-foreground';
+  return value > 0 ? 'text-success' : 'text-destructive';
+}
+
+function driftBadgeClass(status: string | null): string {
+  if (!status) return 'bg-muted text-muted-foreground border-border';
+  const s = status.toLowerCase();
+  if (s === 'ok') return 'bg-success/10 text-success border-success/20';
+  if (s === 'warning') return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
+  if (s === 'critical') return 'bg-destructive/10 text-destructive border-destructive/20';
+  return 'bg-muted text-muted-foreground border-border';
+}
+
+function sessionStatusBadgeClass(status: string): string {
+  const s = status.toLowerCase();
+  if (s === 'active') return 'bg-success/10 text-success border-success/20';
+  if (s === 'halted') return 'bg-destructive/10 text-destructive border-destructive/20';
+  return 'bg-muted text-muted-foreground border-border';
+}
+
+function MetricRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className="text-sm font-semibold">{value}</div>
+    </div>
+  );
+}
 
 export default function TradingPerformancePage() {
+  const {
+    data: sessions,
+    isLoading: sessionsLoading,
+    error: sessionsError,
+  } = useQuery({
+    queryKey: ['trading', 'performance', 'sessions'],
+    queryFn: async () => {
+      const { data: rows, error: err } = await supabase
+        .from('trading_sessions')
+        .select(
+          'session_date, virtual_pnl, virtual_wins, virtual_losses, virtual_trades_count, regime, session_status'
+        )
+        .order('session_date', { ascending: false })
+        .limit(30);
+      if (err) throw err;
+      return (rows as TradingSessionSummaryRow[]) ?? [];
+    },
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+  });
+
+  const {
+    data: modelPerf,
+    isLoading: modelLoading,
+    error: modelError,
+  } = useQuery({
+    queryKey: ['trading', 'performance', 'model'],
+    queryFn: async () => {
+      const { data: rows, error: err } = await supabase
+        .from('trading_model_performance')
+        .select(
+          'accuracy_5d, accuracy_20d, accuracy_60d, drift_status, drift_z_score, profit_factor_20d, preservation_triggers_this_week, challenger_active'
+        )
+        .order('recorded_at', { ascending: false })
+        .limit(1);
+      if (err) throw err;
+      return (rows?.[0] as ModelPerformanceRow | undefined) ?? null;
+    },
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+  });
+
+  const isLoading = sessionsLoading || modelLoading;
+  const hasError = sessionsError ?? modelError;
+
+  const totalPnl = useMemo(
+    () =>
+      sessions?.reduce((sum, s) => sum + (s.virtual_pnl ?? 0), 0) ?? null,
+    [sessions]
+  );
+
+  const totalWins = useMemo(
+    () => sessions?.reduce((sum, s) => sum + (s.virtual_wins ?? 0), 0) ?? 0,
+    [sessions]
+  );
+
+  const totalTrades = useMemo(
+    () =>
+      sessions?.reduce((sum, s) => sum + (s.virtual_trades_count ?? 0), 0) ??
+      0,
+    [sessions]
+  );
+
+  const overallWinRate = useMemo(() => {
+    if (totalTrades === 0) return null;
+    return (totalWins / totalTrades) * 100;
+  }, [totalWins, totalTrades]);
+
+  const profitableSessions = useMemo(
+    () => sessions?.filter((s) => (s.virtual_pnl ?? 0) > 0).length ?? 0,
+    [sessions]
+  );
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Performance"
+          subtitle="Rolling metrics and model accuracy"
+        />
+        <LoadingSkeleton variant="card" rows={4} />
+      </div>
+    );
+  }
+
+  if (hasError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Performance"
+          subtitle="Rolling metrics and model accuracy"
+        />
+        <ErrorState message="Failed to load performance data." />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Performance" subtitle="Rolling metrics and model accuracy — Phase 3B" />
-      <p className="text-muted-foreground">
-        Full performance charts coming in Phase 3B.
-      </p>
+      <PageHeader
+        title="Performance"
+        subtitle="Rolling metrics and model accuracy"
+      />
+
+      {/* Section 1 — Session summary stat cards */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Sessions"
+          value={sessions?.length ?? 0}
+          icon={BarChart2}
+        />
+        <StatCard
+          title="Total Virtual P&L"
+          value={totalPnl != null ? formatPnl(totalPnl) : '—'}
+          icon={BarChart2}
+        />
+        <StatCard
+          title="Overall Win Rate"
+          value={
+            overallWinRate != null ? `${overallWinRate.toFixed(1)}%` : '—'
+          }
+          icon={BarChart2}
+        />
+        <StatCard
+          title="Profitable Sessions"
+          value={profitableSessions}
+          icon={BarChart2}
+        />
+      </div>
+
+      {/* Section 2 — Model performance */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Model Performance</CardTitle>
+          <CardDescription>
+            Accuracy, drift status, and calibration metrics
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!modelPerf ? (
+            <EmptyState
+              icon={BarChart2}
+              title="No model performance data"
+              description="Model performance data appears after the system has traded for multiple sessions."
+            />
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+              <MetricRow
+                label="5-Day Accuracy"
+                value={
+                  modelPerf.accuracy_5d != null
+                    ? `${(modelPerf.accuracy_5d * 100).toFixed(1)}%`
+                    : '—'
+                }
+              />
+              <MetricRow
+                label="20-Day Accuracy"
+                value={
+                  modelPerf.accuracy_20d != null
+                    ? `${(modelPerf.accuracy_20d * 100).toFixed(1)}%`
+                    : '—'
+                }
+              />
+              <MetricRow
+                label="60-Day Accuracy"
+                value={
+                  modelPerf.accuracy_60d != null
+                    ? `${(modelPerf.accuracy_60d * 100).toFixed(1)}%`
+                    : '—'
+                }
+              />
+              <MetricRow
+                label="Profit Factor (20d)"
+                value={
+                  modelPerf.profit_factor_20d != null
+                    ? modelPerf.profit_factor_20d.toFixed(2)
+                    : '—'
+                }
+              />
+              <MetricRow
+                label="Drift Status"
+                value={
+                  <Badge
+                    variant="outline"
+                    className={`text-xs capitalize ${driftBadgeClass(
+                      modelPerf.drift_status
+                    )}`}
+                  >
+                    {modelPerf.drift_status ?? 'No data'}
+                  </Badge>
+                }
+              />
+              <MetricRow
+                label="Drift Z-Score"
+                value={
+                  modelPerf.drift_z_score != null
+                    ? modelPerf.drift_z_score.toFixed(2)
+                    : '—'
+                }
+              />
+              <MetricRow
+                label="Preservation Triggers (week)"
+                value={modelPerf.preservation_triggers_this_week ?? '—'}
+              />
+              <MetricRow
+                label="Challenger Active"
+                value={
+                  <Badge
+                    variant="outline"
+                    className={
+                      modelPerf.challenger_active
+                        ? 'bg-success/10 text-success border-success/20'
+                        : 'bg-muted text-muted-foreground border-border'
+                    }
+                  >
+                    {modelPerf.challenger_active ? 'Yes' : 'No'}
+                  </Badge>
+                }
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Section 3 — Recent sessions table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Recent Sessions</CardTitle>
+          <CardDescription>Last 30 trading sessions</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {!sessions || sessions.length === 0 ? (
+            <div className="p-6">
+              <EmptyState
+                icon={BarChart2}
+                title="No sessions yet"
+                description="Session data appears once the trading backend creates daily sessions."
+              />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                      Date
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">
+                      P&L
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">
+                      Trades
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">
+                      Wins
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">
+                      Losses
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground">
+                      Win Rate
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                      Regime
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {sessions.map((s) => {
+                    const trades = s.virtual_trades_count ?? 0;
+                    const wins = s.virtual_wins ?? 0;
+                    const wr =
+                      trades > 0
+                        ? `${((wins / trades) * 100).toFixed(1)}%`
+                        : '—';
+                    return (
+                      <tr
+                        key={s.session_date}
+                        className="hover:bg-muted/30 transition-colors"
+                      >
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {s.session_date}
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-right font-mono text-xs font-semibold ${pnlClass(
+                            s.virtual_pnl
+                          )}`}
+                        >
+                          {formatPnl(s.virtual_pnl)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-xs">
+                          {trades}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-xs text-success">
+                          {s.virtual_wins ?? 0}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-xs text-destructive">
+                          {s.virtual_losses ?? 0}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-xs">
+                          {wr}
+                        </td>
+                        <td className="px-4 py-3">
+                          {s.regime ? (
+                            <Badge
+                              variant="outline"
+                              className="text-xs capitalize bg-muted text-muted-foreground border-border"
+                            >
+                              {s.regime}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge
+                            variant="outline"
+                            className={`text-xs capitalize ${sessionStatusBadgeClass(
+                              s.session_status
+                            )}`}
+                          >
+                            {s.session_status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
