@@ -31,7 +31,7 @@ CREATE POLICY "trading_view_paper_criteria" ON public.paper_phase_criteria
       JOIN public.role_permissions rp ON r.id = rp.role_id
       JOIN public.permissions p ON rp.permission_id = p.id
       WHERE ur.user_id = auth.uid()
-      AND p.name = 'trading.view'
+      AND p.key = 'trading.view'
     )
   );
 

@@ -1181,6 +1181,57 @@ export type Database = {
           },
         ]
       }
+      paper_phase_criteria: {
+        Row: {
+          id: string
+          criterion_id: string
+          criterion_name: string
+          target_description: string
+          current_value_text: string | null
+          current_value_numeric: number | null
+          status: string
+          observations_count: number | null
+          target_numeric: number | null
+          is_manual: boolean | null
+          last_evaluated_at: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          criterion_id: string
+          criterion_name: string
+          target_description: string
+          current_value_text?: string | null
+          current_value_numeric?: number | null
+          status?: string
+          observations_count?: number | null
+          target_numeric?: number | null
+          is_manual?: boolean | null
+          last_evaluated_at?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          criterion_id?: string
+          criterion_name?: string
+          target_description?: string
+          current_value_text?: string | null
+          current_value_numeric?: number | null
+          status?: string
+          observations_count?: number | null
+          target_numeric?: number | null
+          is_manual?: boolean | null
+          last_evaluated_at?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       trading_sessions: {
         Row: {
           actual_pnl: number | null
