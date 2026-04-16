@@ -75,10 +75,10 @@ The authoritative 7-phase build plan for the MarketMuse trading system. Each pha
 | TPLAN-CONSOLE-003-A | Trading navigation section in admin-navigation.ts | Lovable/React | `implemented` |
 | TPLAN-CONSOLE-003-B | Trading routes in routes.ts | Lovable/React | `implemented` |
 | TPLAN-CONSOLE-003-C | War Room page (`/admin/trading/warroom`) | Lovable/React | `implemented` |
-| TPLAN-CONSOLE-003-D | Positions page (`/admin/trading/positions`) | Lovable/React | `in_progress` |
-| TPLAN-CONSOLE-003-E | Signals page (`/admin/trading/signals`) | Lovable/React | `in_progress` |
-| TPLAN-CONSOLE-003-F | Performance page (`/admin/trading/performance`) | Lovable/React | `in_progress` |
-| TPLAN-CONSOLE-003-G | Configuration page (`/admin/trading/config`) | Lovable/React | `in_progress` |
+| TPLAN-CONSOLE-003-D | Positions page (`/admin/trading/positions`) | Lovable/React | `implemented` |
+| TPLAN-CONSOLE-003-E | Signals page (`/admin/trading/signals`) | Lovable/React | `implemented` |
+| TPLAN-CONSOLE-003-F | Performance page (`/admin/trading/performance`) | Lovable/React | `implemented` |
+| TPLAN-CONSOLE-003-G | Configuration page (`/admin/trading/config`) | Lovable/React | `implemented` |
 | TPLAN-CONSOLE-003-H | Kill-switch button in War Room header | Lovable/React | `implemented` |
 | TPLAN-CONSOLE-003-I | Global CRITICAL banner for trading engine failures | Lovable/React | `implemented` |
 | TPLAN-CONSOLE-003-J | WebSocket realtime subscriptions (positions + health) | Lovable/React | `in_progress` |
