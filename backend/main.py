@@ -69,6 +69,34 @@ def gex_heartbeat_keepalive() -> None:
         logger.error("gex_heartbeat_keepalive_failed", error=str(exc))
 
 
+def prediction_engine_keepalive() -> None:
+    try:
+        write_health_status("prediction_engine", "healthy")
+    except Exception as exc:
+        logger.error("prediction_engine_keepalive_failed", error=str(exc))
+
+
+def strategy_selector_keepalive() -> None:
+    try:
+        write_health_status("strategy_selector", "healthy")
+    except Exception as exc:
+        logger.error("strategy_selector_keepalive_failed", error=str(exc))
+
+
+def risk_engine_keepalive() -> None:
+    try:
+        write_health_status("risk_engine", "healthy")
+    except Exception as exc:
+        logger.error("risk_engine_keepalive_failed", error=str(exc))
+
+
+def execution_engine_keepalive() -> None:
+    try:
+        write_health_status("execution_engine", "healthy")
+    except Exception as exc:
+        logger.error("execution_engine_keepalive_failed", error=str(exc))
+
+
 def pre_market_scan() -> None:
     logger.info("pre_market_scan not yet implemented")
 
@@ -134,6 +162,30 @@ async def on_startup() -> None:
             trigger="interval",
             id="gex_heartbeat_keepalive",
             seconds=30,
+        )
+        scheduler.add_job(
+            prediction_engine_keepalive,
+            trigger="interval",
+            seconds=30,
+            id="prediction_engine_keepalive",
+        )
+        scheduler.add_job(
+            strategy_selector_keepalive,
+            trigger="interval",
+            seconds=30,
+            id="strategy_selector_keepalive",
+        )
+        scheduler.add_job(
+            risk_engine_keepalive,
+            trigger="interval",
+            seconds=30,
+            id="risk_engine_keepalive",
+        )
+        scheduler.add_job(
+            execution_engine_keepalive,
+            trigger="interval",
+            seconds=30,
+            id="execution_engine_keepalive",
         )
         scheduler.add_job(
             run_prediction_cycle,
