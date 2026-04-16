@@ -24,7 +24,7 @@ The authoritative 7-phase build plan for the MarketMuse trading system. Each pha
 | TPLAN-INFRA-001-E | CBOE DataShop SFTP file pickup + morning OI baseline | Python/Railway | `not_started` |
 | TPLAN-INFRA-001-F | VVIX 20-day baseline computation from Polygon | Python/Railway | `in_progress` |
 | TPLAN-INFRA-001-G | Write all data to Supabase + trading_system_health heartbeats | Python/Railway | `in_progress` |
-| TPLAN-INFRA-001-H | Run Supabase migration (all trading tables from Part 4) | Lovable/Supabase | `not_started` |
+| TPLAN-INFRA-001-H | Run Supabase migration (all trading tables from Part 4) | Lovable/Supabase | `implemented` |
 | TPLAN-INFRA-001-I | Engine Health page (`/admin/trading/health`) | Lovable/React | `implemented` |
 
 ### Phase Gate (ALL required)

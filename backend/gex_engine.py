@@ -95,6 +95,7 @@ class GexEngine:
 
         nearest_wall = self._nearest_positive_wall(gex_by_strike)
         flip_zone = self._nearest_flip_zone(gex_by_strike)
+        # TODO T-ACT-004: replace with rolling 20-day average once learning engine is live (Phase 6)
         expected_trades_5min = 1000
         confidence = min(1.0, len(trades) / expected_trades_5min)
 

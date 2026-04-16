@@ -5,7 +5,10 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
-import redis
+try:
+    import redis
+except ModuleNotFoundError:  # pragma: no cover
+    redis = None
 
 from config import REDIS_URL
 from db import write_health_status
@@ -16,6 +19,8 @@ logger = get_logger("tradier_feed")
 
 class TradierFeed:
     def __init__(self) -> None:
+        if redis is None:
+            raise RuntimeError("redis dependency required")
         self.redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
         self.connected = False
         self.last_data_at: Optional[float] = None
