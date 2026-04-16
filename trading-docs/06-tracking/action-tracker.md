@@ -29,6 +29,31 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-008 — Phase 3A: War Room + Navigation + Hooks + Shared Components
+
+- **id:** T-ACT-008
+- **date:** 2026-04-16
+- **action:** Built Phase 3A complete admin console foundation. Added 5 trading nav items to `admin-navigation.ts` (War Room, Positions, Signals, Performance, Config). Registered 5 lazy routes in `App.tsx` under `/admin/trading/*` with `PermissionGate`. Created 4 trading data hooks (`useTradingSession`, `useTradingPrediction`, `useTradingPositions`, `useTradingSystemHealth`). Created 5 shared components (`RegimePanel`, `CVStressPanel`, `PredictionConfidence`, `KillSwitchButton`, `CapitalPreservationStatus`). Built full `WarRoomPage.tsx` operator cockpit with live stat cards, regime/CV_Stress/prediction panels, kill-switch, capital preservation, open positions list, engine health summary, and data freshness footer. Created 4 placeholder pages (Positions, Signals, Performance, Config) for Phase 3B.
+- **type:** code
+- **phase:** phase_3
+- **impact:** HIGH
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `src/config/admin-navigation.ts` (5 items added), `src/App.tsx` (5 lazy routes added), `src/hooks/trading/useTradingSession.ts` (new), `src/hooks/trading/useTradingPrediction.ts` (new), `src/hooks/trading/useTradingPositions.ts` (new), `src/hooks/trading/useTradingSystemHealth.ts` (new), `src/components/trading/RegimePanel.tsx` (new), `src/components/trading/CVStressPanel.tsx` (new), `src/components/trading/PredictionConfidence.tsx` (new), `src/components/trading/KillSwitchButton.tsx` (new), `src/components/trading/CapitalPreservationStatus.tsx` (new), `src/pages/admin/trading/WarRoomPage.tsx` (new), `src/pages/admin/trading/PositionsPage.tsx` (new), `src/pages/admin/trading/SignalsPage.tsx` (new), `src/pages/admin/trading/PerformancePage.tsx` (new), `src/pages/admin/trading/ConfigPage.tsx` (new)
+- **docs_updated:**
+  - trading-docs/00-governance/system-state.md (Phase 2: blocked → complete; Phase 3: blocked → in_progress; module statuses updated)
+  - trading-docs/08-planning/master-plan.md (TPLAN-CONSOLE-003-A, B, C, H, I → implemented; D, E, F, G, J → in_progress)
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** Additive only — appended trading nav items, appended lazy imports and nested routes in App.tsx. No foundation routes, components, pages, or logic modified.
+- **verification:** Zero TypeScript/linter errors in all 16 new/modified files. All hooks export correctly. KillSwitchButton shows confirmation dialog before executing. RegimePanel shows disagreement warning when `regime_agreement=false`. No imports from foundation components except allowed set (PageHeader, StatCard, LoadingSkeleton, ErrorState, EmptyState, Card, Badge, Button, Alert, AlertTitle, AlertDescription).
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ Only trading/* files created; additive-only changes to routes/nav/App; no foundation components modified
+  - T-Rule 3 (Route Namespace Isolation): ✅ All 5 new routes live under /admin/trading/*
+  - T-Rule 7 (Permission Gating): ✅ All trading routes use PermissionGate with trading.view or trading.configure
+  - T-Rule 10 (No Silent Failures): ✅ KillSwitchButton catches all errors and shows toast; hooks surface errors to callers
+
+---
+
 ### T-ACT-001 — Initial Trading Schema Migration Applied
 
 - **id:** T-ACT-001

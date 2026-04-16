@@ -39,6 +39,11 @@ const AdminOnboardingPage = lazy(() => import("./pages/admin/AdminOnboardingPage
 const UserDetailPage = lazy(() => import("./pages/admin/UserDetailPage"));
 const RoleDetailPage = lazy(() => import("./pages/admin/RoleDetailPage"));
 const TradingHealthPage = lazy(() => import("./pages/admin/trading/HealthPage"));
+const TradingWarRoomPage = lazy(() => import("./pages/admin/trading/WarRoomPage"));
+const TradingPositionsPage = lazy(() => import("./pages/admin/trading/PositionsPage"));
+const TradingSignalsPage = lazy(() => import("./pages/admin/trading/SignalsPage"));
+const TradingPerformancePage = lazy(() => import("./pages/admin/trading/PerformancePage"));
+const TradingConfigPage = lazy(() => import("./pages/admin/trading/ConfigPage"));
 
 // User pages (lazy loaded)
 const UserDashboard = lazy(() => import("./pages/user/UserDashboard"));
@@ -164,6 +169,31 @@ const App = () => (
                 <Route path="trading/health" element={
                   <PermissionGate permission="trading.view">
                     <TradingHealthPage />
+                  </PermissionGate>
+                } />
+                <Route path="trading/warroom" element={
+                  <PermissionGate permission="trading.view">
+                    <TradingWarRoomPage />
+                  </PermissionGate>
+                } />
+                <Route path="trading/positions" element={
+                  <PermissionGate permission="trading.view">
+                    <TradingPositionsPage />
+                  </PermissionGate>
+                } />
+                <Route path="trading/signals" element={
+                  <PermissionGate permission="trading.view">
+                    <TradingSignalsPage />
+                  </PermissionGate>
+                } />
+                <Route path="trading/performance" element={
+                  <PermissionGate permission="trading.view">
+                    <TradingPerformancePage />
+                  </PermissionGate>
+                } />
+                <Route path="trading/config" element={
+                  <PermissionGate permission="trading.configure">
+                    <TradingConfigPage />
                   </PermissionGate>
                 } />
                 <Route path="*" element={<DashboardNotFound />} />

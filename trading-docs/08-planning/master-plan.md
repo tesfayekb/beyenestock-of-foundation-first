@@ -1,4 +1,4 @@
-# Trading System — Master Plan
+﻿# Trading System — Master Plan
 
 > **Owner:** tesfayekb | **Version:** 1.0 | **Baseline:** v1
 > **Source:** MARKETMUSE_MASTER.md v4.0, Part 11
@@ -72,16 +72,16 @@ The authoritative 7-phase build plan for the MarketMuse trading system. Each pha
 
 | ID | Deliverable | Platform | Status |
 |----|-------------|----------|--------|
-| TPLAN-CONSOLE-003-A | Trading navigation section in admin-navigation.ts | Lovable/React | `not_started` |
-| TPLAN-CONSOLE-003-B | Trading routes in routes.ts | Lovable/React | `not_started` |
-| TPLAN-CONSOLE-003-C | War Room page (`/admin/trading/warroom`) | Lovable/React | `not_started` |
-| TPLAN-CONSOLE-003-D | Positions page (`/admin/trading/positions`) | Lovable/React | `not_started` |
-| TPLAN-CONSOLE-003-E | Signals page (`/admin/trading/signals`) | Lovable/React | `not_started` |
-| TPLAN-CONSOLE-003-F | Performance page (`/admin/trading/performance`) | Lovable/React | `not_started` |
-| TPLAN-CONSOLE-003-G | Configuration page (`/admin/trading/config`) | Lovable/React | `not_started` |
-| TPLAN-CONSOLE-003-H | Kill-switch button in War Room header | Lovable/React | `not_started` |
-| TPLAN-CONSOLE-003-I | Global CRITICAL banner for trading engine failures | Lovable/React | `not_started` |
-| TPLAN-CONSOLE-003-J | WebSocket realtime subscriptions (positions + health) | Lovable/React | `not_started` |
+| TPLAN-CONSOLE-003-A | Trading navigation section in admin-navigation.ts | Lovable/React | `implemented` |
+| TPLAN-CONSOLE-003-B | Trading routes in routes.ts | Lovable/React | `implemented` |
+| TPLAN-CONSOLE-003-C | War Room page (`/admin/trading/warroom`) | Lovable/React | `implemented` |
+| TPLAN-CONSOLE-003-D | Positions page (`/admin/trading/positions`) | Lovable/React | `in_progress` |
+| TPLAN-CONSOLE-003-E | Signals page (`/admin/trading/signals`) | Lovable/React | `in_progress` |
+| TPLAN-CONSOLE-003-F | Performance page (`/admin/trading/performance`) | Lovable/React | `in_progress` |
+| TPLAN-CONSOLE-003-G | Configuration page (`/admin/trading/config`) | Lovable/React | `in_progress` |
+| TPLAN-CONSOLE-003-H | Kill-switch button in War Room header | Lovable/React | `implemented` |
+| TPLAN-CONSOLE-003-I | Global CRITICAL banner for trading engine failures | Lovable/React | `implemented` |
+| TPLAN-CONSOLE-003-J | WebSocket realtime subscriptions (positions + health) | Lovable/React | `in_progress` |
 
 ### Phase Gate (ALL required)
 
