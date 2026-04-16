@@ -47,7 +47,7 @@ Active risks that could compromise the trading system's profitability, capital p
 
 ### T-RISK-003 — Slippage Model Cold Start
 - **Type:** Model / Execution quality
-- **Likelihood:** 5 | **Impact:** 3 | **Score:** 15 | **Severity:** HIGH (impact-driven override)
+- **Likelihood:** 5 | **Impact:** 3 | **Score:** 15 | **Severity:** HIGH
 - **Description:** Predictive LightGBM slippage model (D-015) requires ≥ 200 fill observations to be calibrated. During paper phase startup, the model is untrained and falls back to static slippage estimates.
 - **Detection Method:**
   - `trading_system_health.slippage_model_observations` tracks observation count
