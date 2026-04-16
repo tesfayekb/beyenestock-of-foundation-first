@@ -447,6 +447,9 @@ export type Database = {
           id: string
           last_name: string | null
           status: string
+          tradier_account_id: string | null
+          tradier_connected: boolean | null
+          trading_tier: string | null
           updated_at: string
         }
         Insert: {
@@ -458,6 +461,9 @@ export type Database = {
           id: string
           last_name?: string | null
           status?: string
+          tradier_account_id?: string | null
+          tradier_connected?: boolean | null
+          trading_tier?: string | null
           updated_at?: string
         }
         Update: {
@@ -469,6 +475,9 @@ export type Database = {
           id?: string
           last_name?: string | null
           status?: string
+          tradier_account_id?: string | null
+          tradier_connected?: boolean | null
+          trading_tier?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -610,6 +619,861 @@ export type Database = {
           value?: number
         }
         Relationships: []
+      }
+      trading_calibration_log: {
+        Row: {
+          actual_slippage: number | null
+          call_touched_by_exit: boolean | null
+          charm_velocity: number | null
+          created_at: string | null
+          cv_stress_score: number | null
+          exit_reason: string | null
+          exit_triggered: boolean | null
+          fn_flag: boolean | null
+          forward_pnl_20m: number | null
+          fp_flag: boolean | null
+          id: string
+          pct_max_profit: number | null
+          position_id: string | null
+          position_state: number | null
+          predicted_slippage: number | null
+          put_touched_by_exit: boolean | null
+          regime: string | null
+          sigma_effective: number | null
+          sigma_implied: number | null
+          sigma_realized: number | null
+          signal_type: string | null
+          slippage_delta: number | null
+          spx_price: number | null
+          strategy_type: string | null
+          t_years_to_exit: number | null
+          touch_prob_call: number | null
+          touch_prob_max: number | null
+          touch_prob_put: number | null
+          ts: string
+          unrealized_pnl: number | null
+          vanna_velocity: number | null
+          vix: number | null
+          vvix: number | null
+          was_correct_exit: boolean | null
+          z_charm: number | null
+          z_vanna: number | null
+        }
+        Insert: {
+          actual_slippage?: number | null
+          call_touched_by_exit?: boolean | null
+          charm_velocity?: number | null
+          created_at?: string | null
+          cv_stress_score?: number | null
+          exit_reason?: string | null
+          exit_triggered?: boolean | null
+          fn_flag?: boolean | null
+          forward_pnl_20m?: number | null
+          fp_flag?: boolean | null
+          id?: string
+          pct_max_profit?: number | null
+          position_id?: string | null
+          position_state?: number | null
+          predicted_slippage?: number | null
+          put_touched_by_exit?: boolean | null
+          regime?: string | null
+          sigma_effective?: number | null
+          sigma_implied?: number | null
+          sigma_realized?: number | null
+          signal_type?: string | null
+          slippage_delta?: number | null
+          spx_price?: number | null
+          strategy_type?: string | null
+          t_years_to_exit?: number | null
+          touch_prob_call?: number | null
+          touch_prob_max?: number | null
+          touch_prob_put?: number | null
+          ts?: string
+          unrealized_pnl?: number | null
+          vanna_velocity?: number | null
+          vix?: number | null
+          vvix?: number | null
+          was_correct_exit?: boolean | null
+          z_charm?: number | null
+          z_vanna?: number | null
+        }
+        Update: {
+          actual_slippage?: number | null
+          call_touched_by_exit?: boolean | null
+          charm_velocity?: number | null
+          created_at?: string | null
+          cv_stress_score?: number | null
+          exit_reason?: string | null
+          exit_triggered?: boolean | null
+          fn_flag?: boolean | null
+          forward_pnl_20m?: number | null
+          fp_flag?: boolean | null
+          id?: string
+          pct_max_profit?: number | null
+          position_id?: string | null
+          position_state?: number | null
+          predicted_slippage?: number | null
+          put_touched_by_exit?: boolean | null
+          regime?: string | null
+          sigma_effective?: number | null
+          sigma_implied?: number | null
+          sigma_realized?: number | null
+          signal_type?: string | null
+          slippage_delta?: number | null
+          spx_price?: number | null
+          strategy_type?: string | null
+          t_years_to_exit?: number | null
+          touch_prob_call?: number | null
+          touch_prob_max?: number | null
+          touch_prob_put?: number | null
+          ts?: string
+          unrealized_pnl?: number | null
+          vanna_velocity?: number | null
+          vix?: number | null
+          vvix?: number | null
+          was_correct_exit?: boolean | null
+          z_charm?: number | null
+          z_vanna?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_calibration_log_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "trading_positions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_model_performance: {
+        Row: {
+          accuracy_20d: number | null
+          accuracy_5d: number | null
+          accuracy_60d: number | null
+          accuracy_event_day: number | null
+          accuracy_range_day: number | null
+          accuracy_reversal_day: number | null
+          accuracy_trend_day: number | null
+          challenger_active: boolean | null
+          challenger_model_id: string | null
+          champion_model_id: string | null
+          created_at: string | null
+          cv_stress_fn_rate: number | null
+          cv_stress_fp_rate: number | null
+          drift_status: string | null
+          drift_z_score: number | null
+          id: string
+          preservation_triggers_this_week: number | null
+          profit_factor_20d: number | null
+          recorded_at: string
+          regime_agreement_rate: number | null
+          samples_since_retrain: number | null
+          session_id: string | null
+          sharpe_20d: number | null
+          slippage_mae: number | null
+          slippage_observations: number | null
+          touch_prob_brier: number | null
+          touch_prob_observations: number | null
+          win_rate_20d: number | null
+          win_rate_5d: number | null
+          win_rate_60d: number | null
+        }
+        Insert: {
+          accuracy_20d?: number | null
+          accuracy_5d?: number | null
+          accuracy_60d?: number | null
+          accuracy_event_day?: number | null
+          accuracy_range_day?: number | null
+          accuracy_reversal_day?: number | null
+          accuracy_trend_day?: number | null
+          challenger_active?: boolean | null
+          challenger_model_id?: string | null
+          champion_model_id?: string | null
+          created_at?: string | null
+          cv_stress_fn_rate?: number | null
+          cv_stress_fp_rate?: number | null
+          drift_status?: string | null
+          drift_z_score?: number | null
+          id?: string
+          preservation_triggers_this_week?: number | null
+          profit_factor_20d?: number | null
+          recorded_at?: string
+          regime_agreement_rate?: number | null
+          samples_since_retrain?: number | null
+          session_id?: string | null
+          sharpe_20d?: number | null
+          slippage_mae?: number | null
+          slippage_observations?: number | null
+          touch_prob_brier?: number | null
+          touch_prob_observations?: number | null
+          win_rate_20d?: number | null
+          win_rate_5d?: number | null
+          win_rate_60d?: number | null
+        }
+        Update: {
+          accuracy_20d?: number | null
+          accuracy_5d?: number | null
+          accuracy_60d?: number | null
+          accuracy_event_day?: number | null
+          accuracy_range_day?: number | null
+          accuracy_reversal_day?: number | null
+          accuracy_trend_day?: number | null
+          challenger_active?: boolean | null
+          challenger_model_id?: string | null
+          champion_model_id?: string | null
+          created_at?: string | null
+          cv_stress_fn_rate?: number | null
+          cv_stress_fp_rate?: number | null
+          drift_status?: string | null
+          drift_z_score?: number | null
+          id?: string
+          preservation_triggers_this_week?: number | null
+          profit_factor_20d?: number | null
+          recorded_at?: string
+          regime_agreement_rate?: number | null
+          samples_since_retrain?: number | null
+          session_id?: string | null
+          sharpe_20d?: number | null
+          slippage_mae?: number | null
+          slippage_observations?: number | null
+          touch_prob_brier?: number | null
+          touch_prob_observations?: number | null
+          win_rate_20d?: number | null
+          win_rate_5d?: number | null
+          win_rate_60d?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_model_performance_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_operator_config: {
+        Row: {
+          account_type: string | null
+          created_at: string | null
+          encrypted_key: string | null
+          id: string
+          is_sandbox: boolean | null
+          live_trading_enabled: boolean | null
+          sizing_phase: number | null
+          tradier_account_id: string | null
+          tradier_key_preview: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          account_type?: string | null
+          created_at?: string | null
+          encrypted_key?: string | null
+          id?: string
+          is_sandbox?: boolean | null
+          live_trading_enabled?: boolean | null
+          sizing_phase?: number | null
+          tradier_account_id?: string | null
+          tradier_key_preview?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          account_type?: string | null
+          created_at?: string | null
+          encrypted_key?: string | null
+          id?: string
+          is_sandbox?: boolean | null
+          live_trading_enabled?: boolean | null
+          sizing_phase?: number | null
+          tradier_account_id?: string | null
+          tradier_key_preview?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_operator_config_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_positions: {
+        Row: {
+          attribution_direction: boolean | null
+          attribution_structure: boolean | null
+          attribution_timing: boolean | null
+          attribution_vol: boolean | null
+          commission_cost: number | null
+          contracts: number | null
+          created_at: string | null
+          current_cv_stress: number | null
+          current_pnl: number | null
+          current_state: number | null
+          current_touch_prob: number | null
+          entry_at: string
+          entry_credit: number | null
+          entry_cv_stress: number | null
+          entry_greeks: Json | null
+          entry_rcs: number | null
+          entry_regime: string | null
+          entry_slippage: number | null
+          entry_spx_price: number | null
+          entry_touch_prob: number | null
+          exit_at: string | null
+          exit_credit: number | null
+          exit_reason: string | null
+          exit_slippage: number | null
+          exit_spx_price: number | null
+          expiry_date: string | null
+          gross_pnl: number | null
+          id: string
+          instrument: string
+          last_updated_at: string | null
+          long_strike: number | null
+          long_strike_2: number | null
+          net_pnl: number | null
+          peak_pnl: number | null
+          position_mode: string
+          position_type: string | null
+          session_id: string | null
+          short_strike: number | null
+          short_strike_2: number | null
+          signal_id: string | null
+          slippage_cost: number | null
+          status: string | null
+          strategy_type: string
+          tradier_fill_price: number | null
+          tradier_order_id: string | null
+        }
+        Insert: {
+          attribution_direction?: boolean | null
+          attribution_structure?: boolean | null
+          attribution_timing?: boolean | null
+          attribution_vol?: boolean | null
+          commission_cost?: number | null
+          contracts?: number | null
+          created_at?: string | null
+          current_cv_stress?: number | null
+          current_pnl?: number | null
+          current_state?: number | null
+          current_touch_prob?: number | null
+          entry_at: string
+          entry_credit?: number | null
+          entry_cv_stress?: number | null
+          entry_greeks?: Json | null
+          entry_rcs?: number | null
+          entry_regime?: string | null
+          entry_slippage?: number | null
+          entry_spx_price?: number | null
+          entry_touch_prob?: number | null
+          exit_at?: string | null
+          exit_credit?: number | null
+          exit_reason?: string | null
+          exit_slippage?: number | null
+          exit_spx_price?: number | null
+          expiry_date?: string | null
+          gross_pnl?: number | null
+          id?: string
+          instrument: string
+          last_updated_at?: string | null
+          long_strike?: number | null
+          long_strike_2?: number | null
+          net_pnl?: number | null
+          peak_pnl?: number | null
+          position_mode: string
+          position_type?: string | null
+          session_id?: string | null
+          short_strike?: number | null
+          short_strike_2?: number | null
+          signal_id?: string | null
+          slippage_cost?: number | null
+          status?: string | null
+          strategy_type: string
+          tradier_fill_price?: number | null
+          tradier_order_id?: string | null
+        }
+        Update: {
+          attribution_direction?: boolean | null
+          attribution_structure?: boolean | null
+          attribution_timing?: boolean | null
+          attribution_vol?: boolean | null
+          commission_cost?: number | null
+          contracts?: number | null
+          created_at?: string | null
+          current_cv_stress?: number | null
+          current_pnl?: number | null
+          current_state?: number | null
+          current_touch_prob?: number | null
+          entry_at?: string
+          entry_credit?: number | null
+          entry_cv_stress?: number | null
+          entry_greeks?: Json | null
+          entry_rcs?: number | null
+          entry_regime?: string | null
+          entry_slippage?: number | null
+          entry_spx_price?: number | null
+          entry_touch_prob?: number | null
+          exit_at?: string | null
+          exit_credit?: number | null
+          exit_reason?: string | null
+          exit_slippage?: number | null
+          exit_spx_price?: number | null
+          expiry_date?: string | null
+          gross_pnl?: number | null
+          id?: string
+          instrument?: string
+          last_updated_at?: string | null
+          long_strike?: number | null
+          long_strike_2?: number | null
+          net_pnl?: number | null
+          peak_pnl?: number | null
+          position_mode?: string
+          position_type?: string | null
+          session_id?: string | null
+          short_strike?: number | null
+          short_strike_2?: number | null
+          signal_id?: string | null
+          slippage_cost?: number | null
+          status?: string | null
+          strategy_type?: string
+          tradier_fill_price?: number | null
+          tradier_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_positions_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trading_positions_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "trading_signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_prediction_outputs: {
+        Row: {
+          capital_preservation_mode: boolean | null
+          charm_velocity: number | null
+          confidence: number | null
+          created_at: string | null
+          cv_stress_score: number | null
+          direction: string | null
+          execution_degraded: boolean | null
+          expected_move_pct: number | null
+          expected_move_pts: number | null
+          gex_confidence: number | null
+          gex_flip_zone: number | null
+          gex_nearest_wall: number | null
+          gex_net: number | null
+          id: string
+          job_execution_id: string | null
+          no_trade_reason: string | null
+          no_trade_signal: boolean | null
+          p_bear: number | null
+          p_bull: number | null
+          p_neutral: number | null
+          predicted_at: string
+          rcs: number | null
+          regime: string | null
+          regime_agreement: boolean | null
+          regime_hmm: string | null
+          regime_lgbm: string | null
+          session_id: string | null
+          spx_price: number | null
+          vanna_velocity: number | null
+          vix: number | null
+          vvix: number | null
+          vvix_z_score: number | null
+        }
+        Insert: {
+          capital_preservation_mode?: boolean | null
+          charm_velocity?: number | null
+          confidence?: number | null
+          created_at?: string | null
+          cv_stress_score?: number | null
+          direction?: string | null
+          execution_degraded?: boolean | null
+          expected_move_pct?: number | null
+          expected_move_pts?: number | null
+          gex_confidence?: number | null
+          gex_flip_zone?: number | null
+          gex_nearest_wall?: number | null
+          gex_net?: number | null
+          id?: string
+          job_execution_id?: string | null
+          no_trade_reason?: string | null
+          no_trade_signal?: boolean | null
+          p_bear?: number | null
+          p_bull?: number | null
+          p_neutral?: number | null
+          predicted_at?: string
+          rcs?: number | null
+          regime?: string | null
+          regime_agreement?: boolean | null
+          regime_hmm?: string | null
+          regime_lgbm?: string | null
+          session_id?: string | null
+          spx_price?: number | null
+          vanna_velocity?: number | null
+          vix?: number | null
+          vvix?: number | null
+          vvix_z_score?: number | null
+        }
+        Update: {
+          capital_preservation_mode?: boolean | null
+          charm_velocity?: number | null
+          confidence?: number | null
+          created_at?: string | null
+          cv_stress_score?: number | null
+          direction?: string | null
+          execution_degraded?: boolean | null
+          expected_move_pct?: number | null
+          expected_move_pts?: number | null
+          gex_confidence?: number | null
+          gex_flip_zone?: number | null
+          gex_nearest_wall?: number | null
+          gex_net?: number | null
+          id?: string
+          job_execution_id?: string | null
+          no_trade_reason?: string | null
+          no_trade_signal?: boolean | null
+          p_bear?: number | null
+          p_bull?: number | null
+          p_neutral?: number | null
+          predicted_at?: string
+          rcs?: number | null
+          regime?: string | null
+          regime_agreement?: boolean | null
+          regime_hmm?: string | null
+          regime_lgbm?: string | null
+          session_id?: string | null
+          spx_price?: number | null
+          vanna_velocity?: number | null
+          vix?: number | null
+          vvix?: number | null
+          vvix_z_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_prediction_outputs_job_execution_id_fkey"
+            columns: ["job_execution_id"]
+            isOneToOne: false
+            referencedRelation: "job_executions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trading_prediction_outputs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_sessions: {
+        Row: {
+          actual_pnl: number | null
+          allocation_tier: string | null
+          capital_preservation_active: boolean | null
+          consecutive_loss_sessions: number | null
+          consecutive_losses_today: number | null
+          created_at: string | null
+          day_type: string | null
+          day_type_confidence: number | null
+          halt_reason: string | null
+          id: string
+          market_close_at: string | null
+          market_open_at: string | null
+          rcs: number | null
+          regime: string | null
+          session_date: string
+          session_status: string | null
+          spx_open: number | null
+          updated_at: string | null
+          virtual_losses: number | null
+          virtual_pnl: number | null
+          virtual_trades_count: number | null
+          virtual_wins: number | null
+          vix_open: number | null
+          vvix_20d_mean: number | null
+          vvix_20d_std: number | null
+          vvix_open: number | null
+        }
+        Insert: {
+          actual_pnl?: number | null
+          allocation_tier?: string | null
+          capital_preservation_active?: boolean | null
+          consecutive_loss_sessions?: number | null
+          consecutive_losses_today?: number | null
+          created_at?: string | null
+          day_type?: string | null
+          day_type_confidence?: number | null
+          halt_reason?: string | null
+          id?: string
+          market_close_at?: string | null
+          market_open_at?: string | null
+          rcs?: number | null
+          regime?: string | null
+          session_date: string
+          session_status?: string | null
+          spx_open?: number | null
+          updated_at?: string | null
+          virtual_losses?: number | null
+          virtual_pnl?: number | null
+          virtual_trades_count?: number | null
+          virtual_wins?: number | null
+          vix_open?: number | null
+          vvix_20d_mean?: number | null
+          vvix_20d_std?: number | null
+          vvix_open?: number | null
+        }
+        Update: {
+          actual_pnl?: number | null
+          allocation_tier?: string | null
+          capital_preservation_active?: boolean | null
+          consecutive_loss_sessions?: number | null
+          consecutive_losses_today?: number | null
+          created_at?: string | null
+          day_type?: string | null
+          day_type_confidence?: number | null
+          halt_reason?: string | null
+          id?: string
+          market_close_at?: string | null
+          market_open_at?: string | null
+          rcs?: number | null
+          regime?: string | null
+          session_date?: string
+          session_status?: string | null
+          spx_open?: number | null
+          updated_at?: string | null
+          virtual_losses?: number | null
+          virtual_pnl?: number | null
+          virtual_trades_count?: number | null
+          virtual_wins?: number | null
+          vix_open?: number | null
+          vvix_20d_mean?: number | null
+          vvix_20d_std?: number | null
+          vvix_open?: number | null
+        }
+        Relationships: []
+      }
+      trading_signals: {
+        Row: {
+          contracts: number | null
+          correlation_id: string | null
+          created_at: string | null
+          cv_stress_at_signal: number | null
+          ev_net: number | null
+          expiry_date: string | null
+          gex_confidence_at_signal: number | null
+          gex_wall_distance_pct: number | null
+          id: string
+          instrument: string
+          job_execution_id: string | null
+          long_strike: number | null
+          long_strike_2: number | null
+          position_size_pct: number | null
+          position_type: string | null
+          predicted_slippage: number | null
+          prediction_id: string | null
+          profit_target: number | null
+          rcs_at_signal: number | null
+          regime_at_signal: string | null
+          rejection_reason: string | null
+          session_id: string | null
+          short_strike: number | null
+          short_strike_2: number | null
+          sigma_effective: number | null
+          signal_at: string
+          signal_status: string | null
+          stop_loss_level: number | null
+          strategy_type: string
+          target_credit: number | null
+          target_debit: number | null
+          touch_prob_at_entry: number | null
+        }
+        Insert: {
+          contracts?: number | null
+          correlation_id?: string | null
+          created_at?: string | null
+          cv_stress_at_signal?: number | null
+          ev_net?: number | null
+          expiry_date?: string | null
+          gex_confidence_at_signal?: number | null
+          gex_wall_distance_pct?: number | null
+          id?: string
+          instrument: string
+          job_execution_id?: string | null
+          long_strike?: number | null
+          long_strike_2?: number | null
+          position_size_pct?: number | null
+          position_type?: string | null
+          predicted_slippage?: number | null
+          prediction_id?: string | null
+          profit_target?: number | null
+          rcs_at_signal?: number | null
+          regime_at_signal?: string | null
+          rejection_reason?: string | null
+          session_id?: string | null
+          short_strike?: number | null
+          short_strike_2?: number | null
+          sigma_effective?: number | null
+          signal_at?: string
+          signal_status?: string | null
+          stop_loss_level?: number | null
+          strategy_type: string
+          target_credit?: number | null
+          target_debit?: number | null
+          touch_prob_at_entry?: number | null
+        }
+        Update: {
+          contracts?: number | null
+          correlation_id?: string | null
+          created_at?: string | null
+          cv_stress_at_signal?: number | null
+          ev_net?: number | null
+          expiry_date?: string | null
+          gex_confidence_at_signal?: number | null
+          gex_wall_distance_pct?: number | null
+          id?: string
+          instrument?: string
+          job_execution_id?: string | null
+          long_strike?: number | null
+          long_strike_2?: number | null
+          position_size_pct?: number | null
+          position_type?: string | null
+          predicted_slippage?: number | null
+          prediction_id?: string | null
+          profit_target?: number | null
+          rcs_at_signal?: number | null
+          regime_at_signal?: string | null
+          rejection_reason?: string | null
+          session_id?: string | null
+          short_strike?: number | null
+          short_strike_2?: number | null
+          sigma_effective?: number | null
+          signal_at?: string
+          signal_status?: string | null
+          stop_loss_level?: number | null
+          strategy_type?: string
+          target_credit?: number | null
+          target_debit?: number | null
+          touch_prob_at_entry?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_signals_job_execution_id_fkey"
+            columns: ["job_execution_id"]
+            isOneToOne: false
+            referencedRelation: "job_executions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trading_signals_prediction_id_fkey"
+            columns: ["prediction_id"]
+            isOneToOne: false
+            referencedRelation: "trading_prediction_outputs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trading_signals_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_system_health: {
+        Row: {
+          cboe_connected: boolean | null
+          created_at: string | null
+          current_session_id: string | null
+          data_lag_seconds: number | null
+          databento_connected: boolean | null
+          details: Json | null
+          error_count_1h: number | null
+          gex_confidence: number | null
+          gex_staleness_seconds: number | null
+          id: string
+          is_market_hours: boolean | null
+          last_data_at: string | null
+          last_error_message: string | null
+          last_heartbeat_at: string
+          latency_ms: number | null
+          service_name: string
+          slippage_model_age_hours: number | null
+          slippage_model_observations: number | null
+          status: string
+          tradier_ws_connected: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          cboe_connected?: boolean | null
+          created_at?: string | null
+          current_session_id?: string | null
+          data_lag_seconds?: number | null
+          databento_connected?: boolean | null
+          details?: Json | null
+          error_count_1h?: number | null
+          gex_confidence?: number | null
+          gex_staleness_seconds?: number | null
+          id?: string
+          is_market_hours?: boolean | null
+          last_data_at?: string | null
+          last_error_message?: string | null
+          last_heartbeat_at?: string
+          latency_ms?: number | null
+          service_name: string
+          slippage_model_age_hours?: number | null
+          slippage_model_observations?: number | null
+          status: string
+          tradier_ws_connected?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          cboe_connected?: boolean | null
+          created_at?: string | null
+          current_session_id?: string | null
+          data_lag_seconds?: number | null
+          databento_connected?: boolean | null
+          details?: Json | null
+          error_count_1h?: number | null
+          gex_confidence?: number | null
+          gex_staleness_seconds?: number | null
+          id?: string
+          is_market_hours?: boolean | null
+          last_data_at?: string | null
+          last_error_message?: string | null
+          last_heartbeat_at?: string
+          latency_ms?: number | null
+          service_name?: string
+          slippage_model_age_hours?: number | null
+          slippage_model_observations?: number | null
+          status?: string
+          tradier_ws_connected?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_system_health_current_session_id_fkey"
+            columns: ["current_session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {

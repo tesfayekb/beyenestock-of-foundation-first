@@ -73,8 +73,8 @@ Ordered ledger of all trading database migrations. Every migration applied to th
   - `idx_calib_position` — position_id, ts DESC
   - `idx_calib_type` — signal_type, regime, ts DESC
 - **Reversible:** Yes — DROP tables in reverse order, remove seeded rows, ALTER TABLE DROP COLUMN
-- **Applied By:** Pending
-- **Verified By:** Pending
-- **Status:** `pending`
-- **Applied Date:** —
-- **Notes:** Full SQL is in MARKETMUSE_MASTER.md Part 4 (sections 4.1–4.13). Must be applied as a single migration to maintain referential integrity.
+- **Applied By:** Lovable (Supabase migration tool)
+- **Verified By:** Pending manual verification
+- **Status:** `applied`
+- **Applied Date:** 2026-04-16
+- **Notes:** Full SQL is in MARKETMUSE_MASTER.md Part 4 (sections 4.1–4.13). Applied as a single migration. Security linter confirmed no new warnings from this migration (all warnings are pre-existing foundation items).
