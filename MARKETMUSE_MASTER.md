@@ -2,7 +2,7 @@
 **Version:** 4.0 — FINAL SINGLE SOURCE OF TRUTH  
 **Date:** 2026-04-16  
 **Owner:** tesfayekb  
-**Repo:** https://github.com/tesfayekb/market-muse.git  
+**Repo:** https://github.com/tesfayekb/beyenestock-of-foundation-first.git  
 **Foundation repo:** https://github.com/tesfayekb/beyenestock-of-foundation-first.git  
 **Status:** PLANNING COMPLETE — BUILD BEGINS FROM THIS DOCUMENT
 
@@ -1345,6 +1345,6 @@ Do not build these in V1. Document here so nothing is forgotten.
 
 *MARKETMUSE Master Specification v4.0 — FINAL*  
 *Single source of truth. Supersedes all prior documents.*  
-*Owner: tesfayekb | Repo: https://github.com/tesfayekb/market-muse.git*  
+*Owner: tesfayekb | Repo: https://github.com/tesfayekb/beyenestock-of-foundation-first.git*  
 *Foundation: https://github.com/tesfayekb/beyenestock-of-foundation-first.git*  
 *Build begins from this document.*
