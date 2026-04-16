@@ -45,10 +45,10 @@ The authoritative 7-phase build plan for the MarketMuse trading system. Each pha
 
 | ID | Deliverable | Platform | Status |
 |----|-------------|----------|--------|
-| TPLAN-VIRTUAL-002-A | Day Type Classifier (pre-market LightGBM) | Python/Railway | `not_started` |
-| TPLAN-VIRTUAL-002-B | Regime detection (HMM + LightGBM 6-state) | Python/Railway | `not_started` |
-| TPLAN-VIRTUAL-002-C | CV_Stress computation from options chain | Python/Railway | `not_started` |
-| TPLAN-VIRTUAL-002-D | Layer B prediction pipeline (93 features) | Python/Railway | `not_started` |
+| TPLAN-VIRTUAL-002-A | Day Type Classifier (pre-market LightGBM) | Python/Railway | `in_progress` |
+| TPLAN-VIRTUAL-002-B | Regime detection (HMM + LightGBM 6-state) | Python/Railway | `in_progress` |
+| TPLAN-VIRTUAL-002-C | CV_Stress computation from options chain | Python/Railway | `in_progress` |
+| TPLAN-VIRTUAL-002-D | Layer B prediction pipeline (93 features) | Python/Railway | `in_progress` |
 | TPLAN-VIRTUAL-002-E | Strategy selection Stages 0–4 + trade frequency governor | Python/Railway | `not_started` |
 | TPLAN-VIRTUAL-002-F | Walk-the-book order simulation (virtual mode) | Python/Railway | `not_started` |
 | TPLAN-VIRTUAL-002-G | Virtual position recorder → trading_positions (mode='virtual') | Python/Railway | `not_started` |
