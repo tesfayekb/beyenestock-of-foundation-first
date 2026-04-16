@@ -188,6 +188,7 @@ export default function TradingHealthPage() {
       };
     },
     refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
   });
 
   // Latest row per service (data is already ordered by heartbeat desc)

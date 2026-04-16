@@ -85,7 +85,7 @@ sentinel_deployed: false
 | Positions Page | Lovable | `not_started` | React/TypeScript |
 | Signals Page | Lovable | `not_started` | React/TypeScript |
 | Performance Page | Lovable | `not_started` | React/TypeScript |
-| Engine Health Page | Lovable | `not_started` | React/TypeScript |
+| Engine Health Page | Lovable | `implemented` | React/TypeScript |
 | Configuration Page | Lovable | `not_started` | React/TypeScript |
 | Trading Navigation | Lovable | `not_started` | React/TypeScript |
 | Trading Routes | Lovable | `not_started` | React/TypeScript |
