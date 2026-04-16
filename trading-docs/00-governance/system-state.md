@@ -24,7 +24,7 @@ sentinel_deployed: false
 | 1 | Data Infrastructure | `complete` | ✅ Passed |
 | 2 | Virtual Trade Engine | `complete` | ✅ Passed |
 | 3 | Admin Console | `complete` | ✅ Passed |
-| 4 | Paper Phase (45 days) | `blocked` | ❌ Depends on Phase 3 |
+| 4 | Paper Phase (45 days) | `in_progress` | ✅ Phase 4A started |
 | 5 | Live Execution | `blocked` | ❌ Depends on Phase 4 |
 | 6 | Learning Engine | `blocked` | ❌ Parallel with Phase 5 |
 | 7 | Phase 3 Sizing | `blocked` | ❌ Depends on 90+ live days |

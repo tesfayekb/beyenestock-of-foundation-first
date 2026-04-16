@@ -29,6 +29,32 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-010 — Phase 4A: Paper Phase Criteria Tracker
+
+- **id:** T-ACT-010
+- **date:** 2026-04-17
+- **action:** Built Phase 4A paper phase criteria tracker. Created `supabase/migrations/20260417000001_paper_phase_criteria.sql` — new `paper_phase_criteria` table with all 12 GLC criteria pre-seeded, RLS via `trading.view` permission, `updated_at` trigger. Created `backend/criteria_evaluator.py` with 8 automated evaluation functions (GLC-001 through GLC-006, GLC-011, GLC-012) plus `run_criteria_evaluation` orchestrator. Manual criteria (GLC-007 through GLC-010) are intentionally skipped to preserve operator sign-off. GLC-012 starts as `blocked` pending CBOE DataShop approval. Updated `backend/main.py` with EOD cron job at 21:30 UTC (4:30 PM ET). Replaced `ConfigPage.tsx` 3-item placeholder with full 12-criteria live dashboard: progress bar, pass/fail summary banners, per-criterion detail rows with status badges, observation counts, and manual tags.
+- **type:** code
+- **phase:** phase_4
+- **impact:** HIGH
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `supabase/migrations/20260417000001_paper_phase_criteria.sql` (new), `backend/criteria_evaluator.py` (new), `backend/main.py` (EOD job added), `src/pages/admin/trading/ConfigPage.tsx` (criteria section replaced), `backend/tests/test_criteria_evaluator.py` (new)
+- **docs_updated:**
+  - trading-docs/08-planning/master-plan.md (TPLAN-PAPER-004-A, G: not_started → implemented)
+  - trading-docs/00-governance/system-state.md (Phase 4: blocked → in_progress ✅ Phase 4A started)
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE — no foundation files modified; ConfigPage update is additive (new query + new UI section replacing placeholder)
+- **verification:** 31/31 unit tests passing (28 existing + 3 new). `criteria_evaluator` imports cleanly. `git diff --name-only origin/main` returns only backend/, src/, supabase/, trading-docs/ files. Zero TypeScript linter errors on ConfigPage.tsx.
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ Only trading/* files modified; no foundation components or routes touched
+  - T-Rule 2 (Table Prefix Isolation): ✅ New table uses `paper_phase_criteria` (trading namespace, no prefix required per schema design)
+  - T-Rule 5 (Capital Preservation Absolute): ✅ D-013 enforced — all 12 criteria required; no partial pass; evaluator never auto-advances live trading
+  - T-Rule 7 (Security Inheritance): ✅ RLS on `paper_phase_criteria` with `trading.view` permission gate
+  - T-Rule 10 (No Silent Failures): ✅ `_upsert_criterion` never raises; all evaluation functions catch exceptions; `run_criteria_evaluation` returns error dict on failure
+
+---
+
 ### T-ACT-009 — Phase 3B: Positions, Signals, Performance & Config Pages
 
 - **id:** T-ACT-009

@@ -5,8 +5,9 @@
  * Permission: trading.configure (already gated in App.tsx).
  * Shows Tradier connection status, sizing phase, paper phase criteria, kill switch.
  */
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Settings2, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Settings2, AlertTriangle, CheckCircle, Clock, User } from 'lucide-react';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
 import { ErrorState } from '@/components/dashboard/ErrorState';
@@ -22,6 +23,52 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { KillSwitchButton } from '@/components/trading/KillSwitchButton';
 import { useTradingSession } from '@/hooks/trading/useTradingSession';
 import { supabase } from '@/integrations/supabase/client';
+
+interface PaperCriterionRow {
+  criterion_id: string;
+  criterion_name: string;
+  target_description: string;
+  current_value_text: string | null;
+  status: string;
+  observations_count: number | null;
+  is_manual: boolean | null;
+  last_evaluated_at: string | null;
+}
+
+function criterionStatusBadge(status: string, observations: number | null) {
+  switch (status) {
+    case 'passed':
+      return (
+        <Badge variant="outline" className="bg-success/10 text-success border-success/20 shrink-0">
+          PASSED
+        </Badge>
+      );
+    case 'failed':
+      return (
+        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 shrink-0">
+          FAILED
+        </Badge>
+      );
+    case 'in_progress':
+      return (
+        <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 shrink-0">
+          IN PROGRESS{observations ? ` (${observations})` : ''}
+        </Badge>
+      );
+    case 'blocked':
+      return (
+        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 shrink-0">
+          BLOCKED
+        </Badge>
+      );
+    default:
+      return (
+        <Badge variant="outline" className="bg-muted text-muted-foreground border-border shrink-0">
+          NOT STARTED
+        </Badge>
+      );
+  }
+}
 
 interface OperatorConfigRow {
   id: string;
@@ -54,12 +101,6 @@ const SIZING_PHASES: Record<
     description: 'Core 1.0%, satellite 0.5% + 2:1 margin',
   },
 };
-
-const GO_LIVE_CRITERIA = [
-  '45 days paper trading completed',
-  'Tradier production account funded',
-  'All 12 go-live criteria passed',
-];
 
 function SizingPhaseIndicator({ current }: { current: number | null }) {
   const phase = current ?? 1;
@@ -108,6 +149,32 @@ export default function TradingConfigPage() {
   });
 
   const { data: session } = useTradingSession();
+
+  const { data: criteriaData } = useQuery({
+    queryKey: ['admin', 'trading', 'paper-criteria'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('paper_phase_criteria')
+        .select(
+          'criterion_id, criterion_name, target_description, current_value_text, status, observations_count, is_manual, last_evaluated_at'
+        )
+        .order('criterion_id', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as PaperCriterionRow[];
+    },
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+  });
+
+  const passedCount = useMemo(
+    () => criteriaData?.filter((c) => c.status === 'passed').length ?? 0,
+    [criteriaData]
+  );
+  const failedCount = useMemo(
+    () => criteriaData?.filter((c) => c.status === 'failed').length ?? 0,
+    [criteriaData]
+  );
+  const allPassed = passedCount === 12 && (criteriaData?.length ?? 0) === 12;
 
   if (configLoading) {
     return (
@@ -227,34 +294,117 @@ export default function TradingConfigPage() {
         </CardContent>
       </Card>
 
-      {/* Section 3 — Paper Phase Status */}
+      {/* Section 3 — Paper Phase Go-Live Criteria */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Paper Phase Status</CardTitle>
+          <CardTitle className="text-base">Paper Phase Go-Live Criteria</CardTitle>
           <CardDescription>
-            Go-live criteria — full checklist in Phase 4
+            All 12 criteria (D-013) must pass before live trading is enabled
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {GO_LIVE_CRITERIA.map((criterion) => (
-            <div
-              key={criterion}
-              className="flex items-center justify-between gap-3 rounded-md border p-3"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="text-sm">{criterion}</span>
-              </div>
-              <Badge
-                variant="outline"
-                className="bg-muted text-muted-foreground border-border shrink-0"
-              >
-                PENDING
-              </Badge>
+        <CardContent className="space-y-4">
+          {/* Summary bar */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Progress</span>
+              <span className="font-mono font-semibold">
+                {passedCount} / 12 passed
+              </span>
             </div>
-          ))}
+            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-success transition-all"
+                style={{ width: `${(passedCount / 12) * 100}%` }}
+              />
+            </div>
+          </div>
+
+          {allPassed && (
+            <Alert className="border-success/30 bg-success/10">
+              <CheckCircle className="h-4 w-4 text-success" />
+              <AlertDescription className="text-success font-medium text-sm">
+                All go-live criteria met — ready for live trading review
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {failedCount > 0 && (
+            <Alert className="border-destructive/30 bg-destructive/10">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <AlertDescription className="text-destructive font-medium text-sm">
+                {failedCount} {failedCount === 1 ? 'criterion' : 'criteria'} failed — live trading blocked
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Criteria list */}
+          {!criteriaData || criteriaData.length === 0 ? (
+            <div className="space-y-2">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-3 rounded-md border p-3"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm text-muted-foreground">
+                      Loading criteria...
+                    </span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="bg-muted text-muted-foreground border-border shrink-0"
+                  >
+                    NOT STARTED
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {criteriaData.map((criterion) => (
+                <div
+                  key={criterion.criterion_id}
+                  className="rounded-md border p-3 space-y-1.5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-0.5 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground shrink-0">
+                          {criterion.criterion_id}
+                        </span>
+                        <span className="text-sm font-medium">
+                          {criterion.criterion_name}
+                        </span>
+                        {criterion.is_manual && (
+                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                            <User className="h-3 w-3" />
+                            Manual
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {criterion.target_description}
+                      </p>
+                      {criterion.current_value_text && (
+                        <p className="text-xs text-foreground font-mono">
+                          {criterion.current_value_text}
+                        </p>
+                      )}
+                    </div>
+                    {criterionStatusBadge(
+                      criterion.status,
+                      criterion.observations_count
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <p className="text-xs text-muted-foreground pt-1">
-            Full go-live criteria checklist coming in Phase 4.
+            Automated criteria evaluated daily at 4:30 PM ET. Manual criteria
+            (GLC-007 through GLC-010) require operator sign-off.
           </p>
         </CardContent>
       </Card>

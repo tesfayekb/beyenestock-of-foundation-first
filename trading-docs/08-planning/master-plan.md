@@ -100,13 +100,13 @@ The authoritative 7-phase build plan for the MarketMuse trading system. Each pha
 
 | ID | Deliverable | Platform | Status |
 |----|-------------|----------|--------|
-| TPLAN-PAPER-004-A | All 12 go-live criteria tracked and written to Supabase | Python/Railway | `not_started` |
+| TPLAN-PAPER-004-A | All 12 go-live criteria tracked and written to Supabase | Python/Railway | `implemented` |
 | TPLAN-PAPER-004-B | Predictive slippage model training (LightGBM) | Python/Railway | `not_started` |
 | TPLAN-PAPER-004-C | CV_Stress threshold calibration (weekly CWER) | Python/Railway | `not_started` |
 | TPLAN-PAPER-004-D | Touch probability calibration (grid search weekly) | Python/Railway | `not_started` |
 | TPLAN-PAPER-004-E | GEX vs OCC validation (CBOE DataShop) | Python/Railway | `not_started` |
 | TPLAN-PAPER-004-F | Regime model retraining + champion/challenger | Python/Railway | `not_started` |
-| TPLAN-PAPER-004-G | Paper phase progress dashboard on Config page | Lovable/React | `not_started` |
+| TPLAN-PAPER-004-G | Paper phase progress dashboard on Config page | Lovable/React | `implemented` |
 | TPLAN-PAPER-004-H | Kill-switch tested against Tradier sandbox (Day 10 deadline) | Manual | `not_started` |
 | TPLAN-PAPER-004-I | Sentinel deployed to GCP and tested weekly | Python/GCP | `not_started` |
 | TPLAN-PAPER-004-J | Intraday execution feedback loop tested | Python/Railway | `not_started` |
