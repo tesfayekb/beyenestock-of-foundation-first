@@ -628,3 +628,19 @@ Single register of every trading change action. Every change to trading code, sc
 - **phase:** phase_4
 - **impact:** HIGH — core prediction quality
 - **t_rules_checked:** T-Rule 1 ✅, T-Rule 4 ✅ (D-021 now active)
+
+---
+
+### T-ACT-024 — Phase 0 Session 1: Four Profit Suppressors
+
+- **id:** T-ACT-024
+- **date:** 2026-04-17
+- **action:** Phase 0 Session 1 — four profit suppressors removed.
+  P0.1: commission 0.65→0.35 per leg (Tradier actual rate).
+  P0.2: entry gate 10:00AM→9:35AM (GEX/ZG valid at open, 5min buffer for tape).
+  P0.3: signal_weak threshold 0.10→0.05 (0.10 was blocking trades at normal
+  0.5-0.8% ZG distance; 0.05 blocks only genuinely ambiguous <0.3% ZG).
+  P0.5: event-day 40% size multiplier on day_type="event" sessions.
+- **phase:** phase_4
+- **impact:** HIGH — combined +6-9pp annual return expected
+- **t_rules_checked:** T-Rule 1 ✅, T-Rule 5 ✅ (D-005 still absolute)

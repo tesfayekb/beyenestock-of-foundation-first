@@ -245,8 +245,8 @@ class PredictionEngine:
         p_bull = 0.50 + 0.15 × tanh(dist_pct × 50)
         This gives ≈±0.15 probability tilt at ±2% from zero-gamma.
 
-        Confidence gate: if |p_bull - p_bear| < 0.10 → signal_weak=True
-        (caller should set no_trade_signal).
+        Confidence gate: if |p_bull - p_bear| < 0.05 → signal_weak=True
+        (blocks trades when SPX within ~0.3% of zero-gamma, allows at >0.5%)
 
         Falls back to regime-based probabilities when GEX unavailable.
         """
@@ -300,7 +300,7 @@ class PredictionEngine:
         confidence = max(p_bull, p_bear, p_neutral)
 
         # Signal quality gate: if spread too narrow, flag as weak
-        signal_weak = abs(p_bull - p_bear) < 0.10
+        signal_weak = abs(p_bull - p_bear) < 0.05  # 0.05: blocks at <0.3% ZG distance, allows at >0.5%
 
         return {
             "p_bull": round(p_bull, 4),
