@@ -79,14 +79,43 @@ class PolygonFeed:
         ).execute()
 
     async def _fetch_vvix(self) -> float:
-        if self.last_vvix is None:
-            return 120.0
-        return self.last_vvix
+        """
+        Fetch current VVIX from Polygon.io REST API.
+        Falls back to last known value or 120.0 if unavailable.
+        """
+        try:
+            import config
+            api_key = config.POLYGON_API_KEY
+            if not api_key:
+                return self.last_vvix if self.last_vvix is not None else 120.0
+
+            import httpx
+            url = "https://api.polygon.io/v2/aggs/ticker/VVIX/prev"
+            params = {"apiKey": api_key}
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, params=params)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    results = data.get("results", [])
+                    if results:
+                        vvix = float(results[0].get("c", 120.0))
+                        self.last_vvix = vvix
+                        return vvix
+        except Exception as e:
+            logger.warning("polygon_vvix_fetch_failed", error=str(e))
+
+        return self.last_vvix if self.last_vvix is not None else 120.0
 
     def _is_market_hours(self) -> bool:
-        now = datetime.now()
+        import zoneinfo
+        now = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
         return now.weekday() < 5 and time(9, 30) <= now.time() <= time(16, 0)
 
     def _is_open_minute(self) -> bool:
-        now = datetime.now()
-        return now.weekday() < 5 and now.time().hour == 9 and now.time().minute == 30
+        import zoneinfo
+        now = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
+        return (
+            now.weekday() < 5
+            and now.time().hour == 9
+            and now.time().minute == 30
+        )

@@ -23,6 +23,19 @@ STATIC_SLIPPAGE_BY_STRATEGY = {
     "long_call": 0.05,
 }
 
+# Placeholder credits by strategy — Phase 2 proxy until real option pricer in Phase 4
+# Based on typical SPX credit spreads at ~$5 wide with SPX ~5200
+PLACEHOLDER_CREDIT_BY_STRATEGY = {
+    "put_credit_spread":  1.50,
+    "call_credit_spread": 1.50,
+    "iron_condor":        2.50,
+    "iron_butterfly":     3.00,
+    "debit_put_spread":  -1.80,  # debit strategies cost money
+    "debit_call_spread": -1.80,
+    "long_put":          -3.00,
+    "long_call":         -3.00,
+}
+
 REGIME_STRATEGY_MAP = {
     "quiet_bullish": ["call_credit_spread", "put_credit_spread", "iron_condor"],
     "volatile_bullish": ["debit_call_spread", "long_call"],
@@ -232,7 +245,7 @@ class StrategySelector:
                 "short_strike": None,
                 "long_strike": None,
                 "expiry_date": None,
-                "target_credit": None,
+                "target_credit": PLACEHOLDER_CREDIT_BY_STRATEGY.get(strategy_type, 1.50),
                 "stop_loss_level": None,
                 "profit_target": None,
                 "ev_net": None,

@@ -29,6 +29,25 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-013 — Fix Group 1: Critical Blocking Fixes
+
+- **id:** T-ACT-013
+- **date:** 2026-04-17
+- **action:** Fix Group 1 critical — position monitor + time stops (D-010/D-011), polygon_feed timezone fix (ET-aware market hours + real VVIX API call), target_credit placeholder pricing by strategy type, Sharpe ratio corrected to % returns. Unblocks GLC-001/002/003/005/011.
+- **type:** code
+- **phase:** phase_4
+- **impact:** CRITICAL
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `backend/position_monitor.py` (new), `backend/main.py` (3 jobs added), `backend/polygon_feed.py` (timezone + VVIX), `backend/strategy_selector.py` (target_credit), `backend/model_retraining.py` (Sharpe formula), `backend/tests/test_position_monitor.py` (new)
+- **docs_updated:**
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE
+- **verification:** 44/44 unit tests passing. `position_monitor` imports cleanly. Only 5 backend files + 1 new test file modified. No frontend, migration, or other files touched.
+- **t_rules_checked:** T-Rule 1 (Foundation Isolation): PASS, T-Rule 5 (Capital Preservation): D-010/D-011 now enforced via time stops, T-Rule 10 (No Silent Failures): all job wrappers catch and log exceptions
+
+---
+
 ### T-ACT-010 — Phase 4A: Paper Phase Criteria Tracker
 
 - **id:** T-ACT-010

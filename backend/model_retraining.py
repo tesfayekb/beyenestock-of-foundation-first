@@ -174,9 +174,11 @@ def detect_drift(
 def compute_sharpe_ratio(days: int = 20) -> Optional[float]:
     """
     Compute annualized Sharpe ratio from virtual session P&L.
-    Target: >= 1.5 (GLC-005).
+    Uses percentage daily returns (pnl / account_value) not raw dollars.
+    Target: >= 1.5 (GLC-005). Account value assumed 100,000 (Phase 1 sizing).
     """
     try:
+        ACCOUNT_VALUE = 100_000.0
         cutoff = (date.today() - timedelta(days=days)).isoformat()
         result = (
             get_client()
@@ -197,14 +199,19 @@ def compute_sharpe_ratio(days: int = 20) -> Optional[float]:
         if len(pnls) < 5:
             return None
 
+        # Convert to daily percentage returns
+        daily_returns = [p / ACCOUNT_VALUE for p in pnls]
+
         import statistics
-        mean_pnl = statistics.mean(pnls)
-        std_pnl = statistics.stdev(pnls) if len(pnls) > 1 else 0.0001
-        if std_pnl == 0:
+        mean_return = statistics.mean(daily_returns)
+        std_return = (
+            statistics.stdev(daily_returns) if len(daily_returns) > 1 else 0.0001
+        )
+        if std_return == 0:
             return None
 
-        # Annualize: ~252 trading days
-        sharpe = (mean_pnl / std_pnl) * (252 ** 0.5)
+        # Annualize: sqrt(252) trading days
+        sharpe = (mean_return / std_return) * (252 ** 0.5)
         return round(sharpe, 3)
     except Exception as e:
         logger.error("sharpe_compute_failed", error=str(e))
