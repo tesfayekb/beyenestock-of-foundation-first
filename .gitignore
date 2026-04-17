@@ -34,3 +34,7 @@ __pycache__/
 
 # Historical training data — large files, not committed
 backend/data/historical/
+
+# Trained model files — committed only when validated and approved
+backend/models/*.pkl
+backend/models/*.json
