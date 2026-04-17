@@ -665,3 +665,24 @@ Single register of every trading change action. Every change to trading code, sc
 - **impact:** HIGH — IV/RV prevents selling cheap premium; partial exit
   reduces variance and captures early reversals
 - **t_rules_checked:** T-Rule 1 ✅, T-Rule 5 ✅
+
+---
+
+### T-ACT-026 — Phase A1: Outcome Labels + Real GLC-001/002 Accuracy
+
+- **id:** T-ACT-026
+- **date:** 2026-04-17
+- **action:** Phase A1 — prediction outcome labels + real GLC-001/002 accuracy.
+  New migration adds outcome_direction, outcome_correct, spx_return_30min to
+  trading_prediction_outputs. label_prediction_outcomes() in model_retraining.py
+  runs daily at EOD: fetches SPX price 30min after each prediction via Polygon
+  aggregate API, writes real direction outcome and correct/incorrect flag.
+  evaluate_glc001 now computes accuracy = outcome_correct/total_labeled (was
+  win_rate proxy). evaluate_glc002 now groups outcome_correct by regime (was
+  observation count). run_eod_criteria_evaluation calls labeling before
+  criteria evaluation so GLC-001/002 always have fresh labels. GLC-001 and
+  GLC-002 can now pass paper phase graduation criteria.
+  Also documented 4 deferred items from Phase 0 Session 2 review (D-017 to D-020).
+- **phase:** phase_4
+- **impact:** CRITICAL — unblocks all ML training and paper phase graduation
+- **t_rules_checked:** T-Rule 1 ✅, T-Rule 5 ✅ (D-005 unchanged)

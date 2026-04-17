@@ -8,6 +8,9 @@ from datetime import datetime, timezone, date, timedelta
 from typing import Optional
 from collections import defaultdict
 
+import config
+import httpx
+
 from db import get_client, write_health_status, write_audit_log
 from logger import get_logger
 
@@ -15,6 +18,145 @@ logger = get_logger("model_retraining")
 
 DRIFT_THRESHOLD = 0.50    # Below 50% accuracy triggers drift warning
 RETRAIN_THRESHOLD = 0.45  # Below 45% triggers critical drift
+
+
+def label_prediction_outcomes(target_date: Optional[date] = None) -> dict:
+    """
+    Label yesterday's predictions with realized SPX outcomes.
+    For each unlabeled prediction:
+      1. Read spx_price at prediction time (already stored on the row)
+      2. Fetch SPX price 30 minutes later from Polygon historical API
+      3. Compute spx_return_30min, outcome_direction, outcome_correct
+      4. Write back to trading_prediction_outputs
+
+    Called daily at ~4:15 PM ET, before criteria evaluation.
+    Only labels no_trade_signal=False predictions (actual trade signals).
+    Never raises — logs errors and returns summary.
+
+    threshold for direction: ±0.10% (1 SPX point ≈ 0.02%)
+    """
+    if target_date is None:
+        target_date = date.today()
+
+    summary = {"labeled": 0, "skipped": 0, "errors": 0, "total": 0}
+
+    try:
+        # Fetch unlabeled trade signals for target_date
+        day_start = f"{target_date.isoformat()}T00:00:00+00:00"
+        day_end = f"{target_date.isoformat()}T23:59:59+00:00"
+
+        result = (
+            get_client()
+            .table("trading_prediction_outputs")
+            .select("id, predicted_at, direction, spx_price")
+            .eq("no_trade_signal", False)
+            .gte("predicted_at", day_start)
+            .lte("predicted_at", day_end)
+            .is_("outcome_correct", "null")
+            .execute()
+        )
+        predictions = result.data or []
+        summary["total"] = len(predictions)
+
+        if not predictions:
+            logger.info("label_outcomes_no_predictions", date=str(target_date))
+            return summary
+
+        api_key = config.POLYGON_API_KEY
+        if not api_key:
+            logger.warning("label_outcomes_no_polygon_key")
+            return summary
+
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        for pred in predictions:
+            try:
+                predicted_at_str = pred.get("predicted_at", "")
+                spx_at_signal = float(pred.get("spx_price") or 0.0)
+                pred_direction = pred.get("direction", "neutral")
+
+                if not predicted_at_str or spx_at_signal <= 0:
+                    summary["skipped"] += 1
+                    continue
+
+                # Parse predicted_at and compute +30 minute window
+                from datetime import timezone as tz
+                predicted_at_dt = datetime.fromisoformat(
+                    predicted_at_str.replace("Z", "+00:00")
+                )
+                t30 = predicted_at_dt + timedelta(minutes=30)
+
+                # Polygon expects millisecond timestamps
+                t30_ms = int(t30.timestamp() * 1000)
+                t31_ms = t30_ms + 60_000  # 1-minute window
+
+                # Fetch SPX 1-minute bar at t+30
+                url = f"https://api.polygon.io/v2/aggs/ticker/I:SPX/range/1/minute/{t30_ms}/{t31_ms}"
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.get(url, headers=headers)
+
+                if resp.status_code != 200:
+                    summary["skipped"] += 1
+                    continue
+
+                bars = resp.json().get("results", [])
+                if not bars:
+                    summary["skipped"] += 1
+                    continue
+
+                spx_at_t30 = float(bars[0].get("c", 0.0))  # close of that minute
+                if spx_at_t30 <= 0:
+                    summary["skipped"] += 1
+                    continue
+
+                # Compute return and direction
+                spx_return = (spx_at_t30 - spx_at_signal) / spx_at_signal
+                DIRECTION_THRESHOLD = 0.001  # ±0.1%
+
+                if spx_return > DIRECTION_THRESHOLD:
+                    actual_direction = "bull"
+                elif spx_return < -DIRECTION_THRESHOLD:
+                    actual_direction = "bear"
+                else:
+                    actual_direction = "neutral"
+
+                is_correct = pred_direction == actual_direction
+
+                # Write outcome labels back
+                get_client().table("trading_prediction_outputs").update({
+                    "outcome_direction": actual_direction,
+                    "outcome_correct": is_correct,
+                    "spx_return_30min": round(spx_return, 6),
+                }).eq("id", pred["id"]).execute()
+
+                summary["labeled"] += 1
+
+            except Exception as pred_err:
+                logger.error(
+                    "label_outcome_single_failed",
+                    pred_id=pred.get("id"),
+                    error=str(pred_err),
+                )
+                summary["errors"] += 1
+
+        # Warn if Polygon returned no data for all predictions
+        # (likely a plan restriction on I:SPX index data)
+        if summary["total"] > 0 and summary["labeled"] == 0 and summary["errors"] == 0:
+            logger.warning(
+                "label_outcomes_all_skipped",
+                total=summary["total"],
+                hint="Check Polygon plan covers I:SPX index minute aggregates",
+            )
+        logger.info("label_prediction_outcomes_complete", **summary)
+        write_audit_log(
+            action="trading.prediction_outcomes_labeled",
+            metadata={**summary, "date": str(target_date)},
+        )
+        return summary
+
+    except Exception as e:
+        logger.error("label_prediction_outcomes_failed", error=str(e))
+        return {**summary, "errors": summary["errors"] + 1}
 
 
 def compute_directional_accuracy(days: int = 20) -> dict:
