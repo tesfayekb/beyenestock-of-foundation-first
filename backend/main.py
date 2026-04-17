@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timezone
 from typing import Dict, List
+from zoneinfo import ZoneInfo
 
 import redis
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -27,7 +28,7 @@ from mark_to_market import run_mark_to_market
 
 logger = get_logger("main")
 app = FastAPI()
-scheduler = AsyncIOScheduler()
+scheduler = AsyncIOScheduler(timezone=ZoneInfo("America/New_York"))
 redis_client = None
 
 tradier_feed = None
@@ -311,9 +312,10 @@ async def on_startup() -> None:
                 pre_market_scan,
                 trigger="cron",
                 day_of_week="mon-fri",
-                id="trading_pre_market_scan",
-                hour=14,
+                hour=9,
                 minute=0,
+                id="trading_pre_market_scan",
+                replace_existing=True,
             )
         scheduler.add_job(
             gex_heartbeat_keepalive,
@@ -347,15 +349,17 @@ async def on_startup() -> None:
         )
         scheduler.add_job(
             run_prediction_cycle,
-            trigger="interval",
-            minutes=5,
+            trigger="cron",
+            day_of_week="mon-fri",
+            hour="9-15",
+            minute="*/5",
             id="trading_prediction_cycle_local",
             replace_existing=True,
         )
         scheduler.add_job(
             run_eod_criteria_evaluation,
             trigger="cron",
-            hour=22,      # After market close in both EDT and EST (6 PM ET / 5 PM ET)
+            hour=17,
             minute=0,
             id="trading_eod_criteria_evaluation",
             replace_existing=True,
@@ -364,7 +368,7 @@ async def on_startup() -> None:
             run_weekly_calibration_job,
             trigger="cron",
             day_of_week="sun",
-            hour=23,
+            hour=18,
             minute=0,
             id="trading_weekly_calibration",
             replace_existing=True,
@@ -373,7 +377,7 @@ async def on_startup() -> None:
             run_weekly_model_performance_job,
             trigger="cron",
             day_of_week="sun",
-            hour=23,
+            hour=18,
             minute=30,
             id="trading_weekly_model_performance",
             replace_existing=True,
@@ -398,42 +402,42 @@ async def on_startup() -> None:
             id="trading_mark_to_market",
             replace_existing=True,
         )
-        # D-010: close short-gamma at 2:30 PM ET = 19:30 UTC
+        # D-010: close short-gamma at 2:30 PM ET (scheduler TZ is America/New_York)
         scheduler.add_job(
             run_time_stop_230pm_job,
             trigger="cron",
             day_of_week="mon-fri",
-            hour=19,
+            hour=14,
             minute=30,
             id="trading_time_stop_230pm",
             replace_existing=True,
         )
-        # D-011: close all at 3:45 PM ET = 20:45 UTC
+        # D-011: close all at 3:45 PM ET
         scheduler.add_job(
             run_time_stop_345pm_job,
             trigger="cron",
             day_of_week="mon-fri",
-            hour=20,
+            hour=15,
             minute=45,
             id="trading_time_stop_345pm",
             replace_existing=True,
         )
-        # Session open: 9:30 AM ET = 13:30 UTC
+        # Session open: 9:30 AM ET
         scheduler.add_job(
             run_market_open_job,
             trigger="cron",
             day_of_week="mon-fri",
-            hour=13,
+            hour=9,
             minute=30,
             id="trading_market_open",
             replace_existing=True,
         )
-        # Session close: 4:30 PM ET = 21:30 UTC
+        # Session close: 4:30 PM ET
         scheduler.add_job(
             run_market_close_job,
             trigger="cron",
             day_of_week="mon-fri",
-            hour=21,
+            hour=16,
             minute=30,
             id="trading_market_close",
             replace_existing=True,

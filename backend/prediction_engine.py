@@ -57,6 +57,21 @@ class PredictionEngine:
         except Exception:
             return default
 
+    def _get_spx_price(self) -> float:
+        """Read current SPX price from Redis. Falls back to 5200.0."""
+        try:
+            raw = self._read_redis("tradier:quotes:SPX", None)
+            if raw:
+                import json
+                data = json.loads(raw)
+                price = float(
+                    data.get("last") or data.get("ask") or data.get("bid") or 5200.0
+                )
+                return round(price, 2)
+        except Exception:
+            pass
+        return 5200.0
+
     def _compute_regime(self) -> dict:
         """
         Layer A: Regime classification placeholder.
@@ -277,7 +292,7 @@ class PredictionEngine:
                 **cv_data,
                 **regime_data,
                 # placeholders until real price feed in Phase 2B
-                "spx_price": 5000.0,
+                "spx_price": self._get_spx_price(),
                 "vix": 18.0,
                 "vvix": vvix,
                 "vvix_z_score": round(vvix_z, 3),

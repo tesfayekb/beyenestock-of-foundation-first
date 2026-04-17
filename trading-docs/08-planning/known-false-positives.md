@@ -130,6 +130,8 @@ expected paper phase graduation.**
 | D-009 | Touch probability hardcoded 0.05 | LOW | Phase 6 Learning Engine | Real Black-Scholes first-passage model needed. Blocked on real option chain data |
 | D-010 | Supabase 1000-row cap on queries | LOW | Before Phase 5 | Not a paper-phase issue (max ~225 rows). Add explicit pagination before Phase 5 live volume |
 | D-011 | Sync scheduler jobs run on asyncio thread pool | LOW | Monitor in Phase 5 | APScheduler handles sync→thread correctly (FP-001). Revisit only if feed latency degrades under live load |
+| D-012 | D-022 consecutive-session counter has one-day lag | LOW | Document only | After EOD close, counter reflects prior sessions not current. One-day lag is acceptable — D-022 sizing reduction applies next session. |
+| D-013 | regime_agreement almost never disagrees (placeholder HMM/LGB both use same VVIX branch) | LOW | Phase 6 | Real model disagreement requires real HMM vs LightGBM outputs. Document that D-021 is dormant until Phase 6 real models. |
 
 ## FIX GROUP 8 TRIGGER CONDITIONS
 

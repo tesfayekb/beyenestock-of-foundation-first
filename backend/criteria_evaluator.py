@@ -23,14 +23,15 @@ def _upsert_criterion(
 ) -> None:
     """Upsert a single criterion row. Never raises."""
     try:
-        get_client().table("paper_phase_criteria").update({
+        get_client().table("paper_phase_criteria").upsert({
+            "criterion_id": criterion_id,
             "status": status,
             "current_value_text": current_value_text,
             "current_value_numeric": current_value_numeric,
             "observations_count": observations_count,
             "last_evaluated_at": datetime.now(timezone.utc).isoformat(),
             "notes": notes,
-        }).eq("criterion_id", criterion_id).execute()
+        }, on_conflict="criterion_id").execute()
     except Exception as e:
         logger.error("criterion_upsert_failed", criterion_id=criterion_id, error=str(e))
 

@@ -48,9 +48,17 @@ class ExecutionEngine:
             max(predicted_slippage * 0.5, min(predicted_slippage * 2.0,
             predicted_slippage * (1 + noise))), 4
         )
-        actual_fill = max(0.05, base_credit - actual_slippage)
+        is_debit = base_credit < 0
+        if is_debit:
+            # Debit: cost paid = abs(credit) + slippage (worse fill = more cost)
+            actual_fill = round(abs(base_credit) + actual_slippage, 4)
+        else:
+            # Credit: premium received = credit - slippage (worse fill = less received)
+            actual_fill = max(0.05, base_credit - actual_slippage)
+
         return {
             "fill_price": round(actual_fill, 4),
+            "is_debit": is_debit,
             "predicted_slippage": predicted_slippage,
             "actual_slippage": actual_slippage,
         }
@@ -192,7 +200,24 @@ class ExecutionEngine:
 
             exit_slip = STATIC_SLIPPAGE_BY_STRATEGY.get(strategy_type, 0.15)
             if exit_credit is None:
-                exit_credit = round(entry_credit * 0.50, 4)
+                # Use mark-to-market current_pnl to derive real exit credit
+                # Formula: exit_credit = entry_credit - (current_pnl / (contracts * 100))
+                current_pnl_mtm = pos.get("current_pnl")
+                contracts_count = contracts if contracts > 0 else 1
+                if current_pnl_mtm is not None and contracts_count > 0:
+                    is_debit_pos = entry_credit < 0
+                    abs_entry = abs(entry_credit)
+                    if is_debit_pos:
+                        # Debit: current_pnl = (current_value - abs_entry) * contracts * 100
+                        mtm_value = abs_entry + (current_pnl_mtm / (contracts_count * 100))
+                        exit_credit = -round(max(0.01, mtm_value), 4)  # keep negative
+                    else:
+                        # Credit: current_pnl = (entry_credit - current_value) * contracts * 100
+                        mtm_value = entry_credit - (current_pnl_mtm / (contracts_count * 100))
+                        exit_credit = round(max(0.01, mtm_value), 4)
+                else:
+                    # No MTM data available — use 50% as last resort
+                    exit_credit = round(entry_credit * 0.50, 4)
 
             # D-019: check execution quality and track degradation
             if session_id:
@@ -280,9 +305,7 @@ class ExecutionEngine:
                     "position_id": position_id,
                     "regime": pos.get("entry_regime"),
                     "predicted_slippage": pos.get("entry_slippage"),
-                    "actual_slippage": round(
-                        abs(entry_credit - (exit_credit or entry_credit * 0.50)), 4
-                    ),
+                    "actual_slippage": pos.get("entry_slippage") or exit_slip,
                     "cv_stress_score": pos.get("entry_cv_stress"),
                     "exit_reason": exit_reason,
                     "exit_triggered": exit_reason not in ("profit_target", "manual"),
