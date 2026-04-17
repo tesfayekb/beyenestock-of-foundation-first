@@ -31,3 +31,6 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+
+# Historical training data — large files, not committed
+backend/data/historical/
