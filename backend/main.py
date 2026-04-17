@@ -107,8 +107,21 @@ def execution_engine_keepalive() -> None:
 
 
 def run_eod_criteria_evaluation() -> None:
-    """Runs daily at 4:30 PM ET after market close."""
+    """Runs daily at 5:00 PM ET after market close.
+    Step 1: Label today's predictions with realized SPX outcomes.
+    Step 2: Evaluate all GLC criteria (GLC-001 now has real accuracy data).
+    """
     try:
+        # Step 1: Label today's prediction outcomes before criteria evaluation
+        from model_retraining import label_prediction_outcomes
+        label_summary = label_prediction_outcomes()
+        logger.info("eod_outcome_labeling_done", **label_summary)
+    except Exception as label_exc:
+        logger.error("eod_outcome_labeling_error", error=str(label_exc))
+        # Continue to criteria evaluation even if labeling fails
+
+    try:
+        # Step 2: Evaluate criteria (GLC-001/002 now have labeled data)
         summary = run_criteria_evaluation()
         logger.info("eod_criteria_evaluation_done", **summary)
     except Exception as exc:

@@ -37,50 +37,175 @@ def _upsert_criterion(
 
 
 def evaluate_glc001_prediction_accuracy() -> None:
-    """GLC-001: Aggregate prediction accuracy >= 58% over 45 days."""
+    """
+    GLC-001: Aggregate directional accuracy >= 58% over 45 days.
+    Uses outcome_correct column populated by label_prediction_outcomes().
+    Requires >= 50 labeled predictions before computing accuracy.
+    Falls back to in_progress with observation count if no labels yet.
+    """
     try:
-        # Count total predictions vs correct (direction matched actual)
-        # Phase 2: placeholder models don't have outcome labels yet
-        # Track observations count as proxy for progress
-        result = (
+        from datetime import date, timedelta
+        cutoff = (date.today() - timedelta(days=45)).isoformat()
+
+        # Count total labeled predictions (outcome_correct IS NOT NULL)
+        labeled_result = (
             get_client()
             .table("trading_prediction_outputs")
             .select("id", count="exact")
+            .eq("no_trade_signal", False)
+            .gte("predicted_at", cutoff)
+            .not_.is_("outcome_correct", "null")
             .execute()
         )
-        total = result.count or 0
-        # Need outcome labels to compute accuracy — that requires position outcomes
-        # For now: in_progress with observation count
-        status = "in_progress" if total > 0 else "not_started"
+        total_labeled = labeled_result.count or 0
+
+        if total_labeled < 50:
+            # Not enough labels yet — report progress
+            total_result = (
+                get_client()
+                .table("trading_prediction_outputs")
+                .select("id", count="exact")
+                .eq("no_trade_signal", False)
+                .gte("predicted_at", cutoff)
+                .execute()
+            )
+            total_signals = total_result.count or 0
+            _upsert_criterion(
+                "GLC-001",
+                "in_progress",
+                f"{total_labeled} labeled predictions ({total_signals} signals total, need 50)",
+                float(total_labeled),
+                observations_count=total_labeled,
+                notes=f"Need 50 labeled predictions. {total_signals} signals recorded, "
+                      f"{total_labeled} have outcome labels from label_prediction_outcomes().",
+            )
+            return
+
+        # Count correct predictions
+        correct_result = (
+            get_client()
+            .table("trading_prediction_outputs")
+            .select("id", count="exact")
+            .eq("no_trade_signal", False)
+            .eq("outcome_correct", True)
+            .gte("predicted_at", cutoff)
+            .execute()
+        )
+        correct = correct_result.count or 0
+        accuracy = correct / total_labeled if total_labeled > 0 else 0.0
+
+        TARGET = 0.58
+        status = "passed" if accuracy >= TARGET else (
+            "failed" if total_labeled >= 100 else "in_progress"
+        )
+
         _upsert_criterion(
             "GLC-001",
             status,
-            f"{total} signals recorded (accuracy computed when outcomes available)",
-            None,
-            observations_count=total,
-            notes="Accuracy requires closed position outcomes to compute directional correctness",
+            f"{accuracy:.1%} directional accuracy ({correct}/{total_labeled} correct)",
+            round(accuracy, 4),
+            observations_count=total_labeled,
+            notes=f"Target: {TARGET:.0%}. Based on real SPX direction 30min after signal.",
         )
     except Exception as e:
         logger.error("glc001_eval_failed", error=str(e))
 
 
 def evaluate_glc002_per_regime_accuracy() -> None:
-    """GLC-002: Per-regime accuracy >= 55% for each day type with >= 8 obs."""
+    """
+    GLC-002: Per-regime directional accuracy >= 55% for regimes with >= 8 observations.
+    Uses outcome_correct column. Requires >= 8 labeled predictions per regime.
+    """
     try:
+        from datetime import date, timedelta
+        cutoff = (date.today() - timedelta(days=45)).isoformat()
+
+        # Fetch all labeled predictions with regime
         result = (
             get_client()
             .table("trading_prediction_outputs")
-            .select("regime", count="exact")
+            .select("regime, outcome_correct")
+            .eq("no_trade_signal", False)
+            .gte("predicted_at", cutoff)
+            .not_.is_("outcome_correct", "null")
             .execute()
         )
-        total = result.count or 0
-        status = "in_progress" if total > 0 else "not_started"
+        predictions = result.data or []
+        total_labeled = len(predictions)
+
+        if total_labeled < 8:
+            _upsert_criterion(
+                "GLC-002",
+                "in_progress",
+                f"{total_labeled} labeled predictions across regimes (need 8 per regime)",
+                float(total_labeled),
+                observations_count=total_labeled,
+                notes="Need >= 8 labeled predictions per regime for per-regime accuracy.",
+            )
+            return
+
+        # Group by regime
+        from collections import defaultdict
+        regime_stats: dict = defaultdict(lambda: {"correct": 0, "total": 0})
+        for pred in predictions:
+            regime = pred.get("regime") or "unknown"
+            regime_stats[regime]["total"] += 1
+            if pred.get("outcome_correct") is True:
+                regime_stats[regime]["correct"] += 1
+
+        TARGET_ACC = 0.55
+        TARGET_OBS = 8
+        regime_results = {}
+        all_pass = True
+
+        for regime, stats in regime_stats.items():
+            if stats["total"] < TARGET_OBS:
+                regime_results[regime] = {
+                    "accuracy": None,
+                    "observations": stats["total"],
+                    "status": "insufficient_data",
+                }
+                continue
+
+            acc = stats["correct"] / stats["total"]
+            passing = acc >= TARGET_ACC
+            if not passing:
+                all_pass = False
+            regime_results[regime] = {
+                "accuracy": round(acc, 4),
+                "observations": stats["total"],
+                "status": "passed" if passing else "failed",
+            }
+
+        # Determine overall status
+        regimes_with_data = [r for r in regime_results.values()
+                             if r["status"] != "insufficient_data"]
+        if not regimes_with_data:
+            overall_status = "in_progress"
+        elif all(r["status"] == "passed" for r in regimes_with_data):
+            overall_status = "passed"
+        elif any(r["status"] == "failed" for r in regimes_with_data):
+            overall_status = "failed"
+        else:
+            overall_status = "in_progress"
+
+        passing_regimes = sum(
+            1 for r in regimes_with_data if r["status"] == "passed"
+        )
+        total_regimes = len(regimes_with_data)
+        avg_accuracy = (
+            sum(r["accuracy"] for r in regimes_with_data if r["accuracy"])
+            / total_regimes
+        ) if total_regimes > 0 else 0.0
+
         _upsert_criterion(
-            "GLC-002", status,
-            f"{total} signals recorded across regimes",
-            None,
-            observations_count=total,
-            notes="Per-regime accuracy requires closed position outcomes",
+            "GLC-002",
+            overall_status,
+            f"{passing_regimes}/{total_regimes} regimes passing "
+            f"(avg accuracy {avg_accuracy:.1%})",
+            round(avg_accuracy, 4),
+            observations_count=total_labeled,
+            notes=str({k: v for k, v in regime_results.items()}),
         )
     except Exception as e:
         logger.error("glc002_eval_failed", error=str(e))
