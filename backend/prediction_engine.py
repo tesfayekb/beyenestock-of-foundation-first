@@ -237,6 +237,26 @@ class PredictionEngine:
     def run_cycle(self) -> Optional[dict]:
         """Run one prediction cycle. Writes to trading_prediction_outputs."""
         try:
+            # Guard: check Redis availability before running on potentially stale data
+            redis_available = False
+            if self.redis_client:
+                try:
+                    self.redis_client.ping()
+                    redis_available = True
+                except Exception:
+                    redis_available = False
+
+            if not redis_available:
+                logger.warning("prediction_cycle_skipped_redis_unavailable")
+                return {
+                    "no_trade_signal": True,
+                    "no_trade_reason": "redis_unavailable",
+                    "regime": "unknown",
+                    "rcs": 0.0,
+                    "allocation_tier": "danger",
+                    "spx_price": 5200.0,
+                }
+
             self._cycle_count += 1
             session = get_today_session()
             if not session:
@@ -245,9 +265,27 @@ class PredictionEngine:
                 return None
 
             # Read VVIX context
+            vvix_z_raw = self._read_redis("polygon:vvix:z_score", None)
+            gex_conf_raw = self._read_redis("gex:confidence", None)
+
+            # If all feed signals are unavailable, don't trade on defaults
+            if vvix_z_raw is None and gex_conf_raw is None:
+                logger.info(
+                    "prediction_cycle_skipped_no_feed_data",
+                    reason="vvix_z and gex_confidence both unavailable",
+                )
+                return {
+                    "no_trade_signal": True,
+                    "no_trade_reason": "feed_data_unavailable",
+                    "regime": "unknown",
+                    "rcs": 0.0,
+                    "allocation_tier": "danger",
+                    "spx_price": self._get_spx_price(),
+                }
+
             try:
                 vvix = float(self._read_redis("polygon:vvix:current", "0.0"))
-                vvix_z = float(self._read_redis("polygon:vvix:z_score", "0.0"))
+                vvix_z = float(vvix_z_raw) if vvix_z_raw is not None else 0.0
             except (ValueError, TypeError):
                 vvix, vvix_z = 0.0, 0.0
 

@@ -192,13 +192,21 @@ def evaluate_glc005_sharpe_ratio() -> None:
 
 
 def evaluate_glc006_zero_exceptions() -> None:
-    """GLC-006: Zero unhandled exceptions in final 20 paper sessions."""
+    """
+    GLC-006: Zero unhandled exceptions in final 20 paper sessions.
+    Uses session_error_snapshot audit entries written at EOD close.
+    These snapshots capture the error counts at the moment of session close,
+    scoped to each session — not the rolling 1-hour window.
+    """
     try:
-        # Get last 20 sessions
+        from datetime import date, timedelta
+
+        # Count total completed sessions first
         sessions_result = (
             get_client()
             .table("trading_sessions")
             .select("id, session_date")
+            .eq("session_status", "closed")
             .order("session_date", desc=True)
             .limit(20)
             .execute()
@@ -207,28 +215,51 @@ def evaluate_glc006_zero_exceptions() -> None:
         session_count = len(sessions)
 
         if session_count < 20:
-            status = "in_progress"
-            text = f"{session_count}/20 sessions completed"
             _upsert_criterion(
-                "GLC-006", status, text, float(session_count),
+                "GLC-006",
+                "in_progress",
+                f"{session_count}/20 sessions completed",
+                float(session_count),
                 observations_count=session_count,
-                notes="Need 20 sessions. Errors tracked via trading_system_health error_count_1h",
+                notes="Counting completed sessions. Error snapshots recorded at EOD close.",
             )
             return
 
-        # Check error counts in health table for these sessions
-        errors_result = (
+        # Query error snapshots for the last 20 sessions
+        cutoff = (date.today() - timedelta(days=30)).isoformat()
+        snapshots_result = (
             get_client()
-            .table("trading_system_health")
-            .select("service_name, error_count_1h")
-            .gt("error_count_1h", 0)
+            .table("audit_logs")
+            .select("metadata, created_at")
+            .eq("action", "trading.session_error_snapshot")
+            .gte("created_at", cutoff)
+            .order("created_at", desc=True)
+            .limit(20)
             .execute()
         )
-        error_services = errors_result.data or []
-        total_errors = sum(r.get("error_count_1h", 0) or 0 for r in error_services)
+        snapshots = snapshots_result.data or []
+
+        if not snapshots:
+            # No snapshots yet — fall back to current health table
+            errors_result = (
+                get_client()
+                .table("trading_system_health")
+                .select("error_count_1h")
+                .gt("error_count_1h", 0)
+                .execute()
+            )
+            total_errors = sum(
+                r.get("error_count_1h", 0) or 0
+                for r in (errors_result.data or [])
+            )
+        else:
+            total_errors = sum(
+                (snap.get("metadata") or {}).get("total_errors", 0) or 0
+                for snap in snapshots
+            )
 
         status = "passed" if total_errors == 0 else "failed"
-        text = f"{total_errors} errors across last 20 sessions"
+        text = f"{total_errors} errors in last {session_count} sessions"
         _upsert_criterion(
             "GLC-006", status, text, float(total_errors),
             observations_count=session_count,

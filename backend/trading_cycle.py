@@ -4,7 +4,7 @@ Called every 5 minutes via APScheduler.
 """
 from typing import Optional
 
-from db import write_health_status
+from db import get_client, write_health_status
 from execution_engine import ExecutionEngine
 from logger import get_logger
 from prediction_engine import PredictionEngine
@@ -52,8 +52,26 @@ def run_trading_cycle(
             logger.warning("trading_cycle_skipped", reason="no_session")
             return result
 
-        # D-005: check daily drawdown before any new entry
-        daily_pnl = session.get("virtual_pnl", 0.0) or 0.0
+        # D-005: include unrealized MTM P&L from open positions
+        realized_pnl = session.get("virtual_pnl", 0.0) or 0.0
+        unrealized_pnl = 0.0
+        try:
+            open_result = (
+                get_client()
+                .table("trading_positions")
+                .select("current_pnl")
+                .eq("session_id", session["id"])
+                .eq("status", "open")
+                .execute()
+            )
+            unrealized_pnl = sum(
+                (p.get("current_pnl") or 0.0)
+                for p in (open_result.data or [])
+            )
+        except Exception:
+            pass  # use realized only if MTM fetch fails
+
+        daily_pnl = realized_pnl + unrealized_pnl
         if check_daily_drawdown(session["id"], daily_pnl, account_value):
             result["skipped_reason"] = "daily_drawdown_halt_d005"
             logger.warning(

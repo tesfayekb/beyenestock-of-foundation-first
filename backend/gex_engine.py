@@ -89,8 +89,45 @@ class GexEngine:
             symbol = trade.get("symbol", "")
             quote = quote_cache.get(symbol)
             if not quote:
-                logger.warning("gex_quote_missing", symbol=symbol)
-                continue
+                # REST fallback — fetch quote synchronously for this symbol
+                try:
+                    import config
+                    import httpx as _httpx
+                    _base = (
+                        "https://sandbox.tradier.com"
+                        if config.TRADIER_SANDBOX
+                        else "https://api.tradier.com"
+                    )
+                    _r = _httpx.get(
+                        f"{_base}/v1/markets/quotes",
+                        params={"symbols": symbol, "greeks": "false"},
+                        headers={
+                            "Authorization": f"Bearer {config.TRADIER_API_KEY}",
+                            "Accept": "application/json",
+                        },
+                        timeout=3.0,
+                    )
+                    if _r.status_code == 200:
+                        _q = _r.json().get("quotes", {}).get("quote", {})
+                        if isinstance(_q, dict) and _q.get("symbol"):
+                            quote = {
+                                "bid": _q.get("bid", 0),
+                                "ask": _q.get("ask", 0),
+                                "last": _q.get("last", 0),
+                            }
+                            # Cache for duration of this compute cycle
+                            quote_cache[symbol] = quote
+                            self.redis_client.setex(
+                                f"tradier:quotes:{symbol}",
+                                60,
+                                json.dumps(quote),
+                            )
+                except Exception:
+                    pass  # skip symbol if REST also fails
+
+                if not quote:
+                    logger.warning("gex_quote_missing_after_rest", symbol=symbol)
+                    continue
             bid = float(quote.get("bid", 0.0) or 0.0)
             ask = float(quote.get("ask", 0.0) or 0.0)
             price = float(trade.get("price", 0.0) or 0.0)

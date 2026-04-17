@@ -197,6 +197,38 @@ def close_today_session() -> bool:
             except Exception as e:
                 logger.error("d022_session_tracking_failed", error=str(e))
 
+        # Snapshot error counts for GLC-006 before EOD reset
+        if ok:
+            try:
+                health_result = (
+                    get_client()
+                    .table("trading_system_health")
+                    .select("service_name, error_count_1h")
+                    .execute()
+                )
+                total_errors = sum(
+                    (r.get("error_count_1h") or 0)
+                    for r in (health_result.data or [])
+                )
+                write_audit_log(
+                    action="trading.session_error_snapshot",
+                    metadata={
+                        "session_date": session.get("session_date"),
+                        "session_id": session["id"],
+                        "total_errors": total_errors,
+                        "services": [
+                            {"service": r.get("service_name"),
+                             "errors": r.get("error_count_1h") or 0}
+                            for r in (health_result.data or [])
+                            if (r.get("error_count_1h") or 0) > 0
+                        ],
+                    },
+                )
+            except Exception as snap_err:
+                logger.warning(
+                    "session_error_snapshot_failed", error=str(snap_err)
+                )
+
         if ok:
             write_audit_log(
                 action="trading.session_closed",
