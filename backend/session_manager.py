@@ -154,6 +154,49 @@ def close_today_session() -> bool:
             session_status="closed",
             market_close_at=datetime.now(timezone.utc).isoformat(),
         )
+
+        # D-022: update consecutive_loss_sessions counter
+        if ok:
+            try:
+                # Read last 3 sessions to compute consecutive losses
+                recent = (
+                    get_client()
+                    .table("trading_sessions")
+                    .select("session_date, virtual_pnl")
+                    .eq("session_status", "closed")
+                    .order("session_date", desc=True)
+                    .limit(3)
+                    .execute()
+                )
+                sessions_data = recent.data or []
+                consecutive = 0
+                for s in sessions_data:
+                    if (s.get("virtual_pnl") or 0.0) < 0:
+                        consecutive += 1
+                    else:
+                        break  # streak broken
+
+                update_session(
+                    session["id"],
+                    consecutive_loss_sessions=consecutive,
+                )
+                if consecutive >= 3:
+                    write_audit_log(
+                        action="trading.consecutive_loss_sessions_alert",
+                        metadata={
+                            "session_date": session.get("session_date"),
+                            "consecutive_loss_sessions": consecutive,
+                            "d022_active": True,
+                        },
+                    )
+                    logger.warning(
+                        "d022_consecutive_loss_sessions",
+                        consecutive=consecutive,
+                        session_date=session.get("session_date"),
+                    )
+            except Exception as e:
+                logger.error("d022_session_tracking_failed", error=str(e))
+
         if ok:
             write_audit_log(
                 action="trading.session_closed",
