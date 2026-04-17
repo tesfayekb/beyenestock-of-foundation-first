@@ -105,7 +105,7 @@ def download_spx_5min(api_key: str) -> pd.DataFrame:
     Uses I:SPX ticker. Returns ~118k rows for 2020-2026.
     Polygon returns max 50000 results per call — paginates automatically.
     """
-    print(f"\n[1/5] Downloading SPX 5-minute bars {SPX_5MIN_START} → {END_DATE}...")
+    print(f"\n[1/5] Downloading SPX 5-minute bars {SPX_5MIN_START} -> {END_DATE}...")
 
     all_results = []
     url = f"{POLYGON_BASE}/v2/aggs/ticker/I:SPX/range/5/minute/{SPX_5MIN_START}/{END_DATE}"
@@ -147,7 +147,7 @@ def download_spx_5min(api_key: str) -> pd.DataFrame:
 
     out = DATA_DIR / "spx_5min.parquet"
     df.to_parquet(out, index=False)
-    print(f"  ✓ Saved {len(df):,} rows → {out}")
+    print(f"  [OK] Saved {len(df):,} rows -> {out}")
     return df
 
 
@@ -155,7 +155,7 @@ def download_spx_5min(api_key: str) -> pd.DataFrame:
 
 def download_spx_daily(api_key: str) -> pd.DataFrame:
     """Download SPX daily OHLCV from Polygon for realized vol features."""
-    print(f"\n[2/5] Downloading SPX daily bars {DAILY_START} → {END_DATE}...")
+    print(f"\n[2/5] Downloading SPX daily bars {DAILY_START} -> {END_DATE}...")
 
     data = polygon_get(
         f"{POLYGON_BASE}/v2/aggs/ticker/I:SPX/range/1/day/{DAILY_START}/{END_DATE}",
@@ -174,7 +174,7 @@ def download_spx_daily(api_key: str) -> pd.DataFrame:
 
     out = DATA_DIR / "spx_daily.parquet"
     df.to_parquet(out, index=False)
-    print(f"  ✓ Saved {len(df):,} rows → {out}")
+    print(f"  [OK] Saved {len(df):,} rows -> {out}")
     return df
 
 
@@ -212,7 +212,7 @@ def download_cboe_csv(url: str, name: str, out_file: str) -> pd.DataFrame:
 
     out = DATA_DIR / out_file
     df.to_parquet(out, index=False)
-    print(f"  ✓ Saved {len(df):,} rows → {out}")
+    print(f"  [OK] Saved {len(df):,} rows -> {out}")
     return df
 
 
@@ -233,7 +233,7 @@ def validate_downloads(dfs: dict) -> None:
         large_gaps = gaps[gaps > 24 * 60 * 60 * 1000 * 3]  # >3 calendar days
         if len(large_gaps) > 10:
             print(f"  WARNING: {len(large_gaps)} large gaps in SPX 5-min data (expected for holidays/weekends)")
-        print(f"  ✓ SPX 5-min: {len(spx5):,} rows, "
+        print(f"  [OK] SPX 5-min: {len(spx5):,} rows, "
               f"from {spx5['datetime_et'].min()} "
               f"to {spx5['datetime_et'].max()}")
 
@@ -243,7 +243,7 @@ def validate_downloads(dfs: dict) -> None:
         if len(spx_d) < 3000:
             print(f"  WARNING: SPX daily only {len(spx_d)} rows — expected ~3600+")
         else:
-            print(f"  ✓ SPX daily: {len(spx_d):,} rows")
+            print(f"  [OK] SPX daily: {len(spx_d):,} rows")
 
     # VIX/VVIX/VIX9D: check reasonable value ranges
     for name, col, lo, hi in [
@@ -258,7 +258,7 @@ def validate_downloads(dfs: dict) -> None:
                 print(f"  WARNING: {name} has {len(out_range)} rows outside "
                       f"expected range [{lo}, {hi}]")
             else:
-                print(f"  ✓ {name}: {len(df):,} rows, "
+                print(f"  [OK] {name}: {len(df):,} rows, "
                       f"close range [{df['close'].min():.1f}, {df['close'].max():.1f}]")
 
     print("  Validation complete.")
@@ -290,12 +290,18 @@ def write_manifest(dfs: dict) -> None:
 
     out = DATA_DIR / "download_manifest.json"
     out.write_text(json.dumps(manifest, indent=2, default=str))
-    print(f"\n  ✓ Manifest written → {out}")
+    print(f"\n  [OK] Manifest written -> {out}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    import sys
+    import io
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    elif sys.platform == 'win32':
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     print("=" * 60)
     print("Phase A2: Historical Data Download")
     print(f"Output: {DATA_DIR}")
@@ -359,7 +365,7 @@ def main() -> None:
     if errors:
         print(f"COMPLETED WITH {len(errors)} ERROR(S):")
         for name, err in errors:
-            print(f"  ✗ {name}: {err}")
+            print(f"  [FAIL] {name}: {err}")
         if any(n in ("spx_5min", "spx_daily", "vix_daily") for n, _ in errors):
             print("\nCRITICAL: SPX 5-min, SPX daily, and VIX daily are required for A3.")
             print("Fix the errors above before running A3 training.")
