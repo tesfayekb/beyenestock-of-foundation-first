@@ -19,6 +19,7 @@ from trading_cycle import run_trading_cycle
 from calibration_engine import run_weekly_calibration
 from criteria_evaluator import run_criteria_evaluation
 from model_retraining import run_weekly_model_performance
+from position_monitor import run_time_stop_230pm, run_time_stop_345pm, run_position_monitor
 
 logger = get_logger("main")
 app = FastAPI()
@@ -125,6 +126,34 @@ def run_weekly_model_performance_job() -> None:
         logger.info("weekly_model_performance_job_done", **summary)
     except Exception as exc:
         logger.error("weekly_model_performance_job_error", error=str(exc))
+
+
+def run_position_monitor_job() -> None:
+    """Runs every minute during market hours (9:30 AM - 3:45 PM ET)."""
+    try:
+        result = run_position_monitor()
+        if result.get("closed", 0) > 0:
+            logger.info("position_monitor_closed_positions", **result)
+    except Exception as exc:
+        logger.error("position_monitor_job_error", error=str(exc))
+
+
+def run_time_stop_230pm_job() -> None:
+    """D-010: Close all short-gamma positions at 2:30 PM ET (19:30 UTC)."""
+    try:
+        result = run_time_stop_230pm()
+        logger.info("time_stop_230pm_job_done", **result)
+    except Exception as exc:
+        logger.error("time_stop_230pm_job_error", error=str(exc))
+
+
+def run_time_stop_345pm_job() -> None:
+    """D-011: Close ALL positions at 3:45 PM ET (20:45 UTC)."""
+    try:
+        result = run_time_stop_345pm()
+        logger.info("time_stop_345pm_job_done", **result)
+    except Exception as exc:
+        logger.error("time_stop_345pm_job_error", error=str(exc))
 
 
 def pre_market_scan() -> None:
@@ -248,6 +277,36 @@ async def on_startup() -> None:
             hour=23,
             minute=30,
             id="trading_weekly_model_performance",
+            replace_existing=True,
+        )
+        # Position monitor — every minute, market hours only (9:30 AM - 3:45 PM ET)
+        scheduler.add_job(
+            run_position_monitor_job,
+            trigger="cron",
+            day_of_week="mon-fri",
+            hour="9-15",
+            minute="*/1",
+            id="trading_position_monitor",
+            replace_existing=True,
+        )
+        # D-010: close short-gamma at 2:30 PM ET = 19:30 UTC
+        scheduler.add_job(
+            run_time_stop_230pm_job,
+            trigger="cron",
+            day_of_week="mon-fri",
+            hour=19,
+            minute=30,
+            id="trading_time_stop_230pm",
+            replace_existing=True,
+        )
+        # D-011: close all at 3:45 PM ET = 20:45 UTC
+        scheduler.add_job(
+            run_time_stop_345pm_job,
+            trigger="cron",
+            day_of_week="mon-fri",
+            hour=20,
+            minute=45,
+            id="trading_time_stop_345pm",
             replace_existing=True,
         )
         scheduler.start()
