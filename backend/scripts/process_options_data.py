@@ -63,9 +63,24 @@ def compute_daily_features(df: pd.DataFrame) -> pd.DataFrame:
             if underlying <= 0:
                 continue
 
+            # Restrict to strikes within 5% of underlying — drops deep OTM noise
+            dte0 = dte0[
+                (dte0["STRIKE"] >= underlying * 0.95) &
+                (dte0["STRIKE"] <= underlying * 1.05)
+            ].copy()
+            if len(dte0) < 3:
+                continue
+
             # --- ATM IV (strike closest to underlying) ---
             dte0["strike_dist"] = abs(dte0["STRIKE"] - underlying)
-            atm_row = dte0.loc[dte0["strike_dist"].idxmin()]
+            # Only use rows with valid IV for ATM selection
+            iv_valid = dte0.dropna(subset=["C_IV", "P_IV"])
+            iv_valid = iv_valid[
+                (iv_valid["C_IV"] > 0.01) & (iv_valid["P_IV"] > 0.01)
+            ]
+            if len(iv_valid) == 0:
+                continue
+            atm_row = iv_valid.loc[iv_valid["strike_dist"].idxmin()]
             iv_atm = float(
                 (atm_row.get("C_IV", 0) + atm_row.get("P_IV", 0)) / 2
             )
@@ -89,7 +104,10 @@ def compute_daily_features(df: pd.DataFrame) -> pd.DataFrame:
             net_g = dte0_sorted["net_gamma"].values
             strikes = dte0_sorted["STRIKE"].values
             for i in range(len(net_g) - 1):
-                if net_g[i] * net_g[i + 1] <= 0 and net_g[i] != net_g[i + 1]:
+                if (net_g[i] * net_g[i + 1] <= 0
+                        and net_g[i] != net_g[i + 1]
+                        and abs(net_g[i]) > 1e-5
+                        and abs(net_g[i + 1]) > 1e-5):
                     # Linear interpolation
                     frac = abs(net_g[i]) / (abs(net_g[i]) + abs(net_g[i + 1]))
                     zero_gamma = strikes[i] + frac * (strikes[i + 1] - strikes[i])
@@ -114,7 +132,8 @@ def compute_daily_features(df: pd.DataFrame) -> pd.DataFrame:
             })
 
         except Exception as e:
-            # Skip bad days silently
+            import logging
+            logging.warning(f"options_day_skipped date={date_str} error={e}")
             continue
 
     return pd.DataFrame(results)
