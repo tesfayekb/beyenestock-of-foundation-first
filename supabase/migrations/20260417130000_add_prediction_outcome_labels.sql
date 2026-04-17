@@ -13,7 +13,7 @@ COMMENT ON COLUMN public.trading_prediction_outputs.outcome_direction IS
 COMMENT ON COLUMN public.trading_prediction_outputs.outcome_correct IS
   'True when predicted direction matched realized SPX direction';
 COMMENT ON COLUMN public.trading_prediction_outputs.spx_return_30min IS
-  'SPX percentage return from predicted_at to predicted_at + 30 minutes';
+  'SPX decimal return (e.g. 0.0019 = +0.19%) from predicted_at to predicted_at + 30 minutes';
 
 CREATE INDEX IF NOT EXISTS idx_prediction_outcome
   ON public.trading_prediction_outputs(outcome_correct, no_trade_signal);
