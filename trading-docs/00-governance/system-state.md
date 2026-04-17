@@ -13,6 +13,7 @@ paper_trading: blocked
 data_feeds: not_connected
 tradier_connection: not_connected
 sentinel_deployed: false
+sentinel_gcp_url: https://marketmuse-sentinel-208163021541.us-east1.run.app
 ```
 
 ---

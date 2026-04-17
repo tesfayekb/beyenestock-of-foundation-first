@@ -105,6 +105,24 @@ Single register of every trading change action. Every change to trading code, sc
 
 ---
 
+### T-ACT-012 — Sentinel Deployed to GCP Cloud Run
+
+- **id:** T-ACT-012
+- **date:** 2026-04-16
+- **action:** Sentinel watchdog deployed to GCP Cloud Run (us-east1, min-instances=1, always-on).
+  Service URL: https://marketmuse-sentinel-208163021541.us-east1.run.app.
+  Sentinel pings Railway backend every 30s, closes all positions if heartbeat lost > 120s.
+  GLC-009 tracking begins — manual verification required after 7 days of operation.
+- **type:** deployment
+- **phase:** phase_4
+- **impact:** HIGH
+- **owner:** Manual (GCP Cloud Shell)
+- **modules_affected:** sentinel/main.py, trading_system_health
+- **foundation_impact:** NONE
+- **t_rules_checked:** T-Rule 9 ✅ (audit log on emergency), T-Rule 10 ✅ (no silent failures)
+
+---
+
 ### T-ACT-001 — Initial Trading Schema Migration Applied
 
 - **id:** T-ACT-001
