@@ -27,7 +27,6 @@ from pathlib import Path
 warnings.filterwarnings("ignore", category=FutureWarning)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import numpy as np
 import pandas as pd
 
 OPTIONS_DIR = Path(__file__).parent.parent / "data" / "historical" / "options"
@@ -109,7 +108,7 @@ def compute_daily_features(df: pd.DataFrame) -> pd.DataFrame:
                 "underlying": round(underlying, 2),
                 "iv_atm": round(iv_atm, 4),
                 "pc_ratio": round(pc_ratio, 4),
-                "zero_gamma": round(zero_gamma, 2) if zero_gamma else None,
+                "zero_gamma": round(zero_gamma, 2) if zero_gamma is not None else None,
                 "skew_25d": round(skew_25d, 4),
                 "n_strikes": len(dte0),
             })
