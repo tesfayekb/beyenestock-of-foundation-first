@@ -266,3 +266,26 @@ Single register of every trading change action. Every change to trading code, sc
   - T-Rule 1 (Foundation Isolation): ✅ No foundation files modified
   - T-Rule 2 (Table Prefix Isolation): ✅ Only writes to trading_system_health (trading_ prefix)
   - T-Rule 10 (No Silent Failures): ✅ gex_heartbeat_keepalive logs exceptions, never swallows errors
+
+---
+
+### T-ACT-011 — Phase 4B: Calibration and Model Retraining Infrastructure
+
+- **id:** T-ACT-011
+- **date:** 2026-04-16
+- **action:** Built Phase 4B calibration and model retraining infrastructure. Created `calibration_engine.py` (slippage MAE via trading_calibration_log, CV_Stress CWER classification error rate, touch probability Brier score — all functions return gracefully with insufficient data). Created `model_retraining.py` (directional accuracy 5d/20d/60d, per-regime accuracy for GLC-002, drift detection D-016 with audit log on warning/critical, Sharpe ratio GLC-005, profit factor, capital preservation trigger count, champion/challenger infra placeholder). Added calibration log write to `execution_engine.py` on every virtual position close (feeds TPLAN-PAPER-004-J intraday feedback loop). Updated `main.py` with two weekly cron jobs: Sunday 23:00 UTC (calibration) and Sunday 23:30 UTC (model performance). 7 new unit tests (38 total passing).
+- **type:** code
+- **phase:** phase_4
+- **impact:** HIGH
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `backend/calibration_engine.py` (new), `backend/model_retraining.py` (new), `backend/execution_engine.py` (calibration log on close), `backend/main.py` (two weekly jobs), `backend/tests/test_calibration_engine.py` (new), `backend/tests/test_model_retraining.py` (new)
+- **docs_updated:**
+  - trading-docs/08-planning/master-plan.md (TPLAN-PAPER-004-B/C/D/F/J: not_started → implemented, E: blocked, H/I: not_started)
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE — no files outside /backend/ or trading-docs/ modified
+- **verification:** 38/38 unit tests passing. Both modules import cleanly. `git diff --name-only origin/main` confirmed only backend files modified. No foundation files touched. Weekly cron triggers verified in scheduler registration.
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ No foundation files modified
+  - T-Rule 2 (Table Prefix Isolation): ✅ Writes only to trading_calibration_log, trading_model_performance, trading_system_health, audit_logs
+  - T-Rule 10 (No Silent Failures): ✅ All compute functions catch exceptions and return gracefully; drift detection fires audit log on warning/critical; calibration log write failure is logged as warning, never raises
