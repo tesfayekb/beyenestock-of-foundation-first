@@ -686,3 +686,22 @@ Single register of every trading change action. Every change to trading code, sc
 - **phase:** phase_4
 - **impact:** CRITICAL — unblocks all ML training and paper phase graduation
 - **t_rules_checked:** T-Rule 1 ✅, T-Rule 5 ✅ (D-005 unchanged)
+
+---
+
+### T-ACT-027 — Phase A2: Historical Data Download Script
+
+- **id:** T-ACT-027
+- **date:** 2026-04-17
+- **action:** Phase A2 — historical data download script.
+  backend/scripts/download_historical_data.py: downloads SPX 5-min OHLCV
+  2020-2026 from Polygon (I:SPX aggregate API, paginated), SPX daily 2010-2026
+  from Polygon, VIX/VVIX/VIX9D daily from CBOE free CSVs. Handles rate limits
+  (429 retry with backoff), 403 plan errors (clear message), CBOE CSV parsing.
+  Outputs parquet files to backend/data/historical/ (gitignored). Writes
+  download_manifest.json with row counts and date ranges for A3 to validate.
+  backend/scripts/README.md: documents how to run scripts.
+  backend/data/historical/ added to .gitignore.
+- **phase:** phase_a
+- **impact:** HIGH — enables all ML model training (A3, A4)
+- **t_rules_checked:** T-Rule 1 ✅ (no production files modified)
