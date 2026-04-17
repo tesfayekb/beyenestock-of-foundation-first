@@ -478,3 +478,30 @@ Single register of every trading change action. Every change to trading code, sc
   - T-Rule 1 (Foundation Isolation): ✅ No frontend or migration files modified
   - T-Rule 4 (Locked Decisions): ✅ D-017 CV_Stress exit implemented; D-022 session-level consecutive loss tracking now active
   - T-Rule 10 (No Silent Failures): ✅ All new code blocks wrapped in try/except with logger.error; D-022 failure logs error but does not interrupt session close
+
+---
+
+### T-ACT-019 — Fix Group 7A: Real Data Feeds (Tradier SSE + Databento Live)
+
+- **id:** T-ACT-019
+- **date:** 2026-04-17
+- **action:** Fix Group 7A — real data feeds. tradier_feed.py: replaces sleep stub
+  with real SSE stream (POST session → GET stream), writes quotes to Redis with
+  60s TTL, plus REST fallback for single symbol fetch. databento_feed.py: replaces
+  sleep stub with real Databento Live SDK subscription to OPRA.PILLAR/trades,
+  runs in thread executor, parses OCC symbology to extract strike/expiry/type.
+- **type:** code
+- **phase:** phase_4
+- **impact:** HIGH
+- **owner:** Cursor
+- **modules_affected:**
+  - `backend/tradier_feed.py` — `_run_stream_loop`: real httpx SSE stream; POST to `/v1/markets/events/session` for sessionid, then GET SSE stream; handles quote/summary/heartbeat event types; `fetch_quote_rest()` added as REST fallback for single symbol; `import httpx` added
+  - `backend/databento_feed.py` — `_run_stream_loop`: real Databento Live SDK (`db.Live`), subscribes to OPRA.PILLAR/trades, runs blocking iterator in `asyncio.run_in_executor` (thread pool); OCC symbology parser extracts root/expiry/option_type/strike; SPX underlying read from Redis; `import re` added
+  - `backend/tests/test_fix_group7a.py` — 4 new unit tests (80 total passing)
+- **docs_updated:**
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE — only tradier_feed.py and databento_feed.py modified; no frontend, migration, or other backend files touched
+- **verification:** 80/80 unit tests passing. TradierFeed and DatabentoFeed import cleanly. git diff --name-only shows only the two feed files modified.
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ Only two feed files and test file modified
+  - T-Rule 10 (No Silent Failures): ✅ All network/parse errors caught with logger.warning/error; backoff retry handled by parent start() loop
