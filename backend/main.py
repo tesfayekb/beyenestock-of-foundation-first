@@ -23,6 +23,7 @@ from calibration_engine import run_weekly_calibration
 from criteria_evaluator import run_criteria_evaluation
 from model_retraining import run_weekly_model_performance
 from position_monitor import run_time_stop_230pm, run_time_stop_345pm, run_position_monitor
+from mark_to_market import run_mark_to_market
 
 logger = get_logger("main")
 app = FastAPI()
@@ -139,6 +140,18 @@ def run_position_monitor_job() -> None:
             logger.info("position_monitor_closed_positions", **result)
     except Exception as exc:
         logger.error("position_monitor_job_error", error=str(exc))
+
+
+def run_mark_to_market_job() -> None:
+    """Runs every minute during market hours — prices open positions."""
+    try:
+        if redis_client is None:
+            return
+        result = run_mark_to_market(redis_client)
+        if result.get("errors", 0) > 0:
+            logger.warning("mark_to_market_errors", **result)
+    except Exception as exc:
+        logger.error("mark_to_market_job_error", error=str(exc))
 
 
 def run_time_stop_230pm_job() -> None:
@@ -373,6 +386,16 @@ async def on_startup() -> None:
             hour="9-15",
             minute="*/1",
             id="trading_position_monitor",
+            replace_existing=True,
+        )
+        # Mark-to-market — every minute, market hours (prices open positions)
+        scheduler.add_job(
+            run_mark_to_market_job,
+            trigger="cron",
+            day_of_week="mon-fri",
+            hour="9-15",
+            minute="*/1",
+            id="trading_mark_to_market",
             replace_existing=True,
         )
         # D-010: close short-gamma at 2:30 PM ET = 19:30 UTC
