@@ -35,9 +35,7 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 HOLDOUT_START = "2025-01-01"
 
-MIN_ACCURACY_GATE = 0.55  # Calibrated for 22-month single-regime dataset
-
-DIRECTION_THRESHOLD = 0.002  # ±0.2% = cleaner bull/bear signal, reduces neutral noise
+MIN_ACCURACY_GATE = 0.52  # Binary classifier: >50% = better than random
 
 
 # -- Data Loading --------------------------------------------------------------
@@ -235,9 +233,11 @@ def engineer_features(
     df["future_close"] = df["close"].shift(-6)
     df["future_return"] = (df["future_close"] - df["close"]) / df["close"]
 
-    df["label"] = "neutral"
-    df.loc[df["future_return"] >  DIRECTION_THRESHOLD, "label"] = "bull"
-    df.loc[df["future_return"] < -DIRECTION_THRESHOLD, "label"] = "bear"
+    # Binary label: bull if SPX goes up, bear if SPX goes down
+    # No neutral class -- signal_weak gate in prediction_engine handles low-confidence
+    df["label"] = df["future_return"].apply(
+        lambda r: "bull" if r > 0 else "bear"
+    )
 
     # Final cleanup
 
@@ -251,8 +251,7 @@ def engineer_features(
     label_counts = df["label"].value_counts()
     print(f"  Total samples: {len(df):,}")
     print(f"  Labels: bull={label_counts.get('bull',0):,}, "
-          f"bear={label_counts.get('bear',0):,}, "
-          f"neutral={label_counts.get('neutral',0):,}")
+          f"bear={label_counts.get('bear',0):,}")
 
     return df
 
@@ -332,21 +331,15 @@ def train_and_evaluate(df: pd.DataFrame) -> tuple:
     model.fit(X_train, y_train)
 
     y_pred = model.predict(X_hold)
-    accuracy = (y_pred == y_hold).mean()
 
-    # Win rate: % of directional predictions that were correct
-    # (exclude neutral predictions for win rate calc)
-    directional_mask = y_pred != "neutral"
-    if directional_mask.sum() > 0:
-        directional_correct = ((y_pred == y_hold) & directional_mask).sum()
-        win_rate = directional_correct / directional_mask.sum()
-    else:
-        win_rate = 0.0
+    # Binary model: every prediction is directional
+    win_rate = (y_pred == y_hold).mean()
+    accuracy = win_rate  # same thing for binary
 
     print(f"\n  Holdout accuracy (all labels): {accuracy:.1%}")
     print(f"  Holdout win rate (directional only): {win_rate:.1%}")
     print(f"\n  Classification report:")
-    print(classification_report(y_hold, y_pred, target_names=["bear", "bull", "neutral"]))
+    print(classification_report(y_hold, y_pred, target_names=["bear", "bull"]))
 
     importance_df = pd.DataFrame({
         "feature": FEATURE_COLS,
