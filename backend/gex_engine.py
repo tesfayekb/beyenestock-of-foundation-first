@@ -93,7 +93,18 @@ class GexEngine:
             gex_by_strike[K] = gex_by_strike.get(K, 0.0) + dealer_gamma
             net_gex += dealer_gamma
 
-        nearest_wall = self._nearest_positive_wall(gex_by_strike)
+        # Read SPX price from Redis if available, else use placeholder
+        spx_price = 5200.0
+        try:
+            raw = self.redis_client.get("tradier:quotes:SPX")
+            if raw:
+                import json as _json
+                quote = _json.loads(raw)
+                spx_price = float(quote.get("last", 5200.0))
+        except Exception:
+            pass
+
+        nearest_wall = self._nearest_positive_wall(gex_by_strike, spx_price)
         flip_zone = self._nearest_flip_zone(gex_by_strike)
         # TODO T-ACT-004: replace with rolling 20-day average once learning engine is live (Phase 6)
         expected_trades_5min = 1000
@@ -129,11 +140,32 @@ class GexEngine:
         )
 
     @staticmethod
-    def _nearest_positive_wall(gex_by_strike: Dict[float, float]) -> Optional[float]:
-        positives = [strike for strike, value in gex_by_strike.items() if value > 0]
+    def _nearest_positive_wall(
+        gex_by_strike: Dict[float, float],
+        spx_price: float = 5200.0,
+    ) -> Optional[float]:
+        """
+        Return the positive GEX strike nearest to the current SPX price.
+        Prefers the strike ABOVE SPX price (resistance wall).
+        Falls back to nearest below if no strikes above exist.
+        """
+        positives = [
+            strike for strike, value in gex_by_strike.items() if value > 0
+        ]
         if not positives:
             return None
-        return sorted(positives)[0]
+
+        # Find strikes above SPX price (resistance)
+        above = [s for s in positives if s >= spx_price]
+        if above:
+            return min(above)  # nearest above
+
+        # Fallback: nearest below SPX price
+        below = [s for s in positives if s < spx_price]
+        if below:
+            return max(below)  # nearest below
+
+        return None
 
     @staticmethod
     def _nearest_flip_zone(gex_by_strike: Dict[float, float]) -> Optional[float]:

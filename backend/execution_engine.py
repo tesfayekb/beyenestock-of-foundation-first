@@ -8,6 +8,7 @@ from typing import Optional
 
 from db import get_client, write_health_status, write_audit_log
 from logger import get_logger
+from risk_engine import check_execution_quality
 from session_manager import get_today_session, update_session
 from strategy_selector import STATIC_SLIPPAGE_BY_STRATEGY
 
@@ -168,6 +169,16 @@ class ExecutionEngine:
             exit_slip = STATIC_SLIPPAGE_BY_STRATEGY.get(strategy_type, 0.15)
             if exit_credit is None:
                 exit_credit = round(entry_credit * 0.50, 4)
+
+            # D-019: check execution quality and track degradation
+            if session_id:
+                predicted_slip = pos.get("entry_slippage") or exit_slip
+                actual_slip = exit_slip
+                check_execution_quality(
+                    predicted_slippage=predicted_slip,
+                    actual_slippage=actual_slip,
+                    session_id=session_id,
+                )
 
             gross_pnl = (entry_credit - exit_credit) * contracts * 100
             slippage_cost = exit_slip * contracts * 100
