@@ -1,0 +1,35 @@
+name: Deploy Sentinel to GCP Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sentinel/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: marketmuse-sentinel
+          region: us-east1
+          source: ./sentinel
+          env_vars: |
+            RAILWAY_HEALTH_URL=https://diplomatic-mercy-production-7e61.up.railway.app/health
+            SUPABASE_URL=https://hnfvuxcwjferoocvybnf.supabase.co
+            TRADIER_ACCOUNT_ID=VA37545874
+            TRADIER_SANDBOX=true
+            HEARTBEAT_INTERVAL_SECONDS=30
+            STALE_THRESHOLD_SECONDS=120
+          secrets: |
+            SUPABASE_SERVICE_ROLE_KEY=SENTINEL_SUPABASE_KEY:latest
+            TRADIER_API_KEY=SENTINEL_TRADIER_KEY:latest
+          flags: --min-instances=1 --max-instances=1 --memory=256Mi --no-allow-unauthenticated
