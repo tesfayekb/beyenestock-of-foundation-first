@@ -33,6 +33,25 @@ def write_health_status(service_name: str, status: str, **kwargs) -> bool:
         # Always clear last_error_message when status is healthy — do not persist stale errors
         if status == "healthy" and "last_error_message" not in kwargs:
             payload["last_error_message"] = None
+        # Increment error_count_1h when writing an error status (GLC-006)
+        if status == "error":
+            try:
+                current = (
+                    get_client()
+                    .table("trading_system_health")
+                    .select("error_count_1h")
+                    .eq("service_name", service_name)
+                    .maybeSingle()
+                    .execute()
+                )
+                current_count = 0
+                if current.data and current.data.get("error_count_1h"):
+                    current_count = int(current.data["error_count_1h"])
+                payload["error_count_1h"] = current_count + 1
+            except Exception:
+                payload["error_count_1h"] = 1
+        if status == "healthy" and "error_count_1h" not in kwargs:
+            payload["error_count_1h"] = 0
         get_client().table("trading_system_health").upsert(
             payload, on_conflict="service_name"
         ).execute()

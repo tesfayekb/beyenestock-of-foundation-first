@@ -13,7 +13,7 @@ from gex_engine import GexEngine
 from logger import get_logger
 from polygon_feed import PolygonFeed
 from prediction_engine import PredictionEngine
-from session_manager import get_or_create_session
+from session_manager import get_or_create_session, open_today_session, close_today_session
 from tradier_feed import TradierFeed
 from trading_cycle import run_trading_cycle
 from calibration_engine import run_weekly_calibration
@@ -154,6 +154,24 @@ def run_time_stop_345pm_job() -> None:
         logger.info("time_stop_345pm_job_done", **result)
     except Exception as exc:
         logger.error("time_stop_345pm_job_error", error=str(exc))
+
+
+def run_market_open_job() -> None:
+    """Transitions session to 'active' at 9:30 AM ET (13:30 UTC)."""
+    try:
+        ok = open_today_session()
+        logger.info("market_open_session_transition", success=ok)
+    except Exception as exc:
+        logger.error("market_open_job_error", error=str(exc))
+
+
+def run_market_close_job() -> None:
+    """Transitions session to 'closed' at 4:30 PM ET (21:30 UTC)."""
+    try:
+        ok = close_today_session()
+        logger.info("market_close_session_transition", success=ok)
+    except Exception as exc:
+        logger.error("market_close_job_error", error=str(exc))
 
 
 def pre_market_scan() -> None:
@@ -307,6 +325,26 @@ async def on_startup() -> None:
             hour=20,
             minute=45,
             id="trading_time_stop_345pm",
+            replace_existing=True,
+        )
+        # Session open: 9:30 AM ET = 13:30 UTC
+        scheduler.add_job(
+            run_market_open_job,
+            trigger="cron",
+            day_of_week="mon-fri",
+            hour=13,
+            minute=30,
+            id="trading_market_open",
+            replace_existing=True,
+        )
+        # Session close: 4:30 PM ET = 21:30 UTC
+        scheduler.add_job(
+            run_market_close_job,
+            trigger="cron",
+            day_of_week="mon-fri",
+            hour=21,
+            minute=30,
+            id="trading_market_close",
             replace_existing=True,
         )
         scheduler.start()

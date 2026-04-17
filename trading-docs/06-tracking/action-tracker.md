@@ -29,6 +29,25 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-014 — Fix Group 2: High Priority Data Integrity Fixes
+
+- **id:** T-ACT-014
+- **date:** 2026-04-17
+- **action:** Fix Group 2 — error_count_1h incremented on error writes (GLC-006 now meaningful), GEX nearest wall returns closest to SPX price not lowest, TRADIER_ACCOUNT_ID added to REQUIRED_KEYS, D-019 check_execution_quality called on position close, session status transitions pending→active→closed wired to 9:30 AM and 4:30 PM ET scheduler jobs.
+- **type:** code
+- **phase:** phase_4
+- **impact:** HIGH
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `backend/db.py` (error_count_1h), `backend/gex_engine.py` (nearest wall), `backend/config.py` (REQUIRED_KEYS), `backend/execution_engine.py` (D-019), `backend/session_manager.py` (open/close transitions), `backend/main.py` (market open/close jobs), `backend/tests/test_fix_group2.py` (new)
+- **docs_updated:**
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE
+- **verification:** 50/50 unit tests passing. `session_manager` and `gex_engine` import cleanly. Only 6 backend files + 1 new test file modified. No frontend, migration, or other files touched.
+- **t_rules_checked:** T-Rule 1 (Foundation Isolation): PASS, T-Rule 9 (Audit Trail): session open/close both write audit logs, T-Rule 10 (No Silent Failures): all job wrappers catch and log exceptions
+
+---
+
 ### T-ACT-013 — Fix Group 1: Critical Blocking Fixes
 
 - **id:** T-ACT-013

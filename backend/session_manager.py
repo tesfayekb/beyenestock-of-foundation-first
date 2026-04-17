@@ -84,3 +84,92 @@ def get_today_session() -> Optional[dict]:
     except Exception as e:
         logger.error("session_fetch_failed", error=str(e))
         return None
+
+
+def open_today_session() -> bool:
+    """
+    Transition today's session from 'pending' to 'active' at market open.
+    Called at 9:30 AM ET by scheduler.
+    Returns True on success, False on failure. Never raises.
+    """
+    try:
+        session = get_today_session()
+        if not session:
+            session = get_or_create_session()
+        if not session:
+            logger.error("open_today_session_no_session")
+            return False
+
+        if session.get("session_status") == "halted":
+            logger.warning("open_today_session_already_halted")
+            return False
+
+        import zoneinfo
+        et = zoneinfo.ZoneInfo("America/New_York")
+        now_et = datetime.now(et)
+
+        ok = update_session(
+            session["id"],
+            session_status="active",
+            market_open_at=datetime.now(timezone.utc).isoformat(),
+            spx_open=None,
+            vix_open=None,
+        )
+        if ok:
+            write_audit_log(
+                action="trading.session_opened",
+                metadata={
+                    "session_date": session.get("session_date"),
+                    "session_id": session["id"],
+                },
+            )
+            logger.info("session_opened", session_date=session.get("session_date"))
+        return ok
+    except Exception as e:
+        logger.error("open_today_session_failed", error=str(e))
+        return False
+
+
+def close_today_session() -> bool:
+    """
+    Transition today's session from 'active' to 'closed' at market close.
+    Called at 4:30 PM ET by EOD criteria job (after positions are closed).
+    Returns True on success, False on failure. Never raises.
+    """
+    try:
+        session = get_today_session()
+        if not session:
+            logger.warning("close_today_session_no_session")
+            return False
+
+        if session.get("session_status") in ("halted", "closed"):
+            logger.info(
+                "close_today_session_already_terminal",
+                status=session.get("session_status"),
+            )
+            return True  # already in terminal state, not an error
+
+        ok = update_session(
+            session["id"],
+            session_status="closed",
+            market_close_at=datetime.now(timezone.utc).isoformat(),
+        )
+        if ok:
+            write_audit_log(
+                action="trading.session_closed",
+                metadata={
+                    "session_date": session.get("session_date"),
+                    "session_id": session["id"],
+                    "virtual_pnl": session.get("virtual_pnl"),
+                    "virtual_trades": session.get("virtual_trades_count"),
+                },
+            )
+            logger.info(
+                "session_closed",
+                session_date=session.get("session_date"),
+                virtual_pnl=session.get("virtual_pnl"),
+            )
+        return ok
+    except Exception as e:
+        logger.error("close_today_session_failed", error=str(e))
+        return False
