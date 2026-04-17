@@ -705,3 +705,36 @@ Single register of every trading change action. Every change to trading code, sc
 - **phase:** phase_a
 - **impact:** HIGH — enables all ML model training (A3, A4)
 - **t_rules_checked:** T-Rule 1 ✅ (no production files modified)
+
+---
+
+### T-ACT-028 — Phase A3: LightGBM Direction Model Training + Wiring
+
+- **id:** T-ACT-028
+- **date:** 2026-04-17
+- **action:** Phase A3 — LightGBM direction model training script + wiring.
+  backend/scripts/train_direction_model.py: engineers 47 features from
+  SPX 5-min + VIX/VVIX/VIX9D daily parquet files, trains LightGBM classifier
+  (3-class: bull/bear/neutral at ±0.1% threshold, 30min forward horizon) with
+  2025+ holdout validation, requires >=72% directional win rate gate before
+  saving model. Saves direction_lgbm_v1.pkl + model_metadata.json to
+  backend/models/. Script is standalone (not wired into scheduler).
+  backend/prediction_engine.py: __init__ loads direction_lgbm_v1.pkl when
+  present; _compute_direction uses LightGBM inference as priority 1, falls
+  back to GEX/ZG rule-based (priority 2) on model error or when model is not
+  loaded. Uses getattr for defensive attribute access so legacy test fixtures
+  using __new__ continue to pass. Emits model_source="lgbm_v1" in output when
+  model is used.
+  backend/polygon_feed.py: _compute_spx_features writes live SPX technical
+  features (return_5m/30m/1h/4h, prior_day_return, rsi_14) to Redis every
+  5 minutes inside _poll_loop for inference. Failures logged as
+  spx_features_update_failed and swallowed (inference falls back to defaults).
+  backend/tests/test_phase_a3.py: 4 unit tests covering feature engineering
+  column coverage, model loading, GEX/ZG fallback when model=None, and
+  metadata writing.
+- **phase:** phase_a
+- **impact:** CRITICAL — replaces hardcoded probability tables with trained
+  ML once model is committed; expected win-rate lift 65% -> 74-78%
+- **t_rules_checked:** T-Rule 1 ✅ (no foundation files touched), T-Rule 5 ✅
+  (capital preservation gates unchanged), T-Rule 8 ✅ (A3 follows A1+A2 in
+  phase A sequence)

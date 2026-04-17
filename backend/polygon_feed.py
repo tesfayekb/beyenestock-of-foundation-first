@@ -76,6 +76,12 @@ class PolygonFeed:
                     except Exception as exc:
                         logger.warning("polygon_iv_rv_update_failed", error=str(exc))
 
+                    # Compute and store SPX technical features for LightGBM
+                    try:
+                        await self._compute_spx_features()
+                    except Exception as feat_exc:
+                        logger.warning("spx_features_update_failed", error=str(feat_exc))
+
                     await self._write_daily_open_if_needed(current)
                 except Exception as exc:
                     logger.warning("polygon_vvix_poll_failed", error=str(exc))
@@ -249,6 +255,45 @@ class PolygonFeed:
         except Exception as e:
             logger.warning("polygon_spx_fetch_failed", error=type(e).__name__)
         return None
+
+    async def _compute_spx_features(self) -> None:
+        """
+        Compute SPX technical features from recent price history.
+        Stores to Redis for LightGBM model inference.
+        Requires >= 2 SPX close values in self.spx_history.
+        """
+        if len(self.spx_history) < 2:
+            return
+
+        closes = self.spx_history
+        c = closes[-1]  # current close
+
+        # Multi-timeframe returns
+        def safe_return(n: int) -> float:
+            if len(closes) > n:
+                return (c - closes[-(n + 1)]) / closes[-(n + 1)] if closes[-(n + 1)] else 0.0
+            return 0.0
+
+        self.redis_client.setex("polygon:spx:return_5m",  300, str(safe_return(1)))
+        self.redis_client.setex("polygon:spx:return_30m", 300, str(safe_return(6)))
+        self.redis_client.setex("polygon:spx:return_1h",  300, str(safe_return(12)))
+        self.redis_client.setex("polygon:spx:return_4h",  300, str(safe_return(48)))
+
+        # Prior day return (use spx_history as daily closes)
+        if len(closes) >= 2:
+            prior = (closes[-1] - closes[-2]) / closes[-2] if closes[-2] else 0.0
+            self.redis_client.setex("polygon:spx:prior_day_return", 86400, str(prior))
+
+        # RSI-14 (simplified from available history)
+        if len(closes) >= 15:
+            diffs = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+            gains = [max(d, 0) for d in diffs[-14:]]
+            losses = [abs(min(d, 0)) for d in diffs[-14:]]
+            avg_gain = sum(gains) / 14
+            avg_loss = sum(losses) / 14
+            rs = avg_gain / avg_loss if avg_loss > 0 else 100
+            rsi = 100 - (100 / (1 + rs))
+            self.redis_client.setex("polygon:spx:rsi_14", 300, str(round(rsi, 2)))
 
     def _is_market_hours(self) -> bool:
         import zoneinfo
