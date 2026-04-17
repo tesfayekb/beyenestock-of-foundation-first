@@ -132,6 +132,9 @@ expected paper phase graduation.**
 | D-011 | Sync scheduler jobs run on asyncio thread pool | LOW | Monitor in Phase 5 | APScheduler handles sync→thread correctly (FP-001). Revisit only if feed latency degrades under live load |
 | D-012 | D-022 consecutive-session counter has one-day lag | LOW | Document only | After EOD close, counter reflects prior sessions not current. One-day lag is acceptable — D-022 sizing reduction applies next session. |
 | D-013 | regime_agreement almost never disagrees (placeholder HMM/LGB both use same VVIX branch) | LOW | Phase 6 | Real model disagreement requires real HMM vs LightGBM outputs. Document that D-021 is dormant until Phase 6 real models. |
+| D-014 | D-022 consecutive-session counter has one-day lag | LOW | Document only | The query in close_today_session fetches the last 3 closed sessions after today's close, so today's result is included. The >= 3 alert fires the day after the third loss, not during it. This one-session lag is acceptable — D-022 sizing reduction applies on the next session. No code change needed. |
+| D-015 | Sentinel audit log not idempotent on crash-restart | LOW | Before Phase 5 | If Sentinel crashes after marking positions closed but before writing sentinel_emergency_close_complete, the next restart writes a second audit entry. Fix: use correlation_id = hash(trigger_timestamp) as upsert key on audit_logs. |
+| D-016 | validate_config() only enforced at FastAPI startup | LOW | Before Phase 5 | Module-level constants default to None if env vars are missing. A standalone CLI call to run_trading_cycle would fail only on first Supabase call, not at import. Fix: add _require() wrapper or call validate_config() in config.py on import when ENVIRONMENT != test. |
 
 ## FIX GROUP 8 TRIGGER CONDITIONS
 

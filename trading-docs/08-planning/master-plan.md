@@ -146,12 +146,17 @@ GLC-006 show in_progress AND ≥ 25 paper sessions completed.
 | TPLAN-HARD-008-F | get_or_create_session upsert ON CONFLICT | Python/Railway | P2-MEDIUM | `not_started` |
 | TPLAN-HARD-008-G | Sentinel operator ACK before re-arm | Python/GCP | P2-MEDIUM | `not_started` |
 | TPLAN-HARD-008-H | Error-code taxonomy in write_health_status (no raw DSNs) | Python/Railway | P3-LOW | `not_started` |
+| TPLAN-HARD-008-I | Seed all 11 trading_system_health rows at migration time (status=offline) | Supabase | P2-MEDIUM | `not_started` |
+| TPLAN-HARD-008-J | Databento Live graceful shutdown — call client.stop() when _stop_event fires | Python/Railway | P2-MEDIUM | `not_started` |
+| TPLAN-HARD-008-K | Atomic error_count_1h increment via Postgres UPDATE...SET error_count_1h = error_count_1h + 1 | Python/Railway | P2-MEDIUM | `not_started` |
+| TPLAN-HARD-008-L | encrypted_key column encryption-at-rest via pgcrypto or KMS reference before live Tradier key stored in DB | Supabase | P1-HIGH | `not_started` |
 
 ### Phase Gate (ALL P1 items required before Phase 5)
 - [ ] TPLAN-HARD-008-A: Sentinel closes real Tradier positions
 - [ ] TPLAN-HARD-008-B: Session P&L race condition eliminated
 - [ ] TPLAN-HARD-008-C: Sentinel has isolated close-only credentials
 - [ ] TPLAN-HARD-008-D: RLS scoped to trading.view permission
+- [ ] TPLAN-HARD-008-L: encrypted_key enforces encryption before any live Tradier key is stored
 
 ---
 
