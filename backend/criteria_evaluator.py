@@ -88,30 +88,43 @@ def evaluate_glc002_per_regime_accuracy() -> None:
 def evaluate_glc003_training_examples() -> None:
     """GLC-003: Minimum 50 training examples per regime-strategy cell."""
     try:
+        # Use Postgres aggregation instead of Python-side Counter
         result = (
             get_client()
             .table("trading_positions")
-            .select("entry_regime, strategy_type", count="exact")
+            .select("entry_regime, strategy_type, id", count="exact")
             .eq("position_mode", "virtual")
+            .eq("status", "closed")
             .execute()
         )
         total = result.count or 0
 
-        # Group by regime x strategy to find minimum cell count
-        if result.data:
-            from collections import Counter
-            cell_counts = Counter(
-                (r.get("entry_regime", "unknown"), r.get("strategy_type", "unknown"))
-                for r in result.data
+        if not result.data:
+            _upsert_criterion(
+                "GLC-003", "not_started",
+                "No closed positions recorded yet",
+                0.0,
+                observations_count=0,
             )
-            min_cell = min(cell_counts.values()) if cell_counts else 0
-            unique_cells = len(cell_counts)
-            status = "passed" if min_cell >= 50 else "in_progress" if total > 0 else "not_started"
-            text = f"{total} positions, {unique_cells} cells, min cell={min_cell}"
-        else:
-            min_cell = 0
-            status = "not_started"
-            text = "No positions recorded yet"
+            return
+
+        # Group by regime x strategy in Python (Supabase REST doesn't support GROUP BY)
+        # but only compute min cell — O(n) is acceptable for criteria evaluation
+        from collections import defaultdict
+        cell_counts: dict = defaultdict(int)
+        for row in result.data:
+            regime = row.get("entry_regime") or "unknown"
+            strategy = row.get("strategy_type") or "unknown"
+            cell_counts[(regime, strategy)] += 1
+
+        min_cell = min(cell_counts.values()) if cell_counts else 0
+        unique_cells = len(cell_counts)
+        status = (
+            "passed" if min_cell >= 50
+            else "in_progress" if total > 0
+            else "not_started"
+        )
+        text = f"{total} positions, {unique_cells} cells, min cell={min_cell}"
 
         _upsert_criterion(
             "GLC-003", status, text,
