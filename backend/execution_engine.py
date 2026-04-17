@@ -238,6 +238,27 @@ class ExecutionEngine:
                     session_id=session_id,
                 )
 
+            # Write calibration log entry for slippage model training (D-015)
+            try:
+                cal_entry = {
+                    "position_id": position_id,
+                    "regime": pos.get("entry_regime"),
+                    "predicted_slippage": pos.get("entry_slippage"),
+                    "actual_slippage": round(
+                        abs(entry_credit - (exit_credit or entry_credit * 0.50)), 4
+                    ),
+                    "cv_stress_score": pos.get("entry_cv_stress"),
+                    "exit_reason": exit_reason,
+                    "exit_triggered": exit_reason not in ("profit_target", "manual"),
+                    "pct_max_profit": round(
+                        (entry_credit - (exit_credit or 0)) / entry_credit, 4
+                    ) if entry_credit > 0 else None,
+                    "position_state": pos.get("current_state"),
+                }
+                get_client().table("trading_calibration_log").insert(cal_entry).execute()
+            except Exception as cal_err:
+                logger.warning("calibration_log_write_failed", error=str(cal_err))
+
             write_audit_log(
                 action="trading.virtual_position_closed",
                 target_type="trading_positions",

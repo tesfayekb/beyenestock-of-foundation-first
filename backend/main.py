@@ -16,7 +16,9 @@ from prediction_engine import PredictionEngine
 from session_manager import get_or_create_session
 from tradier_feed import TradierFeed
 from trading_cycle import run_trading_cycle
+from calibration_engine import run_weekly_calibration
 from criteria_evaluator import run_criteria_evaluation
+from model_retraining import run_weekly_model_performance
 
 logger = get_logger("main")
 app = FastAPI()
@@ -105,6 +107,24 @@ def run_eod_criteria_evaluation() -> None:
         logger.info("eod_criteria_evaluation_done", **summary)
     except Exception as exc:
         logger.error("eod_criteria_evaluation_error", error=str(exc))
+
+
+def run_weekly_calibration_job() -> None:
+    """Runs every Sunday at 6 PM ET (23:00 UTC)."""
+    try:
+        summary = run_weekly_calibration()
+        logger.info("weekly_calibration_job_done", **summary)
+    except Exception as exc:
+        logger.error("weekly_calibration_job_error", error=str(exc))
+
+
+def run_weekly_model_performance_job() -> None:
+    """Runs every Sunday at 6:30 PM ET (23:30 UTC) — after calibration."""
+    try:
+        summary = run_weekly_model_performance()
+        logger.info("weekly_model_performance_job_done", **summary)
+    except Exception as exc:
+        logger.error("weekly_model_performance_job_error", error=str(exc))
 
 
 def pre_market_scan() -> None:
@@ -210,6 +230,24 @@ async def on_startup() -> None:
             hour=21,      # 4:30 PM ET = 21:30 UTC
             minute=30,
             id="trading_eod_criteria_evaluation",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            run_weekly_calibration_job,
+            trigger="cron",
+            day_of_week="sun",
+            hour=23,
+            minute=0,
+            id="trading_weekly_calibration",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            run_weekly_model_performance_job,
+            trigger="cron",
+            day_of_week="sun",
+            hour=23,
+            minute=30,
+            id="trading_weekly_model_performance",
             replace_existing=True,
         )
         scheduler.start()
