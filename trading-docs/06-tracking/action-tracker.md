@@ -809,3 +809,35 @@ Single register of every trading change action. Every change to trading code, sc
 - **t_rules_checked:** T-Rule 1 ✅ (no foundation files touched),
   T-Rule 5 ✅ (capital preservation gates unchanged; no risk_engine
   changes), T-Rule 8 ✅ (Phase B follows Phase A in build order)
+
+---
+
+### T-ACT-031 — GEX/ZG Backtest Script
+
+- **id:** T-ACT-031
+- **date:** 2026-04-17
+- **action:** GEX/ZG backtest script.
+  backend/scripts/backtest_gex_zg.py: standalone backtest that
+  reconstructs the production prediction_engine GEX/ZG classifier
+  (classify_regime + regime_to_strategy) against 2022-2023
+  options_features.parquet. Simulates 16-delta credit spread entries
+  at 9:35 AM SPX open, exits at EOD with proportional breach loss,
+  50% profit target, and 2x stop-loss. Costs: $0.35/leg/contract x 4
+  legs commission + $0.10 slippage per trade. IV-rank is used as a
+  VVIX z-score proxy until real VVIX historical data is wired in.
+  Outputs win rate, profit factor, Sharpe (annualized), max drawdown,
+  per-strategy breakdown, and a text verdict (STRONG / MODERATE /
+  WEAK / NO edge). Saves to data/historical/backtest_results.json.
+  backend/tests/test_backtest_gex_zg.py: 9 unit tests covering
+  classify_regime (pin_range, quiet_bullish, volatile_bearish, crisis),
+  regime_to_strategy (sit-out and tradeable sets), simulate_trade
+  (win and loss paths), and estimate_credit (positivity + iron-condor
+  > single spread).
+- **phase:** phase_b
+- **impact:** CRITICAL — validates whether the rule-based GEX/ZG
+  signal has real edge before we trust it with live capital. Result
+  drives the A3 meta-labeling vs keep-GEX-ZG decision.
+- **t_rules_checked:** T-Rule 1 ✅ (no production files modified;
+  script is standalone under backend/scripts/), T-Rule 5 ✅ (capital
+  preservation gates untouched), T-Rule 8 ✅ (Phase B task; unblocks
+  later A3 rework)
