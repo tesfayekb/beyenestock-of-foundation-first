@@ -139,6 +139,14 @@ def label_prediction_outcomes(target_date: Optional[date] = None) -> dict:
                 )
                 summary["errors"] += 1
 
+        # Warn if Polygon returned no data for all predictions
+        # (likely a plan restriction on I:SPX index data)
+        if summary["total"] > 0 and summary["labeled"] == 0 and summary["errors"] == 0:
+            logger.warning(
+                "label_outcomes_all_skipped",
+                total=summary["total"],
+                hint="Check Polygon plan covers I:SPX index minute aggregates",
+            )
         logger.info("label_prediction_outcomes_complete", **summary)
         write_audit_log(
             action="trading.prediction_outcomes_labeled",
