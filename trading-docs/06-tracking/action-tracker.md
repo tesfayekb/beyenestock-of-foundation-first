@@ -29,6 +29,25 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-015 — Fix Group 3: Medium Priority Security & Reliability Fixes
+
+- **id:** T-ACT-015
+- **date:** 2026-04-17
+- **action:** Fix Group 3 — thread-safe Supabase singleton (double-checked lock), lazy feed initialization in on_startup (Redis must be ready first), Sentinel Supabase singleton (prevents connection exhaustion during emergency), Sentinel config wrapped in try/except with structured logging before sys.exit, prediction_engine Redis defaults changed from fake confidence to neutral.
+- **type:** code
+- **phase:** phase_4
+- **impact:** MEDIUM
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `backend/db.py` (double-checked locking), `backend/main.py` (lazy feed init), `backend/prediction_engine.py` (Redis defaults guard), `sentinel/main.py` (Supabase singleton + config hardening), `backend/tests/test_fix_group3.py` (new)
+- **docs_updated:**
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE
+- **verification:** 54/54 unit tests passing. `db._client_lock` confirmed present. Only 4 backend/sentinel files + 1 new test file modified. No frontend or migration files touched.
+- **t_rules_checked:** T-Rule 1 (Foundation Isolation): PASS, T-Rule 10 (No Silent Failures): Sentinel config crash now logs before sys.exit(1)
+
+---
+
 ### T-ACT-014 — Fix Group 2: High Priority Data Integrity Fixes
 
 - **id:** T-ACT-014

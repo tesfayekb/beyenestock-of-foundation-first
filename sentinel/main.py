@@ -37,28 +37,6 @@ def start_health_server():
 
 
 # -----------------------------------------------------------------------
-# Config — all from environment variables
-# -----------------------------------------------------------------------
-RAILWAY_HEALTH_URL = os.environ["RAILWAY_HEALTH_URL"]  # https://diplomatic-mercy-production-7e61.up.railway.app/health
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-TRADIER_API_KEY = os.environ["TRADIER_API_KEY"]
-TRADIER_ACCOUNT_ID = os.environ["TRADIER_ACCOUNT_ID"]
-TRADIER_SANDBOX = os.environ.get("TRADIER_SANDBOX", "true").lower() == "true"
-HEARTBEAT_INTERVAL_SECONDS = int(
-    os.environ.get("HEARTBEAT_INTERVAL_SECONDS", "30")
-)
-STALE_THRESHOLD_SECONDS = int(
-    os.environ.get("STALE_THRESHOLD_SECONDS", "120")
-)
-
-TRADIER_BASE = (
-    "https://sandbox.tradier.com"
-    if TRADIER_SANDBOX
-    else "https://api.tradier.com"
-)
-
-# -----------------------------------------------------------------------
 # Logging
 # -----------------------------------------------------------------------
 logging.basicConfig(
@@ -68,14 +46,53 @@ logging.basicConfig(
 logger = logging.getLogger("sentinel")
 
 # -----------------------------------------------------------------------
+# Config — loaded after logging is ready so missing vars are visible
+# -----------------------------------------------------------------------
+try:
+    RAILWAY_HEALTH_URL = os.environ["RAILWAY_HEALTH_URL"]
+    SUPABASE_URL = os.environ["SUPABASE_URL"]
+    SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    TRADIER_API_KEY = os.environ["TRADIER_API_KEY"]
+    TRADIER_ACCOUNT_ID = os.environ["TRADIER_ACCOUNT_ID"]
+    TRADIER_SANDBOX = os.environ.get("TRADIER_SANDBOX", "true").lower() == "true"
+    HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("HEARTBEAT_INTERVAL_SECONDS", "30"))
+    STALE_THRESHOLD_SECONDS = int(os.environ.get("STALE_THRESHOLD_SECONDS", "120"))
+    TRADIER_BASE = (
+        "https://sandbox.tradier.com"
+        if TRADIER_SANDBOX
+        else "https://api.tradier.com"
+    )
+except KeyError as missing_key:
+    # Log to stderr — logger may not be fully ready yet
+    import sys
+    print(
+        f"FATAL: Sentinel missing required environment variable: {missing_key}",
+        file=sys.stderr,
+    )
+    # Also try to log via logging if available
+    try:
+        logging.getLogger("sentinel").critical(
+            f"sentinel_missing_env_var: {missing_key}"
+        )
+    except Exception:
+        pass
+    sys.exit(1)
+
+# -----------------------------------------------------------------------
 # State
 # -----------------------------------------------------------------------
 last_healthy_at: float = time.time()
 emergency_triggered: bool = False
 
+_supabase_client = None
+
 
 def get_supabase():
-    return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    """Return singleton Supabase client. Created once, reused forever."""
+    global _supabase_client
+    if _supabase_client is None:
+        _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    return _supabase_client
 
 
 def write_sentinel_health(status: str, message: str = "") -> None:

@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -7,14 +8,16 @@ from logger import get_logger
 logger = get_logger("db")
 
 _client = None
+_client_lock = threading.Lock()
 
 
 def get_client():
     global _client
     if _client is None:
-        from supabase import create_client
-
-        _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        with _client_lock:
+            if _client is None:  # double-checked locking
+                from supabase import create_client
+                _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     return _client
 
 

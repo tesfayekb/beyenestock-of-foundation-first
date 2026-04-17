@@ -26,11 +26,11 @@ app = FastAPI()
 scheduler = AsyncIOScheduler()
 redis_client = None
 
-tradier_feed = TradierFeed()
-polygon_feed = PolygonFeed()
-databento_feed = DatabentoFeed()
-gex_engine = GexEngine()
-prediction_engine = PredictionEngine()
+tradier_feed = None
+polygon_feed = None
+databento_feed = None
+gex_engine = None
+prediction_engine = None
 background_tasks: List[asyncio.Task] = []
 
 
@@ -204,12 +204,19 @@ def heartbeat_check() -> None:
 
 @app.on_event("startup")
 async def on_startup() -> None:
-    global redis_client
+    global redis_client, tradier_feed, polygon_feed, databento_feed, gex_engine, prediction_engine
     try:
         config.validate_config()
         redis_client = redis.Redis.from_url(config.REDIS_URL, decode_responses=True)
         redis_client.ping()
         _ = get_client()
+
+        # Initialize feed objects only after Redis is confirmed ready
+        tradier_feed = TradierFeed()
+        polygon_feed = PolygonFeed()
+        databento_feed = DatabentoFeed()
+        gex_engine = GexEngine()
+        prediction_engine = PredictionEngine()
 
         jobs = load_jobs_from_registry()
         if "trading_gex_computation" in jobs:
