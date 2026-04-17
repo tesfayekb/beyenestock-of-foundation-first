@@ -9,12 +9,32 @@ If Railway is completely down, this process still runs.
 """
 import asyncio
 import os
+import threading
 import time
 import logging
 from datetime import datetime, timezone
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import httpx
 from supabase import create_client
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"sentinel ok")
+
+    def log_message(self, format, *args):
+        pass  # suppress HTTP access logs
+
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logger.info(f"sentinel_health_server_started port={port}")
+
 
 # -----------------------------------------------------------------------
 # Config — all from environment variables
@@ -223,6 +243,7 @@ async def run_sentinel_loop() -> None:
     Main sentinel loop. Runs forever.
     Checks Railway heartbeat every HEARTBEAT_INTERVAL_SECONDS.
     """
+    start_health_server()
     global last_healthy_at
 
     logger.info(
