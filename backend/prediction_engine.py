@@ -63,9 +63,9 @@ class PredictionEngine:
         Uses VVIX Z-score as proxy. Real HMM + LightGBM in Phase 4.
         D-021: regime disagreement guard implemented here.
         """
-        vvix_z_raw = self._read_redis("polygon:vvix:z_score", "0.0")
+        vvix_z_raw = self._read_redis("polygon:vvix:z_score", None)
         try:
-            vvix_z = float(vvix_z_raw)
+            vvix_z = float(vvix_z_raw) if vvix_z_raw is not None else 0.0
         except (ValueError, TypeError):
             vvix_z = 0.0
 
@@ -128,18 +128,18 @@ class PredictionEngine:
         Real charm/vanna velocities from options chain in Phase 4.
         Formula: cv_stress = 60% * proxy_vanna + 40% * proxy_charm
         """
-        try:
-            gex_conf = float(self._read_redis("gex:confidence", "1.0"))
-        except (ValueError, TypeError):
-            gex_conf = 1.0
+        gex_conf_raw = self._read_redis("gex:confidence", None)
+        gex_conf = float(gex_conf_raw) if gex_conf_raw is not None else None
         try:
             vvix_z = float(self._read_redis("polygon:vvix:z_score", "0.0"))
         except (ValueError, TypeError):
             vvix_z = 0.0
 
         # Proxy velocities based on available data
-        proxy_vanna = abs(vvix_z) * 0.6 + (1.0 - gex_conf) * 2.0
-        proxy_charm = abs(vvix_z) * 0.4 + (1.0 - gex_conf) * 1.5
+        # Treat None gex_conf (no Redis data yet) as neutral 0.5 not full confidence 1.0
+        gex_conf_val = gex_conf if gex_conf is not None else 0.5
+        proxy_vanna = abs(vvix_z) * 0.6 + (1.0 - gex_conf_val) * 2.0
+        proxy_charm = abs(vvix_z) * 0.4 + (1.0 - gex_conf_val) * 1.5
         raw = 0.6 * proxy_vanna + 0.4 * proxy_charm
         cv_stress = min(100.0, max(0.0, raw * 20.0))
 
