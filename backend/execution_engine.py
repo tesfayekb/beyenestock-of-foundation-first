@@ -232,7 +232,7 @@ class ExecutionEngine:
             gross_pnl = (entry_credit - exit_credit) * contracts * 100
             slippage_cost = exit_slip * contracts * 100
             legs = self.LEGS_BY_STRATEGY.get(strategy_type, 4)
-            commission_cost = 0.65 * contracts * legs
+            commission_cost = 0.35 * contracts * legs  # Tradier published rate: $0.35/contract/leg
             net_pnl = gross_pnl - slippage_cost - commission_cost
 
             get_client().table("trading_positions").update(

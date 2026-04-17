@@ -102,9 +102,10 @@ class StrategySelector:
             if total_minutes >= 15 * 60 + 45:
                 return False, "after_345pm_d011"
 
-            # Before 10:00 AM — too early for reliable signals
-            if total_minutes < 10 * 60:
-                return False, "before_1000am"
+            # Before 9:35 AM — opening auction noise (GEX/ZG valid at open,
+            # but 5-min buffer for SPX tape to stabilize)
+            if total_minutes < 9 * 60 + 35:
+                return False, "before_935am"
 
             # D-010: after 2:30 PM — long-gamma only
             if total_minutes >= 14 * 60 + 30:
@@ -229,6 +230,10 @@ class StrategySelector:
             spread_width = strikes.get("spread_width", 5.0)
             target_credit_from_chain = strikes.get("target_credit")
 
+            # P0.5: Event-day size override — Fed/CPI/NFP days cut to 40%
+            # day_type="event" is set by pre_market_scan from VVIX Z-score ≥2.5
+            event_size_mult = 0.40 if session.get("day_type") == "event" else 1.0
+
             # Risk sizing
             sizing = compute_position_size(
                 account_value=account_value,
@@ -239,6 +244,22 @@ class StrategySelector:
                 position_type=position_type,
                 allocation_tier=prediction.get("allocation_tier", "full"),
             )
+
+            # Apply event-day multiplier after sizing
+            if event_size_mult < 1.0 and sizing["contracts"] > 0:
+                original_contracts = sizing["contracts"]
+                sizing = {
+                    **sizing,
+                    "contracts": max(1, int(sizing["contracts"] * event_size_mult)),
+                    "risk_pct": round(sizing["risk_pct"] * event_size_mult, 4),
+                }
+                logger.info(
+                    "event_day_size_cut",
+                    day_type=session.get("day_type"),
+                    original_contracts=original_contracts,
+                    reduced_contracts=sizing["contracts"],
+                    event_mult=event_size_mult,
+                )
 
             is_short_gamma = strategy_type in SHORT_GAMMA_STRATEGIES
 
