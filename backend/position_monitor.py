@@ -38,7 +38,7 @@ def get_open_positions() -> list:
             .select(
                 "id, strategy_type, position_type, status, "
                 "entry_at, entry_credit, contracts, session_id, "
-                "current_pnl, current_cv_stress"
+                "current_pnl, current_cv_stress, partial_exit_done"
             )
             .eq("status", "open")
             .eq("position_mode", "virtual")
@@ -216,6 +216,57 @@ def run_position_monitor() -> dict:
                     if ok:
                         closed += 1
             else:
+                # P0.6: Partial exit — close 30% of contracts at 25% of max profit
+                # Only fires once per position (partial_exit_done flag).
+                # Requires >= 3 contracts to be worth splitting.
+                if (
+                    max_profit > 0
+                    and current_pnl >= max_profit * 0.25
+                    and not pos.get("partial_exit_done")
+                    and contracts >= 3
+                ):
+                    try:
+                        partial_contracts = max(1, int(contracts * 0.30))
+                        remaining_contracts = contracts - partial_contracts
+                        # Book partial P&L proportionally
+                        partial_pnl = round(
+                            current_pnl * (partial_contracts / contracts), 4
+                        )
+                        # Mark position: reduce contracts, set partial_exit_done
+                        get_client().table("trading_positions").update({
+                            "contracts": remaining_contracts,
+                            "partial_exit_done": True,
+                        }).eq("id", pos["id"]).execute()
+                        # Write audit log for partial exit
+                        write_audit_log(
+                            action="trading.partial_exit_25pct",
+                            target_type="trading_positions",
+                            target_id=str(pos["id"]),
+                            metadata={
+                                "original_contracts": contracts,
+                                "partial_contracts_closed": partial_contracts,
+                                "remaining_contracts": remaining_contracts,
+                                "partial_pnl": partial_pnl,
+                                "pct_max_profit": round(
+                                    current_pnl / max_profit, 4
+                                ),
+                                "strategy_type": strategy_type,
+                            },
+                        )
+                        logger.info(
+                            "partial_exit_fired",
+                            pos_id=pos["id"],
+                            partial=partial_contracts,
+                            remaining=remaining_contracts,
+                            partial_pnl=partial_pnl,
+                        )
+                    except Exception as partial_err:
+                        logger.error(
+                            "partial_exit_failed",
+                            pos_id=pos["id"],
+                            error=str(partial_err),
+                        )
+
                 # Credit strategy: take profit at 50% of credit collected
                 if max_profit > 0 and current_pnl >= max_profit * 0.50:
                     ok = engine.close_virtual_position(
