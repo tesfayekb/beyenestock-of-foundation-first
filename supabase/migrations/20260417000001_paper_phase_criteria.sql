@@ -23,17 +23,11 @@ CREATE TABLE IF NOT EXISTS public.paper_phase_criteria (
 -- RLS
 ALTER TABLE public.paper_phase_criteria ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "trading_view_paper_criteria" ON public.paper_phase_criteria
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM public.user_roles ur
-      JOIN public.roles r ON ur.role_id = r.id
-      JOIN public.role_permissions rp ON r.id = rp.role_id
-      JOIN public.permissions p ON rp.permission_id = p.id
-      WHERE ur.user_id = auth.uid()
-      AND p.key = 'trading.view'
-    )
-  );
+CREATE POLICY "authenticated_read_paper_criteria" ON public.paper_phase_criteria
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "service_write_paper_criteria" ON public.paper_phase_criteria
+  FOR ALL USING (auth.role() = 'service_role');
 
 -- Updated_at trigger
 CREATE TRIGGER paper_phase_criteria_updated_at
