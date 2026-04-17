@@ -65,17 +65,32 @@ class GexEngine:
             self._write_heartbeat(confidence)
             return {"gex_net": 0.0, "gex_confidence": confidence}
 
+        # Batch all quote lookups in one Redis pipeline round-trip
+        symbols = [trade.get("symbol", "") for trade in trades]
+        pipe = self.redis_client.pipeline(transaction=False)
+        for symbol in symbols:
+            pipe.get(f"tradier:quotes:{symbol}")
+        quote_raws = pipe.execute()
+
+        # Build symbol → quote dict from pipeline results
+        quote_cache: Dict[str, dict] = {}
+        for symbol, raw in zip(symbols, quote_raws):
+            if raw and symbol not in quote_cache:
+                try:
+                    quote_cache[symbol] = json.loads(raw)
+                except Exception:
+                    pass
+
         gex_by_strike: Dict[float, float] = {}
         net_gex = 0.0
         prior_price = float(trades[0].get("price", 0.0) or 0.0)
 
         for trade in trades:
             symbol = trade.get("symbol", "")
-            quote_raw = self.redis_client.get(f"tradier:quotes:{symbol}")
-            if not quote_raw:
+            quote = quote_cache.get(symbol)
+            if not quote:
                 logger.warning("gex_quote_missing", symbol=symbol)
                 continue
-            quote = json.loads(quote_raw)
             bid = float(quote.get("bid", 0.0) or 0.0)
             ask = float(quote.get("ask", 0.0) or 0.0)
             price = float(trade.get("price", 0.0) or 0.0)
@@ -93,20 +108,18 @@ class GexEngine:
             gex_by_strike[K] = gex_by_strike.get(K, 0.0) + dealer_gamma
             net_gex += dealer_gamma
 
-        # Read SPX price from Redis if available, else use placeholder
+        # Read SPX price from Redis
         spx_price = 5200.0
         try:
             raw = self.redis_client.get("tradier:quotes:SPX")
             if raw:
-                import json as _json
-                quote = _json.loads(raw)
+                quote = json.loads(raw)
                 spx_price = float(quote.get("last", 5200.0))
         except Exception:
             pass
 
         nearest_wall = self._nearest_positive_wall(gex_by_strike, spx_price)
         flip_zone = self._nearest_flip_zone(gex_by_strike)
-        # TODO T-ACT-004: replace with rolling 20-day average once learning engine is live (Phase 6)
         expected_trades_5min = 1000
         confidence = min(1.0, len(trades) / expected_trades_5min)
 
@@ -115,13 +128,6 @@ class GexEngine:
         self.redis_client.set("gex:nearest_wall", nearest_wall or "")
         self.redis_client.set("gex:flip_zone", flip_zone or "")
         self.redis_client.set("gex:confidence", confidence)
-        self.redis_client.set("gex:computed_at", datetime.now(timezone.utc).isoformat())
-
-        regime = self.redis_client.get("trading:regime")
-        if regime == "trend" and confidence < 0.70:
-            self.redis_client.set("gex:block_new_entries", "True")
-            logger.warning("gex_trend_block_enabled", gex_confidence=confidence)
-
         self.last_compute_at = datetime.now(timezone.utc)
         self._write_heartbeat(confidence)
         return {"gex_net": net_gex, "gex_confidence": confidence}

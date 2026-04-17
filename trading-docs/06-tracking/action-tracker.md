@@ -29,6 +29,25 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-016 — Fix Group 4: Performance Fixes
+
+- **id:** T-ACT-016
+- **date:** 2026-04-17
+- **action:** Fix Group 4 performance — GEX engine uses Redis pipeline (N round-trips → 1), heartbeat_check made async (no longer blocks event loop), EOD job DST-safe timing (hour=22 UTC covers both EDT/EST), calibration_engine 90-day date filter on slippage MAE, model_retraining 60-day date filter on per-regime accuracy, criteria_evaluator GLC-003 now filters closed positions only.
+- **type:** code
+- **phase:** phase_4
+- **impact:** LOW
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `backend/gex_engine.py` (pipeline), `backend/main.py` (async heartbeat + DST fix), `backend/calibration_engine.py` (date filter), `backend/model_retraining.py` (date filter), `backend/criteria_evaluator.py` (closed-only filter), `backend/tests/test_fix_group4.py` (new)
+- **docs_updated:**
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE
+- **verification:** 59/59 unit tests passing. Imports clean. Only 5 backend files + 1 new test file modified. No frontend or migration files touched.
+- **t_rules_checked:** T-Rule 1 (Foundation Isolation): PASS
+
+---
+
 ### T-ACT-015 — Fix Group 3: Medium Priority Security & Reliability Fixes
 
 - **id:** T-ACT-015

@@ -25,12 +25,15 @@ def compute_slippage_mae() -> dict:
     Returns dict with mae, observations, model_ready flag.
     """
     try:
+        from datetime import date, timedelta
+        cutoff = (date.today() - timedelta(days=90)).isoformat()
         result = (
             get_client()
             .table("trading_calibration_log")
             .select("predicted_slippage, actual_slippage")
             .not_.is_("predicted_slippage", "null")
             .not_.is_("actual_slippage", "null")
+            .gte("created_at", cutoff)
             .execute()
         )
         rows = result.data or []

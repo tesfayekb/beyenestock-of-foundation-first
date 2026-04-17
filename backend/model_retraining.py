@@ -94,12 +94,14 @@ def compute_per_regime_accuracy() -> dict:
     Needed for GLC-002.
     """
     try:
+        cutoff = (date.today() - timedelta(days=60)).isoformat()
         result = (
             get_client()
             .table("trading_positions")
             .select("entry_regime, net_pnl")
             .eq("status", "closed")
             .eq("position_mode", "virtual")
+            .gte("entry_at", cutoff)
             .execute()
         )
         positions = result.data or []

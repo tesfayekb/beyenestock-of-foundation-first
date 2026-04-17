@@ -178,7 +178,7 @@ def pre_market_scan() -> None:
     logger.info("pre_market_scan not yet implemented")
 
 
-def heartbeat_check() -> None:
+async def heartbeat_check() -> None:
     try:
         rows = (
             get_client()
@@ -281,8 +281,8 @@ async def on_startup() -> None:
         scheduler.add_job(
             run_eod_criteria_evaluation,
             trigger="cron",
-            hour=21,      # 4:30 PM ET = 21:30 UTC
-            minute=30,
+            hour=22,      # After market close in both EDT and EST (6 PM ET / 5 PM ET)
+            minute=0,
             id="trading_eod_criteria_evaluation",
             replace_existing=True,
         )
