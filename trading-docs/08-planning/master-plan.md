@@ -108,7 +108,7 @@ The authoritative 7-phase build plan for the MarketMuse trading system. Each pha
 | TPLAN-PAPER-004-F | Regime model retraining + champion/challenger | Python/Railway | `implemented` |
 | TPLAN-PAPER-004-G | Paper phase progress dashboard on Config page | Lovable/React | `implemented` |
 | TPLAN-PAPER-004-H | Kill-switch tested against Tradier sandbox (Day 10 deadline) | Manual | `not_started` |
-| TPLAN-PAPER-004-I | Sentinel deployed to GCP and tested weekly | Python/GCP | `not_started` |
+| TPLAN-PAPER-004-I | Sentinel deployed to GCP and tested weekly | Python/GCP | `in_progress` |
 | TPLAN-PAPER-004-J | Intraday execution feedback loop tested | Python/Railway | `implemented` |
 
 ### Phase Gate (ALL required — 12 Go-Live Criteria)

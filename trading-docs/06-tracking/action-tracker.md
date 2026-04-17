@@ -289,3 +289,26 @@ Single register of every trading change action. Every change to trading code, sc
   - T-Rule 1 (Foundation Isolation): ✅ No foundation files modified
   - T-Rule 2 (Table Prefix Isolation): ✅ Writes only to trading_calibration_log, trading_model_performance, trading_system_health, audit_logs
   - T-Rule 10 (No Silent Failures): ✅ All compute functions catch exceptions and return gracefully; drift detection fires audit log on warning/critical; calibration log write failure is logged as warning, never raises
+
+---
+
+### T-ACT-012 — Phase 4C: Sentinel Watchdog on GCP Cloud Run
+
+- **id:** T-ACT-012
+- **date:** 2026-04-16
+- **action:** Built Phase 4C Sentinel watchdog. Created `sentinel/` directory as a fully isolated, separately deployable GCP Cloud Run service. `sentinel/main.py` pings Railway backend /health every 30s; if heartbeat missed > 120s, triggers emergency close of all open positions in Supabase and halts today's session. Emergency close is idempotent (will not fire twice per process lifecycle) and resets if Railway recovers. Writes health status to trading_system_health (service_name='sentinel') on every cycle. Full GCP deploy instructions in DEPLOYMENT.md. 3 smoke tests all passing.
+- **type:** code
+- **phase:** phase_4
+- **impact:** HIGH
+- **owner:** Cursor
+- **modules_affected:**
+  - Sentinel (new deployable): `sentinel/main.py`, `sentinel/requirements.txt`, `sentinel/Dockerfile`, `sentinel/.env.example`, `sentinel/DEPLOYMENT.md`, `sentinel/test_sentinel.py`
+- **docs_updated:**
+  - trading-docs/08-planning/master-plan.md (TPLAN-PAPER-004-I: not_started → in_progress)
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE — no backend/ or src/ files modified; sentinel/ is an independent deployable
+- **verification:** 3/3 smoke tests passing. sentinel/main.py imports cleanly. Emergency idempotency verified. TRADIER_SANDBOX=true default. No foundation files in diff.
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ Only sentinel/ and trading-docs/ modified — zero backend/ or src/ changes
+  - T-Rule 9 (Audit Trail): ✅ trigger_emergency_close writes audit_log with reason and result; recovery also logged
+  - T-Rule 10 (No Silent Failures): ✅ All network/DB calls wrapped in try/except; every failure logged; sentinel_health written on every cycle
