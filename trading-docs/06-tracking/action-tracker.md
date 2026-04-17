@@ -772,3 +772,40 @@ Single register of every trading change action. Every change to trading code, sc
   T-Rule 5 ✅ (capital preservation gates unchanged; risk_engine sizing
   math unchanged, only an info log added), T-Rule 8 ✅ (Phase B follows
   Phase A in build order)
+
+---
+
+### T-ACT-030 — Phase B2: Asymmetric Iron Condor + OptionsDX Processor
+
+- **id:** T-ACT-030
+- **date:** 2026-04-17
+- **action:** Phase B2 + OptionsDX processor.
+  backend/strike_selector.py: _get_gex_asymmetry() reads
+  gex:nearest_wall and gex:confidence from Redis and returns
+  put_width_mult/call_width_mult multipliers (1.5x on the strong
+  side, 0.75x on the weak side). Applied only when confidence >= 0.3
+  and nearest wall is within 0.1%-2% of SPX. Both the iron_condor /
+  iron_butterfly Tradier-chain happy path and the _fallback_strikes
+  path use the asymmetry; widths are snapped to $2.50 increments and
+  floored at $2.50. Result dict gains put_spread_width and
+  call_spread_width fields. _fallback_strikes() gained a
+  redis_client=None keyword arg; all three call sites in get_strikes()
+  forward redis_client so asymmetry flows into fallback too.
+  backend/scripts/process_options_data.py: reads 24 monthly
+  OptionsDX SPX EOD chain files from backend/data/historical/options/,
+  groups by QUOTE_DATE, filters DTE==0, computes ATM IV, put/call
+  volume ratio, zero-gamma level (linear interpolation of C_GAMMA -
+  P_GAMMA sign change across strikes), 25-delta IV skew. Adds 252-day
+  rolling IV rank and IV percentile. Saves options_features.parquet
+  plus options_features_manifest.json.
+  backend/tests/test_phase_b2_optionsdx.py: 6 unit tests — 4 cover
+  _get_gex_asymmetry cases (wall below SPX, wall above SPX, low
+  confidence symmetric, no-Redis symmetric), 2 cover the processor
+  (zero-gamma crossover detection, monotonic IV rank).
+- **phase:** phase_b
+- **impact:** HIGH — asymmetric wings: +1-2pp expected annual return
+  from directional premium capture; OptionsDX features unblock future
+  GEX/ZG backtest and enable true meta-label training for A3 rework
+- **t_rules_checked:** T-Rule 1 ✅ (no foundation files touched),
+  T-Rule 5 ✅ (capital preservation gates unchanged; no risk_engine
+  changes), T-Rule 8 ✅ (Phase B follows Phase A in build order)

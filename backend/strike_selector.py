@@ -171,6 +171,7 @@ def _fallback_strikes(
     spx_price: float,
     strategy_type: str,
     spread_width: float = DEFAULT_SPREAD_WIDTH,
+    redis_client=None,
 ) -> dict:
     """
     Fallback strike selection when Tradier chain is unavailable.
@@ -204,11 +205,19 @@ def _fallback_strikes(
     elif strategy_type == "call_credit_spread":
         result.update({"short_strike": call_short, "long_strike": call_long})
     elif strategy_type in ("iron_condor", "iron_butterfly"):
+        # B2: asymmetric wings based on GEX wall proximity
+        asym = _get_gex_asymmetry(redis_client, spx_price)
+        put_width = round(spread_width * asym["put_width_mult"] / 2.5) * 2.5
+        call_width = round(spread_width * asym["call_width_mult"] / 2.5) * 2.5
+        put_width = max(2.5, put_width)
+        call_width = max(2.5, call_width)
         result.update({
             "short_strike": put_short,
-            "long_strike": put_long,
+            "long_strike": put_short - put_width,
             "short_strike_2": call_short,
-            "long_strike_2": call_long,
+            "long_strike_2": call_short + call_width,
+            "put_spread_width": put_width,
+            "call_spread_width": call_width,
         })
     elif strategy_type == "debit_put_spread":
         result.update({"short_strike": put_short - 5, "long_strike": put_short})
@@ -219,6 +228,62 @@ def _fallback_strikes(
     elif strategy_type in ("long_call",):
         result.update({"short_strike": call_short, "long_strike": None})
 
+    return result
+
+
+def _get_gex_asymmetry(redis_client, spx_price: float) -> dict:
+    """
+    Read GEX walls from Redis and compute asymmetry ratio.
+    Returns dict with put_width_mult and call_width_mult.
+    Both default to 1.0 (symmetric) when GEX data unavailable.
+
+    Logic:
+    - If put_wall is closer to SPX than call_wall:
+        put side has stronger support -> widen put spread
+    - If call_wall is closer:
+        call side has stronger resistance -> widen call spread
+    - Maximum asymmetry: 1.5x on one side, 0.75x on other
+    - Requires GEX confidence >= 0.3 to apply asymmetry
+    """
+    result = {"put_width_mult": 1.0, "call_width_mult": 1.0}
+    if not redis_client or spx_price <= 0:
+        return result
+    try:
+        nearest_wall_raw = redis_client.get("gex:nearest_wall")
+        confidence_raw = redis_client.get("gex:confidence")
+        if not nearest_wall_raw or not confidence_raw:
+            return result
+        nearest_wall = float(nearest_wall_raw)
+        confidence = float(confidence_raw)
+        if confidence < 0.3 or nearest_wall <= 0:
+            return result
+
+        # Distance from SPX to nearest wall (signed)
+        dist = spx_price - nearest_wall  # positive = wall is below SPX (put side)
+        dist_pct = abs(dist) / spx_price
+
+        # Only apply asymmetry if wall is within 2% and meaningful distance
+        if dist_pct > 0.02 or dist_pct < 0.001:
+            return result
+
+        if dist > 0:
+            # Wall is BELOW SPX -- stronger put support -> widen put spread
+            result["put_width_mult"] = 1.5
+            result["call_width_mult"] = 0.75
+        else:
+            # Wall is ABOVE SPX -- stronger call resistance -> widen call spread
+            result["put_width_mult"] = 0.75
+            result["call_width_mult"] = 1.5
+
+        logger.info(
+            "gex_asymmetry_applied",
+            nearest_wall=nearest_wall,
+            dist_pct=round(dist_pct, 4),
+            put_mult=result["put_width_mult"],
+            call_mult=result["call_width_mult"],
+        )
+    except Exception as e:
+        logger.warning("gex_asymmetry_failed", error=str(e))
     return result
 
 
@@ -269,7 +334,7 @@ def get_strikes(
                 strategy=strategy_type,
                 reason="empty_chain",
             )
-            return _fallback_strikes(spx_price, strategy_type, dynamic_width)
+            return _fallback_strikes(spx_price, strategy_type, dynamic_width, redis_client)
 
         target_delta = DELTA_BY_STRATEGY.get(strategy_type, 0.16)
 
@@ -306,11 +371,20 @@ def get_strikes(
             put_short = _find_strike_by_delta(chain, target_delta, "put", False)
             call_short = _find_strike_by_delta(chain, target_delta, "call", True)
             if put_short and call_short:
+                # B2: asymmetric wings based on GEX wall proximity
+                asym = _get_gex_asymmetry(redis_client, spx_price)
+                put_width = round(dynamic_width * asym["put_width_mult"] / 2.5) * 2.5
+                call_width = round(dynamic_width * asym["call_width_mult"] / 2.5) * 2.5
+                # Enforce minimum $2.50 width on each side
+                put_width = max(2.5, put_width)
+                call_width = max(2.5, call_width)
                 result.update({
                     "short_strike": put_short,
-                    "long_strike": put_short - dynamic_width,
+                    "long_strike": put_short - put_width,
                     "short_strike_2": call_short,
-                    "long_strike_2": call_short + dynamic_width,
+                    "long_strike_2": call_short + call_width,
+                    "put_spread_width": put_width,
+                    "call_spread_width": call_width,
                 })
 
         elif strategy_type in ("long_put", "debit_put_spread"):
@@ -329,7 +403,7 @@ def get_strikes(
 
         # If strikes still None (chain had no greeks), use fallback
         if result["short_strike"] is None:
-            return _fallback_strikes(spx_price, strategy_type, dynamic_width)
+            return _fallback_strikes(spx_price, strategy_type, dynamic_width, redis_client)
 
         logger.info(
             "strikes_selected",
@@ -343,4 +417,4 @@ def get_strikes(
 
     except Exception as e:
         logger.error("strike_selector_failed", error=str(e), strategy=strategy_type)
-        return _fallback_strikes(spx_price, strategy_type, dynamic_width)
+        return _fallback_strikes(spx_price, strategy_type, dynamic_width, redis_client)
