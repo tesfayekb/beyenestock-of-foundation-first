@@ -18,6 +18,8 @@ class PolygonFeed:
         self.redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
         self.last_vvix: Optional[float] = None
         self.history: List[float] = []
+        self.spx_history: List[float] = []
+        self.last_vix: Optional[float] = None
         self._stop_event = asyncio.Event()
 
     async def start(self) -> None:
@@ -37,6 +39,43 @@ class PolygonFeed:
                     self.history.append(current)
                     self.history = self.history[-20:]
                     self._store_baseline(current)
+
+                    # Fetch VIX and SPX close for IV/RV filter
+                    try:
+                        vix = await self._fetch_vix()
+                        self.redis_client.setex(
+                            "polygon:vix:current", 3600, str(vix)
+                        )
+
+                        spx_close = await self._fetch_spx_close()
+                        if spx_close and spx_close > 0:
+                            self.spx_history.append(spx_close)
+                            self.spx_history = self.spx_history[-20:]
+
+                        if len(self.spx_history) >= 5:
+                            import math
+                            log_returns = [
+                                math.log(self.spx_history[i] / self.spx_history[i - 1])
+                                for i in range(1, len(self.spx_history))
+                            ]
+                            n = len(log_returns)
+                            mean_r = sum(log_returns) / n
+                            variance = sum((r - mean_r) ** 2 for r in log_returns) / n
+                            realized_vol = math.sqrt(variance * 252) * 100
+                            self.redis_client.setex(
+                                "polygon:spx:realized_vol_20d",
+                                86400,
+                                str(round(realized_vol, 4)),
+                            )
+                            logger.info(
+                                "polygon_realized_vol_updated",
+                                realized_vol=round(realized_vol, 2),
+                                vix=vix,
+                                history_len=len(self.spx_history),
+                            )
+                    except Exception as exc:
+                        logger.warning("polygon_iv_rv_update_failed", error=str(exc))
+
                     await self._write_daily_open_if_needed(current)
                 except Exception as exc:
                     logger.warning("polygon_vvix_poll_failed", error=str(exc))
@@ -134,6 +173,82 @@ class PolygonFeed:
             logger.warning("polygon_vvix_fetch_failed", error=type(e).__name__)
 
         return self.last_vvix if self.last_vvix is not None else 120.0
+
+    async def _fetch_vix(self) -> float:
+        """
+        Fetch current VIX from Polygon.io.
+        Uses I:VIX index. Falls back to last known value or 18.0.
+        """
+        try:
+            import config
+            api_key = config.POLYGON_API_KEY
+            if not api_key:
+                return self.last_vix if self.last_vix is not None else 18.0
+
+            import httpx
+            headers = {"Authorization": f"Bearer {api_key}"}
+
+            # Try snapshot first
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://api.polygon.io/v3/snapshot",
+                    headers=headers,
+                    params={"ticker.any_of": "I:VIX"},
+                )
+                if resp.status_code == 200:
+                    results = resp.json().get("results", [])
+                    if results:
+                        session_data = results[0].get("session", {})
+                        vix = float(
+                            session_data.get("close")
+                            or session_data.get("prev_close")
+                            or 18.0
+                        )
+                        self.last_vix = vix
+                        return vix
+
+                # Fallback: previous day aggregate
+                resp2 = await client.get(
+                    "https://api.polygon.io/v2/aggs/ticker/I:VIX/prev",
+                    headers=headers,
+                )
+                if resp2.status_code == 200:
+                    results2 = resp2.json().get("results", [])
+                    if results2:
+                        vix = float(results2[0].get("c", 18.0))
+                        self.last_vix = vix
+                        return vix
+        except Exception as e:
+            logger.warning("polygon_vix_fetch_failed", error=type(e).__name__)
+
+        return self.last_vix if self.last_vix is not None else 18.0
+
+    async def _fetch_spx_close(self) -> Optional[float]:
+        """
+        Fetch latest SPX daily close from Polygon.
+        Uses I:SPX index. Returns None on failure.
+        """
+        try:
+            import config
+            api_key = config.POLYGON_API_KEY
+            if not api_key:
+                return None
+
+            import httpx
+            headers = {"Authorization": f"Bearer {api_key}"}
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://api.polygon.io/v2/aggs/ticker/I:SPX/prev",
+                    headers=headers,
+                )
+                if resp.status_code == 200:
+                    results = resp.json().get("results", [])
+                    if results:
+                        return float(results[0].get("c", 0.0)) or None
+        except Exception as e:
+            logger.warning("polygon_spx_fetch_failed", error=type(e).__name__)
+        return None
 
     def _is_market_hours(self) -> bool:
         import zoneinfo

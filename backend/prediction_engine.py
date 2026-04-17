@@ -345,6 +345,20 @@ class PredictionEngine:
             if consecutive >= 5:
                 return True, "capital_preservation_halt_5_losses"
 
+        # IV/RV filter: don't sell premium when implied vol ≤ realized vol
+        # VIX = implied vol proxy. realized_vol_20d = 20-day annualized SPX RV.
+        # Only fire when we have reliable realized vol data (>= 5 days history).
+        try:
+            vix_raw = self._read_redis("polygon:vix:current", None)
+            rv_raw = self._read_redis("polygon:spx:realized_vol_20d", None)
+            if vix_raw is not None and rv_raw is not None:
+                vix_val = float(vix_raw)
+                rv_val = float(rv_raw)
+                if rv_val > 0 and vix_val < rv_val * 1.10:
+                    return True, f"iv_rv_cheap_premium_vix{vix_val:.1f}_rv{rv_val:.1f}"
+        except (ValueError, TypeError):
+            pass  # malformed Redis value — skip filter, don't block trading
+
         return False, None
 
     def run_cycle(self) -> Optional[dict]:

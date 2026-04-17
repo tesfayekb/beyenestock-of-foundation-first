@@ -644,3 +644,24 @@ Single register of every trading change action. Every change to trading code, sc
 - **phase:** phase_4
 - **impact:** HIGH — combined +6-9pp annual return expected
 - **t_rules_checked:** T-Rule 1 ✅, T-Rule 5 ✅ (D-005 still absolute)
+
+---
+
+### T-ACT-025 — Phase 0 Session 2: IV/RV Filter + Partial Exit
+
+- **id:** T-ACT-025
+- **date:** 2026-04-17
+- **action:** Phase 0 Session 2 — IV/RV filter and partial exit at 25%.
+  P0.4: polygon_feed.py now fetches VIX (I:VIX) and SPX daily close
+  (I:SPX) every 5 minutes; computes 20-day annualized realized vol from
+  rolling SPX close history; stores polygon:vix:current and
+  polygon:spx:realized_vol_20d to Redis. prediction_engine._evaluate_no_trade
+  gates on VIX < realized_vol × 1.10 (iv_rv_cheap_premium no-trade).
+  P0.6: new migration adds partial_exit_done to trading_positions.
+  position_monitor closes 30% of contracts at 25% of max profit, marks
+  partial_exit_done=True, writes audit log. Full 50% exit still fires on
+  remaining contracts.
+- **phase:** phase_4
+- **impact:** HIGH — IV/RV prevents selling cheap premium; partial exit
+  reduces variance and captures early reversals
+- **t_rules_checked:** T-Rule 1 ✅, T-Rule 5 ✅
