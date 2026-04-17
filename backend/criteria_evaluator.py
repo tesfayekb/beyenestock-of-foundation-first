@@ -319,6 +319,14 @@ def run_criteria_evaluation() -> dict:
             "all_criteria_passed": all_passed,
         }
 
+        # Reset error_count_1h at EOD after GLC-006 has read it
+        try:
+            get_client().table("trading_system_health").update(
+                {"error_count_1h": 0}
+            ).neq("service_name", "").execute()
+        except Exception as e:
+            logger.warning("error_count_reset_failed", error=str(e))
+
         write_audit_log(
             action="trading.criteria_evaluation_complete",
             metadata=summary,

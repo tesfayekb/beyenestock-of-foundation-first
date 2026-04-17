@@ -22,7 +22,7 @@ def get_or_create_session(session_date: Optional[date] = None) -> Optional[dict]
             .table("trading_sessions")
             .select("*")
             .eq("session_date", date_str)
-            .maybeSingle()
+            .maybe_single()
             .execute()
         )
         if result.data:
@@ -77,7 +77,7 @@ def get_today_session() -> Optional[dict]:
             .table("trading_sessions")
             .select("*")
             .eq("session_date", date.today().isoformat())
-            .maybeSingle()
+            .maybe_single()
             .execute()
         )
         return result.data

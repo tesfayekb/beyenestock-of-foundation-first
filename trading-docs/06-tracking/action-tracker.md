@@ -29,6 +29,42 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-017 — Fix Group 5: Paper Phase Critical
+
+- **id:** T-ACT-017
+- **date:** 2026-04-17
+- **action:** Fix Group 5 paper-phase critical — maybeSingle→maybe_single (7 files,
+  unblocks all DB lookups in production), commission legs fixed (spreads=4,
+  iron condor/butterfly=8), heartbeat threshold 360→90s, error_count_1h stops
+  resetting on keepalives (GLC-006 now meaningful), debit strategy exit logic
+  (take profit at 100% gain, stop at full loss), credit spread stop-loss moved
+  to 200% of credit, VVIX endpoint fixed to I:VVIX with Authorization header.
+- **type:** code
+- **phase:** phase_4
+- **impact:** CRITICAL
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `backend/db.py` (remove error_count_1h reset on healthy),
+    `backend/main.py` (heartbeat threshold 360→90s),
+    `backend/execution_engine.py` (LEGS_BY_STRATEGY dict, correct commission per strategy),
+    `backend/position_monitor.py` (debit strategies exit logic, credit stop at 200%,
+    current_pnl in initial SELECT),
+    `backend/polygon_feed.py` (I:VVIX endpoint, Authorization header, 403 fallback),
+    `backend/criteria_evaluator.py` (explicit EOD error_count_1h reset after GLC-006 read),
+    `backend/calibration_engine.py` (maybeSingle rename),
+    `backend/session_manager.py` (maybeSingle rename),
+    `backend/tests/test_fix_group5.py` (9 new tests)
+- **docs_updated:**
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE — no files outside /backend/ or trading-docs/ modified
+- **verification:** 67/67 unit tests passing. All imports clean. `git diff --name-only origin/main` confirms only backend files modified. No frontend or migration files touched. Zero `.maybeSingle()` calls remain in backend/.
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ No foundation files modified
+  - T-Rule 5 (Capital Preservation): ✅ D-010/D-011 time stops now apply correctly to both debit and credit strategy exit logic
+  - T-Rule 10 (No Silent Failures): ✅ error_count_1h now accumulates correctly; DB lookup failures no longer silently produce AttributeError
+
+---
+
 ### T-ACT-016 — Fix Group 4: Performance Fixes
 
 - **id:** T-ACT-016

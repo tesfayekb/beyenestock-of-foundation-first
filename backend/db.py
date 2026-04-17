@@ -44,7 +44,7 @@ def write_health_status(service_name: str, status: str, **kwargs) -> bool:
                     .table("trading_system_health")
                     .select("error_count_1h")
                     .eq("service_name", service_name)
-                    .maybeSingle()
+                    .maybe_single()
                     .execute()
                 )
                 current_count = 0
@@ -53,8 +53,6 @@ def write_health_status(service_name: str, status: str, **kwargs) -> bool:
                 payload["error_count_1h"] = current_count + 1
             except Exception:
                 payload["error_count_1h"] = 1
-        if status == "healthy" and "error_count_1h" not in kwargs:
-            payload["error_count_1h"] = 0
         get_client().table("trading_system_health").upsert(
             payload, on_conflict="service_name"
         ).execute()

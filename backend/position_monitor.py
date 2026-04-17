@@ -37,7 +37,8 @@ def get_open_positions() -> list:
             .table("trading_positions")
             .select(
                 "id, strategy_type, position_type, status, "
-                "entry_at, entry_credit, contracts, session_id"
+                "entry_at, entry_credit, contracts, session_id, "
+                "current_pnl"
             )
             .eq("status", "open")
             .eq("position_mode", "virtual")
@@ -143,8 +144,8 @@ def run_position_monitor() -> dict:
     """
     Runs every minute during market hours.
     Checks for positions that should be closed based on:
-    - P&L reaching 50% of max profit (take profit)
-    - P&L reaching -100% of entry credit (stop loss)
+    - Credit strategies: take profit at 50% of credit, stop at 200% of credit
+    - Debit strategies: take profit at 100% gain, stop at 100% loss
     Returns summary dict. Never raises.
     """
     try:
@@ -157,47 +158,84 @@ def run_position_monitor() -> dict:
 
         for pos in positions:
             entry_credit = pos.get("entry_credit") or 0.0
-            if entry_credit <= 0:
+            strategy_type = pos.get("strategy_type", "unknown")
+
+            # Determine if this is a debit or credit strategy
+            # Debit strategies have negative entry_credit (cost paid)
+            is_debit = entry_credit < 0
+            abs_entry = abs(entry_credit)
+
+            if abs_entry == 0:
                 continue
 
-            # Get current P&L from Supabase
-            try:
-                full = (
-                    get_client()
-                    .table("trading_positions")
-                    .select("current_pnl, entry_credit, contracts")
-                    .eq("id", pos["id"])
-                    .maybeSingle()
-                    .execute()
-                )
-                if not full.data:
-                    continue
-                current_pnl = full.data.get("current_pnl") or 0.0
-                entry_credit_full = full.data.get("entry_credit") or 0.0
-                contracts = full.data.get("contracts") or 1
-            except Exception:
-                continue
+            # Get current P&L from Supabase (use data already in pos if available)
+            current_pnl = pos.get("current_pnl") or 0.0
+            contracts = pos.get("contracts") or 1
 
-            # Take profit: 50% of max profit
-            max_profit = entry_credit_full * contracts * 100
-            if max_profit > 0 and current_pnl >= max_profit * 0.50:
-                ok = engine.close_virtual_position(
-                    position_id=pos["id"],
-                    exit_reason="take_profit_50pct",
-                )
-                if ok:
-                    closed += 1
+            if current_pnl == 0.0:
+                # Fetch fresh data only if current_pnl not populated
+                try:
+                    full = (
+                        get_client()
+                        .table("trading_positions")
+                        .select("current_pnl, entry_credit, contracts")
+                        .eq("id", pos["id"])
+                        .maybe_single()
+                        .execute()
+                    )
+                    if not full.data:
+                        continue
+                    current_pnl = full.data.get("current_pnl") or 0.0
+                    abs_entry = abs(full.data.get("entry_credit") or abs_entry)
+                    contracts = full.data.get("contracts") or contracts
+                except Exception:
                     continue
 
-            # Stop loss: loss exceeds 100% of entry credit collected
-            max_loss = entry_credit_full * contracts * 100
-            if current_pnl <= -max_loss:
-                ok = engine.close_virtual_position(
-                    position_id=pos["id"],
-                    exit_reason="stop_loss_100pct",
-                )
-                if ok:
-                    closed += 1
+            max_profit = abs_entry * contracts * 100
+
+            if is_debit:
+                # Debit strategy: take profit at 2× debit paid (100% gain)
+                take_profit_threshold = max_profit  # 100% of debit paid
+                # Stop loss at 100% of debit paid (full loss of premium)
+                stop_loss_threshold = -max_profit
+
+                if current_pnl >= take_profit_threshold:
+                    ok = engine.close_virtual_position(
+                        position_id=pos["id"],
+                        exit_reason="take_profit_debit_100pct",
+                    )
+                    if ok:
+                        closed += 1
+                        continue
+
+                if current_pnl <= stop_loss_threshold:
+                    ok = engine.close_virtual_position(
+                        position_id=pos["id"],
+                        exit_reason="stop_loss_debit_100pct",
+                    )
+                    if ok:
+                        closed += 1
+            else:
+                # Credit strategy: take profit at 50% of credit collected
+                if max_profit > 0 and current_pnl >= max_profit * 0.50:
+                    ok = engine.close_virtual_position(
+                        position_id=pos["id"],
+                        exit_reason="take_profit_50pct",
+                    )
+                    if ok:
+                        closed += 1
+                        continue
+
+                # Stop loss: loss exceeds 200% of credit collected
+                # (correct for ~$5 spread: credit $1.50, max loss $3.50 ≈ 2.3×)
+                stop_loss_threshold = -(max_profit * 2.0)
+                if current_pnl <= stop_loss_threshold:
+                    ok = engine.close_virtual_position(
+                        position_id=pos["id"],
+                        exit_reason="stop_loss_200pct_credit",
+                    )
+                    if ok:
+                        closed += 1
 
         write_health_status("execution_engine", "healthy")
         return {"checked": len(positions), "closed": closed}
