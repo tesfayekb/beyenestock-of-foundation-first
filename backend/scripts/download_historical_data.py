@@ -206,7 +206,7 @@ def download_cboe_csv(url: str, name: str, out_file: str) -> pd.DataFrame:
     # Parse date column
     date_col = [c for c in df.columns if "date" in c][0]
     df = df.rename(columns={date_col: "date"})
-    df["date"] = pd.to_datetime(df["date"], infer_datetime_format=True)
+    df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date").reset_index(drop=True)
     df = df[df["date"] >= pd.Timestamp(DAILY_START)]
 
@@ -220,8 +220,8 @@ def download_cboe_csv(url: str, name: str, out_file: str) -> pd.DataFrame:
 
 def validate_downloads(dfs: dict) -> None:
     """
-    Validate downloaded data quality. Raises if critical issues found.
-    Prints warnings for non-critical gaps.
+    Validate downloaded data quality. Prints warnings for issues found.
+    Raises are handled in main() — this function never raises directly.
     """
     print("\n[Validation]")
 
