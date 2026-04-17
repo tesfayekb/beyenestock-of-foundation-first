@@ -17,6 +17,18 @@ logger = get_logger("execution_engine")
 
 class ExecutionEngine:
 
+    # Legs per strategy (entry leg count × 2 sides = total commissions)
+    LEGS_BY_STRATEGY = {
+        "put_credit_spread":  4,  # 2 legs × open + close
+        "call_credit_spread": 4,
+        "debit_put_spread":   4,
+        "debit_call_spread":  4,
+        "iron_condor":        8,  # 4 legs × open + close
+        "iron_butterfly":     8,
+        "long_put":           2,  # 1 leg × open + close
+        "long_call":          2,
+    }
+
     def _simulate_fill(
         self, target_credit: Optional[float], strategy_type: str
     ) -> dict:
@@ -151,7 +163,7 @@ class ExecutionEngine:
                 .select("*")
                 .eq("id", position_id)
                 .eq("status", "open")
-                .maybeSingle()
+                .maybe_single()
                 .execute()
             )
             pos = result.data
@@ -182,7 +194,8 @@ class ExecutionEngine:
 
             gross_pnl = (entry_credit - exit_credit) * contracts * 100
             slippage_cost = exit_slip * contracts * 100
-            commission_cost = 0.65 * contracts * 2
+            legs = self.LEGS_BY_STRATEGY.get(strategy_type, 4)
+            commission_cost = 0.65 * contracts * legs
             net_pnl = gross_pnl - slippage_cost - commission_cost
 
             get_client().table("trading_positions").update(
@@ -206,7 +219,7 @@ class ExecutionEngine:
                 .table("trading_sessions")
                 .select("*")
                 .eq("id", session_id)
-                .maybeSingle()
+                .maybe_single()
                 .execute()
             )
             session = session_result.data or {}

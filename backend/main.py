@@ -192,7 +192,7 @@ async def heartbeat_check() -> None:
             heartbeat = datetime.fromisoformat(
                 row["last_heartbeat_at"].replace("Z", "+00:00")
             )
-            if (now - heartbeat).total_seconds() > 360:
+            if (now - heartbeat).total_seconds() > 90:
                 write_health_status(
                     row["service_name"],
                     "degraded",

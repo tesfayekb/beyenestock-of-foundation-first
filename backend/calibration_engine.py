@@ -221,7 +221,7 @@ def run_weekly_calibration() -> dict:
                 .table("trading_sessions")
                 .select("id")
                 .eq("session_date", date.today().isoformat())
-                .maybeSingle()
+                .maybe_single()
                 .execute()
             )
             if s.data:

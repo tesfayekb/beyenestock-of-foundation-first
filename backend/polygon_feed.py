@@ -80,7 +80,9 @@ class PolygonFeed:
 
     async def _fetch_vvix(self) -> float:
         """
-        Fetch current VVIX from Polygon.io REST API.
+        Fetch current VVIX from Polygon.io indices API.
+        Uses I:VVIX namespace (not stock VVIX).
+        Uses Authorization header to prevent key leaking in logs.
         Falls back to last known value or 120.0 if unavailable.
         """
         try:
@@ -90,19 +92,46 @@ class PolygonFeed:
                 return self.last_vvix if self.last_vvix is not None else 120.0
 
             import httpx
-            url = "https://api.polygon.io/v2/aggs/ticker/VVIX/prev"
-            params = {"apiKey": api_key}
+            # Use indices endpoint — I:VVIX is the correct Polygon namespace
+            # /v2/aggs/ticker/{ticker}/prev returns previous session close
+            # For intraday, use snapshot: /v3/snapshot?ticker.any_of=I:VVIX
+            # Use snapshot for most current value during market hours
+            url = "https://api.polygon.io/v3/snapshot"
+            headers = {"Authorization": f"Bearer {api_key}"}
+            params = {"ticker.any_of": "I:VVIX"}
+
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url, params=params)
+                resp = await client.get(url, headers=headers, params=params)
                 if resp.status_code == 200:
                     data = resp.json()
                     results = data.get("results", [])
                     if results:
-                        vvix = float(results[0].get("c", 120.0))
+                        # Extract last value from snapshot
+                        session = results[0].get("session", {})
+                        vvix = float(
+                            session.get("close")
+                            or session.get("prev_close")
+                            or 120.0
+                        )
                         self.last_vvix = vvix
+                        logger.info("polygon_vvix_fetched", vvix=vvix)
                         return vvix
+                elif resp.status_code == 403:
+                    # Plan may not cover indices snapshot — fall back to prev close
+                    url_fallback = (
+                        "https://api.polygon.io/v2/aggs/ticker/I:VVIX/prev"
+                    )
+                    resp2 = await client.get(url_fallback, headers=headers)
+                    if resp2.status_code == 200:
+                        data2 = resp2.json()
+                        results2 = data2.get("results", [])
+                        if results2:
+                            vvix = float(results2[0].get("c", 120.0))
+                            self.last_vvix = vvix
+                            return vvix
         except Exception as e:
-            logger.warning("polygon_vvix_fetch_failed", error=str(e))
+            # Scrub exception message to avoid leaking API key
+            logger.warning("polygon_vvix_fetch_failed", error=type(e).__name__)
 
         return self.last_vvix if self.last_vvix is not None else 120.0
 
