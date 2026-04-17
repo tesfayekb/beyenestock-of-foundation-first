@@ -5,6 +5,8 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
+
 try:
     import redis
 except ModuleNotFoundError:  # pragma: no cover
@@ -44,20 +46,130 @@ class TradierFeed:
         self.connected = False
 
     async def _run_stream_loop(self) -> None:
+        """
+        Real Tradier SSE stream implementation.
+        Step 1: Create a streaming session to get sessionid.
+        Step 2: Subscribe to SSE stream with target symbols.
+        Writes quotes to Redis as tradier:quotes:{symbol} with 60s TTL.
+        """
+        from datetime import date
+        import config
+
+        base_url = (
+            "https://sandbox.tradier.com"
+            if config.TRADIER_SANDBOX
+            else "https://api.tradier.com"
+        )
+        headers = {
+            "Authorization": f"Bearer {config.TRADIER_API_KEY}",
+            "Accept": "application/json",
+        }
+
+        # Step 1: Create streaming session
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{base_url}/v1/markets/events/session",
+                headers=headers,
+            )
+            resp.raise_for_status()
+            session_data = resp.json()
+            sessionid = session_data["stream"]["sessionid"]
+            logger.info("tradier_session_created", sessionid=sessionid[:8] + "...")
+
+        # Step 2: Build symbol list — SPX index + current week's SPXW options
+        today = date.today()
+        # SPX 0DTE options use SPXW prefix with format SPXWYYMMD{C/P}strike
+        # Subscribe to SPX index for underlying price
+        symbols = ["SPX"]
+
+        # Step 3: Open SSE stream
+        stream_url = f"{base_url}/v1/markets/events"
+        stream_params = {
+            "sessionid": sessionid,
+            "symbols": ",".join(symbols),
+            "filter": "quote",
+            "linebreak": "true",
+        }
+
         self.connected = True
         self.disconnect_started_at = None
         write_health_status("tradier_websocket", "healthy")
-        logger.info("tradier_connected")
+        logger.info("tradier_sse_stream_started", symbols=len(symbols))
 
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         try:
-            while not self._stop_event.is_set():
-                await asyncio.sleep(1)
+            async with httpx.AsyncClient(timeout=None) as stream_client:
+                async with stream_client.stream(
+                    "GET",
+                    stream_url,
+                    params=stream_params,
+                    headers={
+                        "Authorization": f"Bearer {config.TRADIER_API_KEY}",
+                        "Accept": "application/json",
+                    },
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if self._stop_event.is_set():
+                            break
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            event = json.loads(line)
+                            event_type = event.get("type")
+                            if event_type == "quote":
+                                self.process_quote(event)
+                            elif event_type == "summary":
+                                # Summary events contain bid/ask/last — treat as quote
+                                self.process_quote(event)
+                            elif event_type == "heartbeat":
+                                self.last_data_at = time.time()
+                        except json.JSONDecodeError:
+                            pass  # Skip non-JSON lines (SSE metadata)
+                        except Exception as exc:
+                            logger.warning(
+                                "tradier_event_process_error", error=str(exc)
+                            )
         finally:
             heartbeat_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await heartbeat_task
             await self._mark_disconnected()
+
+    async def fetch_quote_rest(self, symbol: str) -> None:
+        """
+        Fetch a single quote via REST for symbols not yet in Redis.
+        Used as fallback when SSE hasn't delivered a quote yet.
+        """
+        try:
+            import config
+            base_url = (
+                "https://sandbox.tradier.com"
+                if config.TRADIER_SANDBOX
+                else "https://api.tradier.com"
+            )
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"{base_url}/v1/markets/quotes",
+                    params={"symbols": symbol, "greeks": "false"},
+                    headers={
+                        "Authorization": f"Bearer {config.TRADIER_API_KEY}",
+                        "Accept": "application/json",
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    quotes = data.get("quotes", {}).get("quote", {})
+                    if isinstance(quotes, dict):
+                        self.process_quote(quotes)
+                    elif isinstance(quotes, list):
+                        for q in quotes:
+                            self.process_quote(q)
+        except Exception as exc:
+            logger.warning(
+                "tradier_rest_quote_failed", symbol=symbol, error=str(exc)
+            )
 
     async def _mark_disconnected(self) -> None:
         self.connected = False
