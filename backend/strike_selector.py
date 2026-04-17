@@ -18,7 +18,30 @@ from logger import get_logger
 logger = get_logger("strike_selector")
 
 # Default spread width in points when GEX wall is not available
-DEFAULT_SPREAD_WIDTH = 5.0
+DEFAULT_SPREAD_WIDTH = 5.0  # Used when VIX is unavailable
+
+# VIX-regime spread width table
+# Wider spreads in high-vol regimes: more premium for same delta
+VIX_SPREAD_WIDTH_TABLE = [
+    (15.0, 2.50),   # VIX < 15: tight, low-premium environment
+    (20.0, 5.00),   # VIX 15-20: normal
+    (30.0, 7.50),   # VIX 20-30: elevated vol
+    (float("inf"), 10.00),  # VIX > 30: high stress, maximum premium
+]
+
+
+def get_dynamic_spread_width(vix_level: float) -> float:
+    """
+    Return spread width in points based on current VIX level.
+    Higher VIX = wider spread = more premium collected per trade.
+    Falls back to DEFAULT_SPREAD_WIDTH if vix_level is invalid.
+    """
+    if vix_level <= 0:
+        return DEFAULT_SPREAD_WIDTH
+    for threshold, width in VIX_SPREAD_WIDTH_TABLE:
+        if vix_level < threshold:
+            return width
+    return 10.00
 
 # Target deltas by strategy
 # 16 delta ≈ 1 standard deviation away (credit spread standard)
@@ -147,6 +170,7 @@ def _find_strike_by_delta(
 def _fallback_strikes(
     spx_price: float,
     strategy_type: str,
+    spread_width: float = DEFAULT_SPREAD_WIDTH,
 ) -> dict:
     """
     Fallback strike selection when Tradier chain is unavailable.
@@ -162,12 +186,12 @@ def _fallback_strikes(
 
     put_short = round(spx_price * (1 - pct_away) / 5) * 5   # round to $5
     call_short = round(spx_price * (1 + pct_away) / 5) * 5
-    put_long = put_short - DEFAULT_SPREAD_WIDTH
-    call_long = call_short + DEFAULT_SPREAD_WIDTH
+    put_long = put_short - spread_width
+    call_long = call_short + spread_width
 
     result = {
         "expiry_date": expiry,
-        "spread_width": DEFAULT_SPREAD_WIDTH,
+        "spread_width": spread_width,
         "short_strike": None,
         "long_strike": None,
         "short_strike_2": None,
@@ -213,9 +237,22 @@ def get_strikes(
     spx_price = _get_spx_price_from_redis(redis_client)
     expiry = _get_0dte_expiry()
 
+    # Read current VIX for dynamic spread width
+    vix_level = 18.0
+    try:
+        if redis_client:
+            vix_raw = redis_client.get("polygon:vix:current")
+            if vix_raw:
+                vix_level = float(vix_raw)
+    except Exception:
+        pass  # Use default VIX if Redis unavailable
+
+    dynamic_width = get_dynamic_spread_width(vix_level)
+
     result = {
         "expiry_date": expiry,
-        "spread_width": DEFAULT_SPREAD_WIDTH,
+        "spread_width": dynamic_width,
+        "vix_level_used": round(vix_level, 1),
         "short_strike": None,
         "long_strike": None,
         "short_strike_2": None,
@@ -232,7 +269,7 @@ def get_strikes(
                 strategy=strategy_type,
                 reason="empty_chain",
             )
-            return _fallback_strikes(spx_price, strategy_type)
+            return _fallback_strikes(spx_price, strategy_type, dynamic_width)
 
         target_delta = DELTA_BY_STRATEGY.get(strategy_type, 0.16)
 
@@ -240,7 +277,7 @@ def get_strikes(
             short = _find_strike_by_delta(chain, target_delta, "put", False)
             if short:
                 result["short_strike"] = short
-                result["long_strike"] = short - DEFAULT_SPREAD_WIDTH
+                result["long_strike"] = short - dynamic_width
                 # Get mid-price for target_credit
                 opt = next(
                     (o for o in chain if float(o.get("strike", 0)) == short
@@ -255,7 +292,7 @@ def get_strikes(
             short = _find_strike_by_delta(chain, target_delta, "call", True)
             if short:
                 result["short_strike"] = short
-                result["long_strike"] = short + DEFAULT_SPREAD_WIDTH
+                result["long_strike"] = short + dynamic_width
                 opt = next(
                     (o for o in chain if float(o.get("strike", 0)) == short
                      and o.get("option_type", "").lower() == "call"), None
@@ -271,9 +308,9 @@ def get_strikes(
             if put_short and call_short:
                 result.update({
                     "short_strike": put_short,
-                    "long_strike": put_short - DEFAULT_SPREAD_WIDTH,
+                    "long_strike": put_short - dynamic_width,
                     "short_strike_2": call_short,
-                    "long_strike_2": call_short + DEFAULT_SPREAD_WIDTH,
+                    "long_strike_2": call_short + dynamic_width,
                 })
 
         elif strategy_type in ("long_put", "debit_put_spread"):
@@ -281,18 +318,18 @@ def get_strikes(
             if short:
                 result["short_strike"] = short
                 if strategy_type == "debit_put_spread":
-                    result["long_strike"] = short + DEFAULT_SPREAD_WIDTH
+                    result["long_strike"] = short + dynamic_width
 
         elif strategy_type in ("long_call", "debit_call_spread"):
             short = _find_strike_by_delta(chain, target_delta, "call", True)
             if short:
                 result["short_strike"] = short
                 if strategy_type == "debit_call_spread":
-                    result["long_strike"] = short - DEFAULT_SPREAD_WIDTH
+                    result["long_strike"] = short - dynamic_width
 
         # If strikes still None (chain had no greeks), use fallback
         if result["short_strike"] is None:
-            return _fallback_strikes(spx_price, strategy_type)
+            return _fallback_strikes(spx_price, strategy_type, dynamic_width)
 
         logger.info(
             "strikes_selected",
@@ -306,4 +343,4 @@ def get_strikes(
 
     except Exception as e:
         logger.error("strike_selector_failed", error=str(e), strategy=strategy_type)
-        return _fallback_strikes(spx_price, strategy_type)
+        return _fallback_strikes(spx_price, strategy_type, dynamic_width)

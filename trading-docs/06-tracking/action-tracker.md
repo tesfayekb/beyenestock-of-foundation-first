@@ -738,3 +738,37 @@ Single register of every trading change action. Every change to trading code, sc
 - **t_rules_checked:** T-Rule 1 ✅ (no foundation files touched), T-Rule 5 ✅
   (capital preservation gates unchanged), T-Rule 8 ✅ (A3 follows A1+A2 in
   phase A sequence)
+
+---
+
+### T-ACT-029 — Phase B1: Dynamic Spread Width Optimizer
+
+- **id:** T-ACT-029
+- **date:** 2026-04-17
+- **action:** Phase B1 — dynamic spread width optimizer.
+  backend/strike_selector.py: added VIX_SPREAD_WIDTH_TABLE and
+  get_dynamic_spread_width(vix_level). get_strikes() reads
+  polygon:vix:current from Redis and selects width:
+  $2.50 (VIX<15), $5.00 (15-20), $7.50 (20-30), $10.00 (>30).
+  Both the Tradier-chain happy path and the _fallback_strikes path
+  use the dynamic width, so long_strike geometry matches the declared
+  spread_width field in all branches (consistency fix beyond literal
+  task to avoid risk_engine under-sizing positions).
+  _fallback_strikes() now accepts spread_width parameter (default =
+  DEFAULT_SPREAD_WIDTH) instead of hardcoding the module constant.
+  result dict gains vix_level_used for observability.
+  backend/risk_engine.py: added position_sized structured log after
+  contracts computation in compute_position_size for width monitoring.
+  backend/tests/test_phase_b1.py: 9 unit tests — 5 cover VIX buckets
+  (low, normal, elevated, high-stress, invalid), 2 cover get_strikes
+  Redis read paths (VIX present / VIX absent), 1 covers
+  _fallback_strikes parameter threading, 1 covers the Tradier-chain
+  happy path with VIX=25 returning $7.50 width and correct long_strike
+  geometry.
+- **phase:** phase_b
+- **impact:** HIGH — +1-3pp expected annual return from better premium
+  capture in elevated-VIX regimes; also unblocks B4 width-aware stop-loss
+- **t_rules_checked:** T-Rule 1 ✅ (no foundation files touched),
+  T-Rule 5 ✅ (capital preservation gates unchanged; risk_engine sizing
+  math unchanged, only an info log added), T-Rule 8 ✅ (Phase B follows
+  Phase A in build order)
