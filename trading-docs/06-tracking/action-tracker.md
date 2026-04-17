@@ -505,3 +505,35 @@ Single register of every trading change action. Every change to trading code, sc
 - **t_rules_checked:**
   - T-Rule 1 (Foundation Isolation): ✅ Only two feed files and test file modified
   - T-Rule 10 (No Silent Failures): ✅ All network/parse errors caught with logger.warning/error; backoff retry handled by parent start() loop
+
+---
+
+### T-ACT-020 — Fix Group 7B: Strike Selection + Mark-to-Market
+
+- **id:** T-ACT-020
+- **date:** 2026-04-17
+- **action:** Fix Group 7B — strike selection + mark-to-market. strike_selector.py:
+  fetches Tradier option chain (16-delta target), falls back to SPX±1.5% heuristic.
+  mark_to_market.py: prices open positions every minute using live quotes or
+  Black-Scholes fallback, updates current_pnl and peak_pnl. strategy_selector.py:
+  wires real strikes into every signal. execution_engine.py: populates short_strike,
+  long_strike, expiry_date on position open. main.py: mark-to-market job every
+  minute during market hours.
+- **type:** code
+- **phase:** phase_4
+- **impact:** HIGH
+- **owner:** Cursor
+- **modules_affected:**
+  - `backend/strike_selector.py` (new) — Tradier option chain fetch (GET /v1/markets/options/chains with greeks=true), delta-based strike selection (16-delta for credit, 25-delta for debit), SPX±pct fallback, all 8 strategy types covered; `get_strikes()` public API
+  - `backend/mark_to_market.py` (new) — `run_mark_to_market(redis_client)`: fetches open virtual positions with strike/expiry columns, prices each via live Redis quote or Black-Scholes fallback, writes current_pnl + peak_pnl to trading_positions every minute; `_bs_option_price()` uses scipy.stats.norm
+  - `backend/strategy_selector.py` — added `StrategySelector.__init__` with redis_client; `from strike_selector import get_strikes`; strike lookup before signal build; real `spread_width` (not hardcoded 5.0) passed to `compute_position_size`; signal dict populated with short_strike, long_strike, short_strike_2, long_strike_2, expiry_date, real target_credit
+  - `backend/execution_engine.py` — `open_virtual_position` now reads expiry_date, short_strike, long_strike, short_strike_2, long_strike_2 from signal dict (was hardcoded None)
+  - `backend/main.py` — `from mark_to_market import run_mark_to_market`; `run_mark_to_market_job()` function; `trading_mark_to_market` cron job every minute market hours (mon-fri, 9-15 UTC)
+  - `backend/tests/test_fix_group7b.py` (new) — 6 tests; 85 passed + 1 skipped (scipy ATM call test skipped; scipy in requirements.txt but not in local dev env)
+- **docs_updated:**
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE — no frontend, migration, or out-of-scope backend files modified
+- **verification:** 85 passed, 1 skipped (scipy), 0 failed. strike_selector and mark_to_market import cleanly. git diff --name-only confirms only execution_engine.py, main.py, strategy_selector.py modified (new files untracked).
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ No frontend or migration files modified
+  - T-Rule 10 (No Silent Failures): ✅ strike_selector returns fallback on any error; mark_to_market returns {errors:1} on outer failure; all per-position errors caught and counted

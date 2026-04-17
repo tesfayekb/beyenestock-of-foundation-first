@@ -9,6 +9,7 @@ from typing import Optional, Tuple, Union
 from db import write_health_status
 from logger import get_logger
 from risk_engine import compute_position_size, check_trade_frequency
+from strike_selector import get_strikes
 
 logger = get_logger("strategy_selector")
 
@@ -70,6 +71,13 @@ _NEUTRAL_PREFERRED = {"iron_condor", "iron_butterfly"}
 
 
 class StrategySelector:
+
+    def __init__(self) -> None:
+        import redis as redis_lib
+        from config import REDIS_URL
+        self.redis_client = redis_lib.Redis.from_url(
+            REDIS_URL, decode_responses=True
+        )
 
     def _stage0_time_gate(
         self, cv_stress: float
@@ -216,10 +224,15 @@ class StrategySelector:
             # D-012: satellite positioning after first trade
             position_type = "core" if trades_today == 0 else "satellite"
 
+            # Get concrete strikes from Tradier option chain
+            strikes = get_strikes(strategy_type, self.redis_client)
+            spread_width = strikes.get("spread_width", 5.0)
+            target_credit_from_chain = strikes.get("target_credit")
+
             # Risk sizing
             sizing = compute_position_size(
                 account_value=account_value,
-                spread_width=5.0,  # placeholder width — real GEX strike calc in Phase 4
+                spread_width=spread_width,  # real spread width from strike selector
                 sizing_phase=sizing_phase,
                 regime_agreement=regime_agreement,
                 consecutive_losses_today=consecutive_losses,
@@ -243,10 +256,15 @@ class StrategySelector:
                 "position_size_pct": sizing["risk_pct"],
                 "signal_status": "pending",
                 "is_short_gamma": is_short_gamma,
-                "short_strike": None,
-                "long_strike": None,
-                "expiry_date": None,
-                "target_credit": PLACEHOLDER_CREDIT_BY_STRATEGY.get(strategy_type, 1.50),
+                "short_strike": strikes.get("short_strike"),
+                "long_strike": strikes.get("long_strike"),
+                "short_strike_2": strikes.get("short_strike_2"),
+                "long_strike_2": strikes.get("long_strike_2"),
+                "expiry_date": strikes.get("expiry_date"),
+                "target_credit": (
+                    target_credit_from_chain
+                    or PLACEHOLDER_CREDIT_BY_STRATEGY.get(strategy_type, 1.50)
+                ),
                 "stop_loss_level": None,
                 "profit_target": None,
                 "ev_net": None,
