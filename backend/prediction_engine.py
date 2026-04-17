@@ -74,30 +74,87 @@ class PredictionEngine:
 
     def _compute_regime(self) -> dict:
         """
-        Layer A: Regime classification placeholder.
-        Uses VVIX Z-score as proxy. Real HMM + LightGBM in Phase 4.
-        D-021: regime disagreement guard implemented here.
+        Regime classification — dual-model approach for D-021 disagreement.
+
+        Layer A (regime_hmm): VVIX Z-score proxy (unchanged from Phase 2).
+        Layer B (regime_lgbm): GEX zero-gamma level (new — real signal).
+
+        Two independent inputs → genuine D-021 disagreement possible.
+        GEX confidence < 0.3 → fall back to HMM for both (data quality gate).
         """
+        import math
+
+        # --- Read all signals ---
         vvix_z_raw = self._read_redis("polygon:vvix:z_score", None)
         try:
             vvix_z = float(vvix_z_raw) if vvix_z_raw is not None else 0.0
         except (ValueError, TypeError):
             vvix_z = 0.0
 
+        gex_conf_raw = self._read_redis("gex:confidence", None)
+        try:
+            gex_conf = float(gex_conf_raw) if gex_conf_raw is not None else 0.0
+        except (ValueError, TypeError):
+            gex_conf = 0.0
+
+        flip_zone_raw = self._read_redis("gex:flip_zone", None)
+        try:
+            flip_zone = float(flip_zone_raw) if flip_zone_raw else None
+        except (ValueError, TypeError):
+            flip_zone = None
+
+        spx_price = self._get_spx_price()
+
+        # --- Layer A: VVIX Z-score regime (HMM proxy) ---
         if abs(vvix_z) > 2.5:
             regime_hmm = "volatile_bearish" if vvix_z > 0 else "volatile_bullish"
-            regime_lgbm = "crisis" if vvix_z > 2.5 else "volatile_bullish"
-            rcs = 35.0
+            rcs_hmm = 35.0
         elif abs(vvix_z) > 1.5:
             regime_hmm = "quiet_bullish"
-            regime_lgbm = "quiet_bullish"
-            rcs = 55.0
+            rcs_hmm = 55.0
         else:
             regime_hmm = "pin_range"
-            regime_lgbm = "pin_range"
-            rcs = 65.0
+            rcs_hmm = 65.0
 
-        # D-021: detect disagreement and apply penalty
+        # --- Layer B: GEX zero-gamma regime (LightGBM proxy) ---
+        # Requires gex_conf >= 0.3 (enough option flow data) and valid flip_zone
+        if gex_conf < 0.3 or flip_zone is None or flip_zone <= 0:
+            # Insufficient GEX data — both layers agree (no D-021 penalty)
+            regime_lgbm = regime_hmm
+            rcs_lgbm = rcs_hmm
+        else:
+            # SPX position relative to zero-gamma level
+            dist_pct = (spx_price - flip_zone) / flip_zone  # positive = above ZG
+
+            if dist_pct > 0.003 and abs(vvix_z) < 1.5:
+                # SPX above ZG, low vol → dealers long gamma → mean-reversion
+                regime_lgbm = "pin_range"
+                rcs_lgbm = 70.0
+            elif dist_pct > 0.001 and abs(vvix_z) < 0.8:
+                # SPX just above ZG, calm → quiet trend
+                regime_lgbm = "quiet_bullish"
+                rcs_lgbm = 60.0
+            elif dist_pct < -0.003 and vvix_z > 1.5:
+                # SPX below ZG, rising vol → dealers short gamma → trending
+                regime_lgbm = "volatile_bearish"
+                rcs_lgbm = 45.0
+            elif dist_pct < -0.001:
+                # SPX below ZG → trend-following regime
+                regime_lgbm = "trend"
+                rcs_lgbm = 55.0
+            elif abs(vvix_z) > 2.5:
+                # Crisis override regardless of ZG position
+                regime_lgbm = "crisis"
+                rcs_lgbm = 25.0
+            else:
+                # Near ZG, uncertain
+                regime_lgbm = "range"
+                rcs_lgbm = 60.0
+
+        # --- Combine: use average RCS, apply D-021 on disagreement ---
+        rcs = (rcs_hmm + rcs_lgbm) / 2.0
+
+        # D-021: genuine disagreement between HMM and LightGBM signals
         regime_agreement = regime_hmm == regime_lgbm
         if not regime_agreement:
             rcs = max(0.0, rcs - 15.0)
@@ -106,15 +163,22 @@ class PredictionEngine:
                 metadata={
                     "regime_hmm": regime_hmm,
                     "regime_lgbm": regime_lgbm,
-                    "rcs_after_penalty": rcs,
+                    "vvix_z": round(vvix_z, 3),
+                    "gex_flip_zone": flip_zone,
+                    "spx_price": spx_price,
+                    "dist_pct": round(dist_pct, 5) if flip_zone else None,
+                    "rcs_after_penalty": round(rcs, 1),
                 },
             )
             logger.warning(
-                "regime_disagreement",
+                "regime_disagreement_d021",
                 regime_hmm=regime_hmm,
                 regime_lgbm=regime_lgbm,
-                rcs=rcs,
+                rcs=round(rcs, 1),
             )
+
+        # Use the LightGBM (GEX-based) regime as primary when data is available
+        regime = regime_lgbm if gex_conf >= 0.3 and flip_zone else regime_hmm
 
         if rcs >= 80:
             allocation_tier = "full"
@@ -128,12 +192,14 @@ class PredictionEngine:
             allocation_tier = "danger"
 
         return {
-            "regime": regime_lgbm,
+            "regime": regime,
             "regime_hmm": regime_hmm,
             "regime_lgbm": regime_lgbm,
             "regime_agreement": regime_agreement,
             "rcs": round(rcs, 2),
             "allocation_tier": allocation_tier,
+            "gex_flip_zone_used": flip_zone,
+            "gex_conf_at_regime": round(gex_conf, 4),
         }
 
     def _compute_cv_stress(self) -> dict:
@@ -164,31 +230,77 @@ class PredictionEngine:
             "vanna_velocity": round(proxy_vanna, 8),
         }
 
-    def _compute_direction(self, regime: str, cv_stress: float) -> dict:
+    def _compute_direction(
+        self,
+        regime: str,
+        cv_stress: float,
+        spx_price: float = 5200.0,
+        flip_zone: float = None,
+        gex_conf: float = 0.0,
+    ) -> dict:
         """
-        Layer B: Direction prediction placeholder.
-        Returns calibrated probabilities based on regime + CV_Stress.
-        Real LightGBM on 93 features in Phase 4.
-        """
-        if cv_stress > 70:
-            p_bull, p_bear, p_neutral = 0.25, 0.35, 0.40
-        elif regime in ("quiet_bullish",):
-            p_bull, p_bear, p_neutral = 0.45, 0.25, 0.30
-        elif regime in ("crisis", "volatile_bearish"):
-            p_bull, p_bear, p_neutral = 0.20, 0.50, 0.30
-        else:
-            p_bull, p_bear, p_neutral = 0.35, 0.30, 0.35
+        Direction prediction — GEX zero-gamma tilt + regime overlay.
 
-        total = p_bull + p_bear + p_neutral
-        p_bull /= total
-        p_bear /= total
-        p_neutral /= total
+        Primary signal: SPX distance from zero-gamma level.
+        p_bull = 0.50 + 0.15 × tanh(dist_pct × 50)
+        This gives ≈±0.15 probability tilt at ±2% from zero-gamma.
+
+        Confidence gate: if |p_bull - p_bear| < 0.10 → signal_weak=True
+        (caller should set no_trade_signal).
+
+        Falls back to regime-based probabilities when GEX unavailable.
+        """
+        import math
+
+        # --- GEX/ZG-based directional tilt ---
+        if (
+            flip_zone is not None
+            and flip_zone > 0
+            and gex_conf >= 0.3
+        ):
+            dist_pct = (spx_price - flip_zone) / flip_zone
+            tilt = 0.15 * math.tanh(dist_pct * 50.0)
+
+            p_bull_raw = 0.50 + tilt
+            p_bear_raw = 0.50 - tilt
+            p_neutral_raw = 0.12  # small fixed neutral component
+
+            # Overlay CV_Stress: high stress tilts toward bear
+            if cv_stress > 70:
+                p_bear_raw += 0.08
+                p_bull_raw -= 0.04
+
+            total = p_bull_raw + p_bear_raw + p_neutral_raw
+            p_bull = p_bull_raw / total
+            p_bear = p_bear_raw / total
+            p_neutral = p_neutral_raw / total
+
+        else:
+            # --- Fallback: regime-based probabilities (Phase 2 placeholder) ---
+            if cv_stress > 70:
+                p_bull, p_bear, p_neutral = 0.25, 0.35, 0.40
+            elif regime in ("quiet_bullish",):
+                p_bull, p_bear, p_neutral = 0.45, 0.25, 0.30
+            elif regime in ("crisis", "volatile_bearish"):
+                p_bull, p_bear, p_neutral = 0.20, 0.50, 0.30
+            elif regime in ("pin_range", "range"):
+                p_bull, p_bear, p_neutral = 0.35, 0.35, 0.30
+            else:
+                p_bull, p_bear, p_neutral = 0.35, 0.30, 0.35
+
+            total = p_bull + p_bear + p_neutral
+            p_bull /= total
+            p_bear /= total
+            p_neutral /= total
 
         direction = max(
             [("bull", p_bull), ("bear", p_bear), ("neutral", p_neutral)],
             key=lambda x: x[1],
         )[0]
         confidence = max(p_bull, p_bear, p_neutral)
+
+        # Signal quality gate: if spread too narrow, flag as weak
+        signal_weak = abs(p_bull - p_bear) < 0.10
 
         return {
             "p_bull": round(p_bull, 4),
@@ -198,6 +310,7 @@ class PredictionEngine:
             "confidence": round(confidence, 4),
             "expected_move_pts": round(10.0 * (p_bull - p_bear), 2),
             "expected_move_pct": round(0.002 * (p_bull - p_bear), 6),
+            "signal_weak": signal_weak,
         }
 
     def _evaluate_no_trade(
@@ -293,7 +406,11 @@ class PredictionEngine:
             regime_data = self._compute_regime()
             cv_data = self._compute_cv_stress()
             direction_data = self._compute_direction(
-                regime_data["regime"], cv_data["cv_stress_score"]
+                regime_data["regime"],
+                cv_data["cv_stress_score"],
+                spx_price=self._get_spx_price(),
+                flip_zone=regime_data.get("gex_flip_zone_used"),
+                gex_conf=regime_data.get("gex_conf_at_regime", 0.0),
             )
 
             def _safe_float(key, default=0.0):
@@ -318,6 +435,11 @@ class PredictionEngine:
                 vvix_z,
                 session,
             )
+
+            # Signal quality gate: weak directional signal → no trade
+            if not no_trade and direction_data.get("signal_weak"):
+                no_trade = True
+                no_trade_reason = "direction_signal_weak"
 
             output = {
                 "session_id": session["id"],

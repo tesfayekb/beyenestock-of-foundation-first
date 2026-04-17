@@ -610,3 +610,21 @@ Single register of every trading change action. Every change to trading code, sc
   - T-Rule 1 (Foundation Isolation): ✅ No frontend or migration files modified
   - T-Rule 5 (Paper Phase Integrity): ✅ D-005 now catches unrealized losses from open positions; GLC-006 is properly session-scoped; prediction engine refuses to trade on stale/absent feed data
   - T-Rule 10 (No Silent Failures): ✅ GEX REST fallback logs `gex_quote_missing_after_rest` on both Redis and REST failure; Redis guard logs `prediction_cycle_skipped_redis_unavailable`
+
+---
+
+### T-ACT-023 — GEX/ZG Regime + Direction Classifier
+
+- **id:** T-ACT-023
+- **date:** 2026-04-17
+- **action:** GEX/ZG regime + direction classifier. prediction_engine.py:
+  _compute_regime now has two genuinely independent inputs — regime_hmm
+  (VVIX Z-score) and regime_lgbm (GEX zero-gamma distance). D-021
+  disagreement now fires legitimately when feeds disagree. _compute_direction
+  now uses tanh(SPX-ZG/ZG × 50) × 0.15 probability tilt from zero-gamma level.
+  signal_weak gate added: no trade when |p_bull - p_bear| < 0.10.
+  GEX confidence < 0.3 falls back to VVIX-only (data quality gate).
+  Expected lift: +5 to +8pp on GLC-001 direction accuracy.
+- **phase:** phase_4
+- **impact:** HIGH — core prediction quality
+- **t_rules_checked:** T-Rule 1 ✅, T-Rule 4 ✅ (D-021 now active)
