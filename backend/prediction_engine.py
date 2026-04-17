@@ -3,6 +3,7 @@ Prediction engine — runs every 5 minutes.
 Phase 2: placeholder model outputs. Real models trained in Phase 4.
 """
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 try:
@@ -47,6 +48,29 @@ class PredictionEngine:
             logger.error("prediction_engine_redis_failed", error=str(e))
             self.redis_client = None
         self._cycle_count = 0
+
+        # Phase A3: load trained LightGBM direction model if available
+        self._direction_model = None
+        self._direction_features = None
+        model_path = Path(__file__).parent / "models" / "direction_lgbm_v1.pkl"
+        meta_path  = Path(__file__).parent / "models" / "model_metadata.json"
+        if model_path.exists():
+            try:
+                import pickle
+                with open(model_path, "rb") as f:
+                    self._direction_model = pickle.load(f)
+                if meta_path.exists():
+                    import json as _json
+                    meta = _json.loads(meta_path.read_text())
+                    self._direction_features = meta.get("features", [])
+                logger.info(
+                    "direction_model_loaded",
+                    model_version="v1",
+                    features=len(self._direction_features or []),
+                )
+            except Exception as e:
+                logger.warning("direction_model_load_failed", error=str(e))
+                self._direction_model = None
 
     def _read_redis(self, key: str, default=None):
         if not self.redis_client:
@@ -239,18 +263,103 @@ class PredictionEngine:
         gex_conf: float = 0.0,
     ) -> dict:
         """
-        Direction prediction — GEX zero-gamma tilt + regime overlay.
+        Direction prediction — LightGBM model (Phase A3) with GEX/ZG overlay.
 
-        Primary signal: SPX distance from zero-gamma level.
-        p_bull = 0.50 + 0.15 × tanh(dist_pct × 50)
-        This gives ≈±0.15 probability tilt at ±2% from zero-gamma.
-
-        Confidence gate: if |p_bull - p_bear| < 0.05 → signal_weak=True
-        (blocks trades when SPX within ~0.3% of zero-gamma, allows at >0.5%)
-
-        Falls back to regime-based probabilities when GEX unavailable.
+        Priority order:
+        1. LightGBM model (if loaded) — uses live Redis features
+        2. GEX/ZG rule-based (fallback when model not loaded)
+        3. Regime-based hardcoded (fallback when GEX unavailable)
         """
         import math
+
+        # --- Priority 1: LightGBM model inference ---
+        # Use getattr to support tests that bypass __init__ via __new__.
+        direction_model = getattr(self, "_direction_model", None)
+        direction_features = getattr(self, "_direction_features", None)
+        if direction_model is not None and direction_features:
+            try:
+                import numpy as np
+                from datetime import datetime, timezone
+                import zoneinfo
+
+                now_et = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
+
+                # Build feature vector matching training features
+                vix_raw  = self._read_redis("polygon:vix:current", "18.0")
+                vvix_raw = self._read_redis("polygon:vvix:current", "120.0")
+                vvix_z   = float(self._read_redis("polygon:vvix:z_score", "0.0"))
+                rv_20d   = float(self._read_redis("polygon:spx:realized_vol_20d", "15.0") or 15.0)
+
+                vix_val  = float(vix_raw or 18.0)
+                vvix_val = float(vvix_raw or 120.0)
+                iv_rv    = vix_val / rv_20d if rv_20d > 0 else 1.0
+
+                minutes_from_open = (
+                    (now_et.hour * 60 + now_et.minute) - (9 * 60 + 30)
+                )
+                minutes_to_close = 390 - minutes_from_open
+
+                feature_map = {
+                    "return_5m":          float(self._read_redis("polygon:spx:return_5m",  "0.0") or 0.0),
+                    "return_30m":         float(self._read_redis("polygon:spx:return_30m", "0.0") or 0.0),
+                    "return_1h":          float(self._read_redis("polygon:spx:return_1h",  "0.0") or 0.0),
+                    "return_4h":          float(self._read_redis("polygon:spx:return_4h",  "0.0") or 0.0),
+                    "overnight_gap":      float(self._read_redis("polygon:spx:overnight_gap", "0.0") or 0.0),
+                    "prior_day_return":   float(self._read_redis("polygon:spx:prior_day_return", "0.0") or 0.0),
+                    "rsi_14":             float(self._read_redis("polygon:spx:rsi_14", "50.0") or 50.0),
+                    "macd_signal":        float(self._read_redis("polygon:spx:macd_signal", "0.0") or 0.0),
+                    "bb_pct_b":           float(self._read_redis("polygon:spx:bb_pct_b", "0.5") or 0.5),
+                    "minutes_from_open":  float(minutes_from_open),
+                    "minutes_to_close":   float(minutes_to_close),
+                    "vwap_distance":      float(self._read_redis("polygon:spx:vwap_distance", "0.0") or 0.0),
+                    "morning_range":      float(self._read_redis("polygon:spx:morning_range", "0.005") or 0.005),
+                    "vix_close":          vix_val,
+                    "vix_5d_change":      float(self._read_redis("polygon:vix:5d_change", "0.0") or 0.0),
+                    "vix_z_score":        float(self._read_redis("polygon:vix:z_score", "0.0") or 0.0),
+                    "vvix_close":         vvix_val,
+                    "vvix_z_score":       vvix_z,
+                    "rv_20d":             rv_20d,
+                    "iv_rv_ratio":        iv_rv,
+                    "vix_term_ratio":     float(self._read_redis("polygon:vix9d:current", "18.0") or 18.0) / max(vix_val, 1.0),
+                    "hour_sin":           math.sin(2 * math.pi * minutes_from_open / 390),
+                    "hour_cos":           math.cos(2 * math.pi * minutes_from_open / 390),
+                    "dow_sin":            math.sin(2 * math.pi * now_et.weekday() / 5),
+                    "dow_cos":            math.cos(2 * math.pi * now_et.weekday() / 5),
+                }
+
+                X = np.array([[feature_map.get(f, 0.0) for f in direction_features]])
+                pred_proba = direction_model.predict_proba(X)[0]
+                classes = list(direction_model.classes_)
+
+                p_bull    = float(pred_proba[classes.index("bull")])    if "bull"    in classes else 0.35
+                p_bear    = float(pred_proba[classes.index("bear")])    if "bear"    in classes else 0.30
+                p_neutral = float(pred_proba[classes.index("neutral")]) if "neutral" in classes else 0.35
+
+                direction = max(
+                    [("bull", p_bull), ("bear", p_bear), ("neutral", p_neutral)],
+                    key=lambda x: x[1],
+                )[0]
+                confidence = max(p_bull, p_bear, p_neutral)
+                signal_weak = abs(p_bull - p_bear) < 0.05
+
+                return {
+                    "p_bull":           round(p_bull, 4),
+                    "p_bear":           round(p_bear, 4),
+                    "p_neutral":        round(p_neutral, 4),
+                    "direction":        direction,
+                    "confidence":       round(confidence, 4),
+                    "expected_move_pts": round(10.0 * (p_bull - p_bear), 2),
+                    "expected_move_pct": round(0.002 * (p_bull - p_bear), 6),
+                    "signal_weak":      signal_weak,
+                    "model_source":     "lgbm_v1",
+                }
+
+            except Exception as model_err:
+                logger.warning(
+                    "direction_model_inference_failed",
+                    error=str(model_err),
+                )
+                # Fall through to GEX/ZG rule-based below
 
         # --- GEX/ZG-based directional tilt ---
         if (
