@@ -42,6 +42,23 @@ DIRECTION_THRESHOLD = 0.001
 
 # -- Data Loading --------------------------------------------------------------
 
+def _find_close_col(df: pd.DataFrame, hint: str) -> str:
+    """Find the primary price column in a daily DataFrame.
+    Tries: 'close', then the hint name, then the only non-OHLV numeric column."""
+    if "close" in df.columns:
+        return "close"
+    if hint.lower() in df.columns:
+        return hint.lower()
+    skip = {"date", "datetime", "timestamp_ms", "open", "high", "low", "volume"}
+    candidates = [c for c in df.columns if c.lower() not in skip
+                  and pd.api.types.is_numeric_dtype(df[c])]
+    if len(candidates) == 1:
+        return candidates[0]
+    raise RuntimeError(
+        f"Cannot find close column with hint='{hint}'. Columns: {list(df.columns)}"
+    )
+
+
 def load_data() -> tuple:
     """Load SPX 5-min and daily VIX/VVIX parquet files."""
     print("\n[1/5] Loading historical data...")
@@ -64,12 +81,16 @@ def load_data() -> tuple:
 
     vix = pd.read_parquet(DATA_DIR / "vix_daily.parquet")
     vix["date"] = pd.to_datetime(vix["date"]).dt.date
-    vix = vix.sort_values("date").rename(columns={"close": "vix_close"})
+    vix = vix.sort_values("date")
+    vix_col = _find_close_col(vix, "vix")
+    vix = vix.rename(columns={vix_col: "vix_close"})
     print(f"  VIX daily: {len(vix):,} rows")
 
     vvix = pd.read_parquet(DATA_DIR / "vvix_daily.parquet")
     vvix["date"] = pd.to_datetime(vvix["date"]).dt.date
-    vvix = vvix.sort_values("date").rename(columns={"close": "vvix_close"})
+    vvix = vvix.sort_values("date")
+    vvix_col = _find_close_col(vvix, "vvix")
+    vvix = vvix.rename(columns={vvix_col: "vvix_close"})
     print(f"  VVIX daily: {len(vvix):,} rows")
 
     vix9d = None
@@ -77,7 +98,9 @@ def load_data() -> tuple:
     if vix9d_path.exists():
         vix9d = pd.read_parquet(vix9d_path)
         vix9d["date"] = pd.to_datetime(vix9d["date"]).dt.date
-        vix9d = vix9d.sort_values("date").rename(columns={"close": "vix9d_close"})
+        vix9d = vix9d.sort_values("date")
+        vix9d_col = _find_close_col(vix9d, "vix9d")
+        vix9d = vix9d.rename(columns={vix9d_col: "vix9d_close"})
         print(f"  VIX9D daily: {len(vix9d):,} rows")
 
     return spx5, vix, vvix, vix9d
