@@ -47,6 +47,18 @@ class TradierFeed:
 
     async def _run_stream_loop(self) -> None:
         """
+        Real Tradier feed implementation.
+        In SANDBOX mode: uses REST polling (SSE not supported in sandbox).
+        In PRODUCTION mode: uses SSE streaming.
+        """
+        import config as _config
+        if _config.TRADIER_SANDBOX:
+            await self._run_rest_poll_loop()
+        else:
+            await self._run_sse_stream_loop()
+
+    async def _run_sse_stream_loop(self) -> None:
+        """
         Real Tradier SSE stream implementation.
         Step 1: Create a streaming session to get sessionid.
         Step 2: Subscribe to SSE stream with target symbols.
@@ -155,6 +167,59 @@ class TradierFeed:
                 await heartbeat_task
             await self._mark_disconnected()
 
+    async def _run_rest_poll_loop(self) -> None:
+        """
+        REST polling fallback for Tradier sandbox.
+        Sandbox does not support SSE streaming.
+        Polls /v1/markets/quotes every 10 seconds for SPX price.
+        Writes tradier:quotes:SPX to Redis so mark_to_market has current price.
+        """
+        import config as _config
+        base_url = "https://sandbox.tradier.com"
+        headers = {
+            "Authorization": f"Bearer {_config.TRADIER_API_KEY}",
+            "Accept": "application/json",
+        }
+
+        self.connected = True
+        self.disconnect_started_at = None
+        write_health_status(
+            "tradier_websocket",
+            "healthy",
+            last_error_message="sandbox_rest_polling",
+        )
+        logger.info("tradier_sandbox_rest_polling_started")
+
+        heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        resp = await client.get(
+                            f"{base_url}/v1/markets/quotes",
+                            params={"symbols": "SPX", "greeks": "false"},
+                            headers=headers,
+                        )
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            quotes = data.get("quotes", {}).get("quote", {})
+                            if isinstance(quotes, dict) and quotes.get("symbol"):
+                                self.process_quote(quotes)
+                            elif isinstance(quotes, list):
+                                for q in quotes:
+                                    self.process_quote(q)
+                except Exception as poll_err:
+                    logger.warning(
+                        "tradier_rest_poll_failed", error=str(poll_err)
+                    )
+
+                await asyncio.sleep(10)
+        finally:
+            heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat_task
+            await self._mark_disconnected()
+
     async def fetch_quote_rest(self, symbol: str) -> None:
         """
         Fetch a single quote via REST for symbols not yet in Redis.
@@ -193,6 +258,9 @@ class TradierFeed:
         self.connected = False
         if self.disconnect_started_at is None:
             self.disconnect_started_at = time.time()
+        # Don't write error on clean stop
+        if self._stop_event.is_set():
+            return
         write_health_status(
             "tradier_websocket",
             "degraded",
