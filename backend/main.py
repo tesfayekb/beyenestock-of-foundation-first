@@ -13,7 +13,10 @@ from gex_engine import GexEngine
 from logger import get_logger
 from polygon_feed import PolygonFeed
 from prediction_engine import PredictionEngine
-from session_manager import get_or_create_session, open_today_session, close_today_session
+from session_manager import (
+    get_or_create_session, open_today_session, close_today_session,
+    update_session,
+)
 from tradier_feed import TradierFeed
 from trading_cycle import run_trading_cycle
 from calibration_engine import run_weekly_calibration
@@ -175,7 +178,64 @@ def run_market_close_job() -> None:
 
 
 def pre_market_scan() -> None:
-    logger.info("pre_market_scan not yet implemented")
+    """
+    Pre-market regime and day_type classification. Runs at 9:00 AM ET (14:00 UTC).
+    Classifies today's session as: trend, open_drive, range, reversal, event, unknown.
+    Uses VVIX Z-score, overnight ATR proxy, and macro calendar check.
+    Updates trading_sessions.day_type and day_type_confidence.
+    """
+    try:
+        session = get_or_create_session()
+        if not session:
+            logger.warning("pre_market_scan_no_session")
+            return
+
+        # Read signals from Redis
+        vvix_z_raw = redis_client.get("polygon:vvix:z_score") if redis_client else None
+        vvix_z = float(vvix_z_raw) if vvix_z_raw else 0.0
+        baseline_ready = (
+            redis_client.get("polygon:vvix:baseline_ready") == "True"
+            if redis_client else False
+        )
+
+        # Day type classification heuristic
+        # Phase 2 proxy — real classification uses overnight ATR + economic calendar
+        # in Phase 4
+        if not baseline_ready:
+            day_type = "unknown"
+            confidence = 0.0
+        elif abs(vvix_z) >= 2.5:
+            day_type = "event"
+            confidence = 0.80
+        elif vvix_z >= 1.5:
+            day_type = "reversal"
+            confidence = 0.65
+        elif vvix_z >= 0.8:
+            day_type = "open_drive"
+            confidence = 0.60
+        elif vvix_z <= -0.5:
+            day_type = "trend"
+            confidence = 0.60
+        else:
+            day_type = "range"
+            confidence = 0.55
+
+        update_session(
+            session["id"],
+            day_type=day_type,
+            day_type_confidence=round(confidence, 4),
+        )
+
+        write_health_status("prediction_engine", "healthy")
+        logger.info(
+            "pre_market_scan_complete",
+            day_type=day_type,
+            confidence=confidence,
+            vvix_z=vvix_z,
+        )
+
+    except Exception as e:
+        logger.error("pre_market_scan_failed", error=str(e))
 
 
 async def heartbeat_check() -> None:
@@ -237,8 +297,9 @@ async def on_startup() -> None:
             scheduler.add_job(
                 pre_market_scan,
                 trigger="cron",
+                day_of_week="mon-fri",
                 id="trading_pre_market_scan",
-                hour=9,
+                hour=14,
                 minute=0,
             )
         scheduler.add_job(

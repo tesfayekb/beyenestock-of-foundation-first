@@ -38,7 +38,7 @@ def get_open_positions() -> list:
             .select(
                 "id, strategy_type, position_type, status, "
                 "entry_at, entry_credit, contracts, session_id, "
-                "current_pnl"
+                "current_pnl, current_cv_stress"
             )
             .eq("status", "open")
             .eq("position_mode", "virtual")
@@ -225,6 +225,22 @@ def run_position_monitor() -> dict:
                     if ok:
                         closed += 1
                         continue
+
+                # D-017: CV_Stress exit — only when P&L ≥ 50% of max profit
+                if not is_debit and max_profit > 0:
+                    cv_stress = pos.get("current_cv_stress") or 0.0
+                    pct_profit = (
+                        current_pnl / max_profit if max_profit > 0 else 0.0
+                    )
+                    # CV_Stress > 70 AND P&L ≥ 50% of max profit → exit
+                    if cv_stress > 70.0 and pct_profit >= 0.50:
+                        ok = engine.close_virtual_position(
+                            position_id=pos["id"],
+                            exit_reason="cv_stress_exit_d017",
+                        )
+                        if ok:
+                            closed += 1
+                            continue
 
                 # Stop loss: loss exceeds 200% of credit collected
                 # (correct for ~$5 spread: credit $1.50, max loss $3.50 ≈ 2.3×)

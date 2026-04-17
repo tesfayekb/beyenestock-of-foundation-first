@@ -33,16 +33,26 @@ class ExecutionEngine:
         self, target_credit: Optional[float], strategy_type: str
     ) -> dict:
         """
-        Simulate a virtual fill with static slippage model (D-015 placeholder).
-        Real fill simulation via walk-the-book in Phase 4.
+        Simulate a virtual fill with realistic slippage perturbation.
+        D-015 placeholder: actual slippage drawn from N(predicted, 20%) distribution.
+        Real fill simulation via walk-the-book in Phase 5.
         """
+        import random
         predicted_slippage = STATIC_SLIPPAGE_BY_STRATEGY.get(strategy_type, 0.15)
         base_credit = target_credit if target_credit else 1.50
-        actual_fill = max(0.05, base_credit - predicted_slippage)
+
+        # Perturb actual slippage with ±20% noise — makes D-019 meaningful
+        # actual = predicted * (1 + N(0, 0.2)), clamped to [0.5×, 2.0×] predicted
+        noise = random.gauss(0, 0.20)
+        actual_slippage = round(
+            max(predicted_slippage * 0.5, min(predicted_slippage * 2.0,
+            predicted_slippage * (1 + noise))), 4
+        )
+        actual_fill = max(0.05, base_credit - actual_slippage)
         return {
             "fill_price": round(actual_fill, 4),
             "predicted_slippage": predicted_slippage,
-            "actual_slippage": predicted_slippage,
+            "actual_slippage": actual_slippage,
         }
 
     def open_virtual_position(

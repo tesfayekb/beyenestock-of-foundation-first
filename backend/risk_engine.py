@@ -41,6 +41,7 @@ def compute_position_size(
     regime_agreement: bool = True,
     consecutive_losses_today: int = 0,
     position_type: str = "core",
+    allocation_tier: str = "full",
 ) -> dict:
     """
     Compute number of contracts and risk metadata.
@@ -87,6 +88,30 @@ def compute_position_size(
                 consecutive_losses=consecutive_losses_today,
                 reduced_pct=risk_pct,
             )
+
+        # D-004: RCS-dynamic allocation via allocation_tier
+        TIER_MULTIPLIERS = {
+            "full":      1.0,
+            "moderate":  0.70,
+            "low":       0.40,
+            "pre_event": 0.20,
+            "danger":    0.0,
+        }
+        tier_mult = TIER_MULTIPLIERS.get(allocation_tier, 1.0)
+        if tier_mult < 1.0:
+            risk_pct *= tier_mult
+            tier_reason = f"allocation_tier_{allocation_tier}_d004"
+            size_reduction_reason = (
+                f"{size_reduction_reason}+{tier_reason}"
+                if size_reduction_reason else tier_reason
+            )
+            if tier_mult == 0.0:
+                return {
+                    "contracts": 0,
+                    "risk_pct": 0.0,
+                    "stressed_loss_per_contract": 0.0,
+                    "size_reduction_reason": tier_reason,
+                }
 
         stressed_loss_per_contract = spread_width * 100
         max_risk_dollars = account_value * risk_pct

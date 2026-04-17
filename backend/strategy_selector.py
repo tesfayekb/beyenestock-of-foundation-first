@@ -224,6 +224,7 @@ class StrategySelector:
                 regime_agreement=regime_agreement,
                 consecutive_losses_today=consecutive_losses,
                 position_type=position_type,
+                allocation_tier=prediction.get("allocation_tier", "full"),
             )
 
             is_short_gamma = strategy_type in SHORT_GAMMA_STRATEGIES
