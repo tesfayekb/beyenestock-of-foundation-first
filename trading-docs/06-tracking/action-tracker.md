@@ -537,3 +537,40 @@ Single register of every trading change action. Every change to trading code, sc
 - **t_rules_checked:**
   - T-Rule 1 (Foundation Isolation): ✅ No frontend or migration files modified
   - T-Rule 10 (No Silent Failures): ✅ strike_selector returns fallback on any error; mark_to_market returns {errors:1} on outer failure; all per-position errors caught and counted
+
+---
+
+### T-ACT-021 — Fix Group 9: Critical Paper Phase Integrity
+
+- **id:** T-ACT-021
+- **date:** 2026-04-17
+- **action:** Fix Group 9 critical integrity — (1) AsyncIOScheduler now uses
+  America/New_York timezone, all cron hours changed to ET: D-010 14:30,
+  D-011 15:45, market open 09:30, market close 16:30, pre-market 09:00,
+  EOD 17:00, weekly 18:00/18:30. (2) Prediction cycle changed to cron
+  market hours only (9-15 ET Mon-Fri). (3) Debit strategy fill records
+  real cost abs(credit)+slippage not max(0.05). (4) Exit credit uses
+  MTM current_pnl derivation not fabricated 50%. (5) Calibration log
+  actual_slippage writes fill slippage not P&L delta. (6) entry_spx_price
+  reads tradier:quotes:SPX from Redis, fallback 5200.0 not 5000.0.
+  (7) _upsert_criterion uses .upsert() not .update().
+- **type:** code
+- **phase:** phase_4
+- **impact:** CRITICAL
+- **owner:** Cursor
+- **modules_affected:**
+  - `backend/main.py` — `from zoneinfo import ZoneInfo`; `AsyncIOScheduler(timezone=ZoneInfo("America/New_York"))`; all cron jobs converted from UTC to ET (D-010 hour=14/min=30, D-011 hour=15/min=45, market open hour=9/min=30, market close hour=16/min=30, pre-market hour=9/min=0, EOD hour=17/min=0, weekly Sunday hour=18/min=0 and hour=18/min=30); prediction cycle converted from `trigger="interval", minutes=5` to `trigger="cron", day_of_week="mon-fri", hour="9-15", minute="*/5"`
+  - `backend/execution_engine.py` — `_simulate_fill`: branches on `base_credit < 0`; debit returns `abs(base_credit) + actual_slippage` (no longer clamped to 0.05 floor); credit path unchanged; `is_debit` boolean added to return dict. `close_virtual_position`: when `exit_credit is None`, derives from `pos["current_pnl"]` (MTM from `mark_to_market.py`) using inverse of P&L formula; handles debit (negative entry_credit) and credit cases separately; falls back to 50% only if current_pnl is None. Calibration log `actual_slippage` = `pos.get("entry_slippage") or exit_slip` (was `abs(entry_credit - exit_credit)`).
+  - `backend/prediction_engine.py` — new `_get_spx_price()` method reads `tradier:quotes:SPX` from Redis, parses JSON, returns `last / ask / bid / 5200.0`; `run_cycle()` now returns `"spx_price": self._get_spx_price()` (was `5000.0`).
+  - `backend/criteria_evaluator.py` — `_upsert_criterion` uses `.upsert({criterion_id, ...}, on_conflict="criterion_id")` (was `.update({...}).eq("criterion_id", id)`).
+  - `backend/tests/test_fix_group9.py` (new) — 9 tests: scheduler timezone string check, debit fill > 2.50 for target -3.00, credit fill < target, calibration log no P&L delta, `_get_spx_price` fallback 5200.0, `run_cycle` source has no 5000.0, `_upsert_criterion` uses `.upsert(`, prediction cycle uses `cron` not `interval`, D-010/D-011 registered at ET hours.
+- **docs_updated:**
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+  - trading-docs/08-planning/known-false-positives.md (added D-012, D-013 to GENUINELY DEFERRED table)
+- **foundation_impact:** NONE — no frontend, migration, or out-of-scope backend files modified
+- **verification:** 94 passed, 1 skipped (scipy pre-existing), 0 failed. `git diff --name-only origin/main` confirms only backend/main.py, backend/execution_engine.py, backend/prediction_engine.py, backend/criteria_evaluator.py, backend/tests/test_fix_group9.py, and trading-docs changed. Manual: `_simulate_fill(-3.00, 'long_put')` → fill_price ≈ 3.05, is_debit=True; `_simulate_fill(1.50, 'put_credit_spread')` → fill_price ≈ 1.36, is_debit=False.
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ No frontend or migration files modified
+  - T-Rule 5 (Paper Phase Integrity): ✅ Fill economics, exit pricing, calibration slippage, SPX attribution all now record truthful values
+  - T-Rule 6 (Time Stops D-010/D-011 correctness): ✅ Scheduler timezone America/New_York — D-010 fires at 14:30 ET and D-011 at 15:45 ET in both EDT and EST (previously 1 hour late in EDT = 8 months/year)
+  - T-Rule 10 (No Silent Failures): ✅ _upsert_criterion now creates the row if missing instead of silently matching zero rows
