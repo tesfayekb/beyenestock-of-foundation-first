@@ -117,6 +117,13 @@ def compute_position_size(
         max_risk_dollars = account_value * risk_pct
         contracts = int(max_risk_dollars / stressed_loss_per_contract)
 
+        logger.info(
+            "position_sized",
+            spread_width=spread_width,
+            contracts=contracts,
+            risk_pct=risk_pct,
+        )
+
         return {
             "contracts": contracts,
             "risk_pct": round(risk_pct, 6),
