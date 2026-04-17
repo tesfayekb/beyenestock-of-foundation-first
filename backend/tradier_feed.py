@@ -52,7 +52,6 @@ class TradierFeed:
         Step 2: Subscribe to SSE stream with target symbols.
         Writes quotes to Redis as tradier:quotes:{symbol} with 60s TTL.
         """
-        from datetime import date
         import config
 
         base_url = (
@@ -76,11 +75,30 @@ class TradierFeed:
             sessionid = session_data["stream"]["sessionid"]
             logger.info("tradier_session_created", sessionid=sessionid[:8] + "...")
 
-        # Step 2: Build symbol list — SPX index + current week's SPXW options
-        today = date.today()
-        # SPX 0DTE options use SPXW prefix with format SPXWYYMMD{C/P}strike
-        # Subscribe to SPX index for underlying price
+        # Step 2: Build symbol list — SPX index + today's 0DTE SPXW options
         symbols = ["SPX"]
+        try:
+            from strike_selector import _get_0dte_expiry, _get_option_chain_tradier
+            expiry = _get_0dte_expiry()
+            chain = _get_option_chain_tradier(expiry, None)
+            option_syms = [
+                opt.get("symbol", "")
+                for opt in chain
+                if opt.get("symbol")
+            ]
+            # Cap at 200 symbols to stay within Tradier SSE limits
+            symbols.extend(option_syms[:200])
+            logger.info(
+                "tradier_sse_option_symbols_added",
+                count=len(option_syms),
+                capped=len(option_syms) > 200,
+            )
+        except Exception as chain_err:
+            logger.warning(
+                "tradier_sse_option_chain_failed",
+                error=str(chain_err),
+            )
+            # Continue with SPX-only — GEX will use REST fallback per symbol
 
         # Step 3: Open SSE stream
         stream_url = f"{base_url}/v1/markets/events"

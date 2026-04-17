@@ -574,3 +574,39 @@ Single register of every trading change action. Every change to trading code, sc
   - T-Rule 5 (Paper Phase Integrity): ✅ Fill economics, exit pricing, calibration slippage, SPX attribution all now record truthful values
   - T-Rule 6 (Time Stops D-010/D-011 correctness): ✅ Scheduler timezone America/New_York — D-010 fires at 14:30 ET and D-011 at 15:45 ET in both EDT and EST (previously 1 hour late in EDT = 8 months/year)
   - T-Rule 10 (No Silent Failures): ✅ _upsert_criterion now creates the row if missing instead of silently matching zero rows
+
+---
+
+### T-ACT-022 — Fix Group 10: GEX Data + Signal Quality
+
+- **id:** T-ACT-022
+- **date:** 2026-04-17
+- **action:** Fix Group 10 GEX + signal quality — (1) Tradier SSE now subscribes
+  to 0DTE SPXW option chain at startup (capped at 200 symbols); GEX engine has
+  REST fallback for missing quotes so GEX is no longer always zero. (2) Prediction
+  cycle skips on Redis unavailable or when all feed signals (VVIX Z + GEX
+  confidence) are both None — prevents garbage rows poisoning GLC-001/002.
+  (3) D-005 daily drawdown now includes unrealized MTM P&L from open positions —
+  large open losses now count toward the -3% halt. (4) GLC-006 now uses
+  session_error_snapshot audit entries written at EOD close, scoped to actual
+  sessions rather than the rolling 1h time window.
+- **type:** code
+- **phase:** phase_4
+- **impact:** HIGH
+- **owner:** Cursor
+- **modules_affected:**
+  - `backend/tradier_feed.py` — `_run_stream_loop` now calls `_get_0dte_expiry()` + `_get_option_chain_tradier()` from `strike_selector`, extends `symbols` list with up to 200 SPXW option symbols before opening SSE stream; falls back gracefully to SPX-only if chain fetch fails; removed unused `from datetime import date` local import
+  - `backend/gex_engine.py` — `compute_gex` inner loop: on cache miss, performs synchronous `httpx.get /v1/markets/quotes` with 3s timeout, caches result in `quote_cache` and Redis (60s TTL); skips symbol with `gex_quote_missing_after_rest` warning only if REST also fails
+  - `backend/prediction_engine.py` — `run_cycle`: (a) Redis availability guard via `self.redis_client.ping()` — returns `{no_trade_signal: True, no_trade_reason: "redis_unavailable"}` immediately if ping fails; (b) reads `vvix_z_raw` and `gex_conf_raw` from Redis before session fetch; if both are None returns `{no_trade_signal: True, no_trade_reason: "feed_data_unavailable"}`
+  - `backend/trading_cycle.py` — added `from db import get_client`; D-005 block replaced with `realized_pnl + unrealized_pnl` where `unrealized_pnl` sums `current_pnl` from all open positions via `trading_positions` table query; falls back to realized only on DB error
+  - `backend/session_manager.py` — `close_today_session`: inserts `trading.session_error_snapshot` audit log entry (total_errors + per-service breakdown) immediately before the `trading.session_closed` entry; provides EOD snapshot for GLC-006 evaluation
+  - `backend/criteria_evaluator.py` — `evaluate_glc006_zero_exceptions` rewritten: (a) queries last 20 closed sessions; (b) reads `trading.session_error_snapshot` audit entries from last 30 days; (c) sums `total_errors` from snapshots; (d) falls back to live `trading_system_health` if no snapshots exist yet
+  - `backend/tests/test_fix_group10.py` (new) — 6 tests: GEX REST fallback source check, Redis unavailable no-trade, no-feed-data no-trade (with session mock), D-005 unrealized source check, GLC-006 snapshot source check, close_today_session snapshot source check
+- **docs_updated:**
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE — no frontend, migration, or out-of-scope backend files modified
+- **verification:** 100 passed, 1 skipped (scipy pre-existing), 0 failed. All 4 modules import cleanly. `git diff --name-only origin/main` limited to 6 allowed backend files only.
+- **t_rules_checked:**
+  - T-Rule 1 (Foundation Isolation): ✅ No frontend or migration files modified
+  - T-Rule 5 (Paper Phase Integrity): ✅ D-005 now catches unrealized losses from open positions; GLC-006 is properly session-scoped; prediction engine refuses to trade on stale/absent feed data
+  - T-Rule 10 (No Silent Failures): ✅ GEX REST fallback logs `gex_quote_missing_after_rest` on both Redis and REST failure; Redis guard logs `prediction_cycle_skipped_redis_unavailable`
