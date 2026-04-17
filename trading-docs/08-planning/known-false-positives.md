@@ -112,17 +112,38 @@ SET (millisecond operation, not a Supabase write). There is no data loss risk.
 
 ## GENUINELY DEFERRED (known gaps, intentionally not yet fixed)
 
-These are real issues that are documented as out-of-scope for paper phase
-and will be addressed before Phase 5 (live trading):
+These are real issues documented as out-of-scope for paper phase.
+**Fix Group 8 Cursor task will be generated when GLC-001 through GLC-006
+first show `in_progress` status AND at least 2 weeks remain before
+expected paper phase graduation.**
 
-| ID | Issue | Fix When |
-|----|-------|----------|
-| D-001 | RLS allows any authenticated user to read trading data | Before adding users |
-| D-002 | Service role key has no secret redaction in logs | Before Phase 5 |
-| D-003 | Session counters have no optimistic locking | Before Phase 5 |
-| D-004 | Sentinel uses same Tradier key as backend | Before Phase 5 |
-| D-005 | Sentinel close_all_positions_tradier doesn't call Tradier API | Before Phase 5 |
-| D-006 | Tradier WebSocket feed is a stub | Separate task (Fix Group 7) |
-| D-007 | Databento OPRA feed is a stub | Separate task (Fix Group 7) |
-| D-008 | Strikes/expiries never populated | Separate task (Fix Group 7) |
-| D-009 | Touch probability hardcoded 0.05 | Fix Group 7 |
+| ID | Issue | Severity | Fix When | Notes |
+|----|-------|----------|----------|-------|
+| D-001 | RLS allows any authenticated user to read all trading data | HIGH | Before adding any non-admin users | 6 trading table policies use `auth.role()='authenticated'` — change to `trading.view` permission check |
+| D-002 | Service role key has no secret redaction in logs | HIGH | Before Phase 5 | Raw exception text may contain Redis DSN. Implement error-code taxonomy in write_health_status |
+| D-003 | Session P&L counters have no optimistic locking | HIGH | Before Phase 5 | Read-then-write race on virtual_pnl when 3 positions close simultaneously. Fix: Postgres atomic `UPDATE … SET virtual_pnl = virtual_pnl + $delta` |
+| D-004 | Sentinel uses same Tradier API key as backend | HIGH | Before Phase 5 | GLC-009 requires "separate credentials, close-only scope". Rename to SENTINEL_TRADIER_API_KEY, verify close-only at startup |
+| D-005 | Sentinel close_all_positions_tradier only marks Supabase rows | CRITICAL for live | Before Phase 5 | Real positions stay open during emergency. Gate on position_mode: for 'live', call Tradier REST `/v1/accounts/{id}/orders` with market close orders |
+| D-006 | Time-stop jobs can double-fire on Railway rolling restart | MEDIUM | Before Phase 5 | Brief 2-instance overlap during deploy. Add Postgres advisory lock at job entry: `pg_try_advisory_lock(hashtext('time_stop_230pm'))` |
+| D-007 | get_or_create_session insert race | MEDIUM | Before Phase 5 | Select-then-insert without ON CONFLICT. Replace with `.upsert(on_conflict="session_date", ignore_duplicates=True)` then re-select |
+| D-008 | Sentinel re-arms automatically after Railway flap | MEDIUM | Before Phase 5 | If Railway health flaps around 120s threshold, sentinel can emergency-close twice. Add operator ACK requirement before re-arm |
+| D-009 | Touch probability hardcoded 0.05 | LOW | Phase 6 Learning Engine | Real Black-Scholes first-passage model needed. Blocked on real option chain data |
+| D-010 | Supabase 1000-row cap on queries | LOW | Before Phase 5 | Not a paper-phase issue (max ~225 rows). Add explicit pagination before Phase 5 live volume |
+| D-011 | Sync scheduler jobs run on asyncio thread pool | LOW | Monitor in Phase 5 | APScheduler handles sync→thread correctly (FP-001). Revisit only if feed latency degrades under live load |
+
+## FIX GROUP 8 TRIGGER CONDITIONS
+
+Generate Fix Group 8 Cursor task file when ALL of the following are true:
+1. GLC-001 (prediction accuracy) shows `in_progress` with observations > 0
+2. GLC-003 (training examples) shows observations > 100
+3. GLC-005 (Sharpe ratio) shows any numeric value
+4. At least 25 paper trading sessions completed
+5. At least 14 calendar days before expected paper phase graduation
+
+Priority order within Fix Group 8:
+1. D-005 (Sentinel Tradier API) — MUST be first, most critical for live capital safety
+2. D-003 (session locking) — prevents P&L corruption under live load
+3. D-004 (Sentinel separate key) — GLC-009 hard requirement
+4. D-001 (RLS) — before adding any non-admin users
+5. D-006, D-007, D-008 — reliability improvements
+6. D-002, D-010, D-011 — polish

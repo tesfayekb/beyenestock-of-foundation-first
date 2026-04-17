@@ -128,6 +128,33 @@ The authoritative 7-phase build plan for the MarketMuse trading system. Each pha
 
 ---
 
+## TPLAN-HARDENING-008: Fix Group 8 — Pre-Live Hardening Gate
+
+**Goal:** Complete all security and reliability fixes required before
+live trading is enabled. Must be completed before Phase 5 begins.
+
+**Trigger:** Generate Fix Group 8 Cursor tasks when GLC-001 through
+GLC-006 show in_progress AND ≥ 25 paper sessions completed.
+
+| ID | Deliverable | Platform | Priority | Status |
+|----|-------------|----------|----------|--------|
+| TPLAN-HARD-008-A | Sentinel close_all_positions_tradier calls real Tradier API for live positions | Python/GCP | P1-CRITICAL | `not_started` |
+| TPLAN-HARD-008-B | Session P&L atomic UPDATE (optimistic locking) | Python/Railway | P1-HIGH | `not_started` |
+| TPLAN-HARD-008-C | Sentinel separate SENTINEL_TRADIER_API_KEY credential | Python/GCP | P1-HIGH | `not_started` |
+| TPLAN-HARD-008-D | RLS trading tables scoped to trading.view permission | Supabase | P2-HIGH | `not_started` |
+| TPLAN-HARD-008-E | Time-stop jobs Postgres advisory lock | Python/Railway | P2-MEDIUM | `not_started` |
+| TPLAN-HARD-008-F | get_or_create_session upsert ON CONFLICT | Python/Railway | P2-MEDIUM | `not_started` |
+| TPLAN-HARD-008-G | Sentinel operator ACK before re-arm | Python/GCP | P2-MEDIUM | `not_started` |
+| TPLAN-HARD-008-H | Error-code taxonomy in write_health_status (no raw DSNs) | Python/Railway | P3-LOW | `not_started` |
+
+### Phase Gate (ALL P1 items required before Phase 5)
+- [ ] TPLAN-HARD-008-A: Sentinel closes real Tradier positions
+- [ ] TPLAN-HARD-008-B: Session P&L race condition eliminated
+- [ ] TPLAN-HARD-008-C: Sentinel has isolated close-only credentials
+- [ ] TPLAN-HARD-008-D: RLS scoped to trading.view permission
+
+---
+
 ## TPLAN-LIVE-005: Phase 5 — Live Execution (Week 15+)
 
 **Goal:** Real trades executing on operator's Tradier account.
