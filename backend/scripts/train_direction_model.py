@@ -384,7 +384,7 @@ def save_model(model, win_rate: float, accuracy: float,
         "features": FEATURE_COLS,
         "n_features": len(FEATURE_COLS),
         "gate_threshold": MIN_ACCURACY_GATE,
-        "gate_passed": win_rate >= MIN_ACCURACY_GATE,
+        "gate_passed": bool(win_rate >= MIN_ACCURACY_GATE),
         "top_features": importance_df.head(10)["feature"].tolist(),
     }
     meta_path = MODELS_DIR / "model_metadata.json"
