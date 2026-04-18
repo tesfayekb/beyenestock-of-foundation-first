@@ -261,6 +261,39 @@ def _run_surprise_detector_job() -> None:
         logger.error("surprise_detector_job_failed", error=str(exc))
 
 
+def _run_flow_agent_job() -> None:
+    """Phase 2C: options flow agent.
+    Runs at 8:45 AM ET and on a 30-min interval during market hours."""
+    try:
+        import sys
+        import os
+        sys.path.insert(
+            0,
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        )
+        from flow_agent import run_flow_agent
+        if redis_client:
+            run_flow_agent(redis_client)
+    except Exception as exc:
+        logger.error("flow_agent_job_failed", error=str(exc))
+
+
+def _run_sentiment_agent_job() -> None:
+    """Phase 2C: news sentiment agent. Runs at 8:30 AM ET."""
+    try:
+        import sys
+        import os
+        sys.path.insert(
+            0,
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        )
+        from sentiment_agent import run_sentiment_agent
+        if redis_client:
+            run_sentiment_agent(redis_client)
+    except Exception as exc:
+        logger.error("sentiment_agent_job_failed", error=str(exc))
+
+
 def pre_market_scan() -> None:
     """
     Pre-market regime and day_type classification. Runs at 9:00 AM ET (14:00 UTC).
@@ -571,6 +604,31 @@ async def on_startup() -> None:
             trigger="cron",
             hour=8, minute=45,
             id="trading_surprise_detector",
+            timezone="America/New_York",
+        )
+
+        # Phase 2C: flow agent — 8:45 AM ET pre-market load,
+        # then refresh every 30 min so mid-session unusual prints are caught.
+        scheduler.add_job(
+            _run_flow_agent_job,
+            trigger="cron",
+            hour=8, minute=45,
+            id="trading_flow_agent",
+            timezone="America/New_York",
+        )
+        scheduler.add_job(
+            _run_flow_agent_job,
+            trigger="interval",
+            minutes=30,
+            id="trading_flow_refresh",
+            timezone="America/New_York",
+        )
+        # Phase 2C: sentiment agent — 8:30 AM ET (same time as macro)
+        scheduler.add_job(
+            _run_sentiment_agent_job,
+            trigger="cron",
+            hour=8, minute=30,
+            id="trading_sentiment_agent",
             timezone="America/New_York",
         )
 
