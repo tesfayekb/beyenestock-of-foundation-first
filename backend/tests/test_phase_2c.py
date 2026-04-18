@@ -149,3 +149,58 @@ def test_build_prompt_includes_flow_and_sentiment():
     assert "MARKET SENTIMENT" in prompt
     assert "SIGNAL CONFLUENCE" in prompt
     assert "45" in prompt  # flow_score appears in prompt
+
+
+# --- Session 2: per-agent feature flag gates ------------------------------
+
+
+def test_flow_agent_skips_redis_write_when_flag_off():
+    """Flag OFF (key missing) → setex never called, brief still returned."""
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None  # flag absent → OFF
+    with patch("flow_agent.config") as mock_config:
+        mock_config.UNUSUAL_WHALES_API_KEY = ""
+        mock_config.POLYGON_API_KEY = ""
+        from flow_agent import run_flow_agent
+        result = run_flow_agent(mock_redis)
+    assert isinstance(result, dict)
+    mock_redis.setex.assert_not_called()
+
+
+def test_flow_agent_writes_when_flag_on():
+    """Flag ON ('true') → setex IS called with the ai:flow:brief key."""
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = "true"  # decode_responses=True style
+    with patch("flow_agent.config") as mock_config:
+        mock_config.UNUSUAL_WHALES_API_KEY = ""
+        mock_config.POLYGON_API_KEY = ""
+        from flow_agent import run_flow_agent
+        run_flow_agent(mock_redis)
+    assert mock_redis.setex.called
+    args, _ = mock_redis.setex.call_args
+    assert args[0] == "ai:flow:brief"
+
+
+def test_sentiment_agent_skips_redis_write_when_flag_off():
+    """Flag OFF (key missing) → setex never called, brief still returned."""
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None  # flag absent → OFF
+    with patch("sentiment_agent.config") as mock_config:
+        mock_config.NEWSAPI_KEY = ""
+        from sentiment_agent import run_sentiment_agent
+        result = run_sentiment_agent(mock_redis)
+    assert isinstance(result, dict)
+    mock_redis.setex.assert_not_called()
+
+
+def test_sentiment_agent_writes_when_flag_on():
+    """Flag ON (bytes b'true') → setex IS called with ai:sentiment:brief."""
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = b"true"  # decode_responses=False style
+    with patch("sentiment_agent.config") as mock_config:
+        mock_config.NEWSAPI_KEY = ""
+        from sentiment_agent import run_sentiment_agent
+        run_sentiment_agent(mock_redis)
+    assert mock_redis.setex.called
+    args, _ = mock_redis.setex.call_args
+    assert args[0] == "ai:sentiment:brief"

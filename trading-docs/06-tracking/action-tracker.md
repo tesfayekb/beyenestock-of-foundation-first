@@ -29,6 +29,108 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-038 — Phase 2C: Options Flow + Sentiment Agents + Enriched Synthesis
+
+- **id:** T-ACT-038
+- **date:** 2026-04-16
+- **action:** Phase 2C — added two new Tier-2 intelligence agents and
+  enriched the synthesis prompt with multi-signal confluence on branch
+  `feature/phase-2c-agents`. Built across two sessions.
+
+  **Session 1 — New agents + synthesis enrichment + scheduling.**
+  - New `backend_agents/flow_agent.py`: pulls SPX/SPXW unusual options
+    activity from Unusual Whales (paid, primary) and the SPX put/call
+    ratio from Polygon (already-paid fallback). Computes a `flow_score`
+    in [-100, +100] from the put/call ratio (bearish ≥1.2, bullish ≤0.7,
+    neutral otherwise) plus an unusual-activity tally and a directional
+    label (`bullish` / `bearish` / `neutral`). Output dict written to
+    Redis key `ai:flow:brief` (TTL 8hr).
+  - New `backend_agents/sentiment_agent.py`: combines NewsAPI top-headline
+    keyword scoring (bullish/bearish lexicon), CNN Fear & Greed Index
+    (extreme-fear contrarian uplift, extreme-greed warning), and the
+    SPX overnight gap (read from `polygon:spx:overnight_gap` if present)
+    into a `sentiment_score` in [-100, +100] and a `sentiment_direction`.
+    Output dict written to Redis key `ai:sentiment:brief` (TTL 8hr).
+  - `backend_agents/synthesis_agent.py` updated to read
+    `ai:flow:brief` and `ai:sentiment:brief` from Redis on every run,
+    compute a confluence score via new `_compute_confluence(macro, flow,
+    sentiment)` (1.0 = all three signals agree, 0.0 = any pair opposes),
+    and pass all three into a rewritten `_build_prompt()` that now has
+    dedicated **SIGNAL CONFLUENCE**, **OPTIONS FLOW**, and **MARKET
+    SENTIMENT** sections. The synthesis output dict gained three new
+    fields: `confluence_score`, `flow_direction`, `sentiment_direction`.
+    Schema/validation, the existing `agents:ai_synthesis:enabled` feature
+    flag gate, and the `ai:synthesis:latest` Redis write are unchanged.
+  - `backend/main.py` got two new job functions
+    (`_run_flow_agent_job`, `_run_sentiment_agent_job`) following the
+    same `sys.path.insert` + Redis-init pattern as the Phase 2A jobs,
+    plus three scheduler entries: flow agent at **08:45 ET cron**,
+    flow refresh **every 30 min during market hours**, sentiment agent
+    at **08:30 ET cron**. All three log start/end and never raise.
+  - `backend/config.py` adds `UNUSUAL_WHALES_API_KEY` (default empty
+    string — system unchanged until the operator sets it on Railway).
+
+  **Session 2 — Per-agent feature flag gates + documentation.** Added
+  Redis-backed flag gates on the WRITE path of both new agents:
+  `agents:flow_agent:enabled` for `flow_agent.py` and
+  `agents:sentiment_agent:enabled` for `sentiment_agent.py`. Both
+  default OFF. Pattern: agent always computes and returns the brief
+  in-process; the `redis.setex(...)` to `ai:flow:brief` / `ai:sentiment:brief`
+  is only executed when the flag is `"true"` (str or bytes). The flag
+  read itself is wrapped in try/except — any Redis exception fails
+  closed (no write). When flag is OFF a `*_flag_off_skipping_redis_write`
+  debug log is emitted so operators can confirm gating in production.
+  This means Phase 2C agents have ZERO downstream influence on
+  `synthesis_agent.py` until the operator explicitly flips the flags,
+  matching the safety contract used in Phase 2A and 2B.
+
+- **type:** code
+- **phase:** phase_2c
+- **impact:** MEDIUM — new agents shipped behind dual feature flags;
+  synthesis prompt structure changed but only fires when
+  `agents:ai_synthesis:enabled=true` (also default OFF since Phase 2A);
+  no production strategy/order path touched
+- **owner:** Cursor
+- **modules_affected:**
+  - `backend_agents/flow_agent.py` (new)
+  - `backend_agents/sentiment_agent.py` (new)
+  - `backend_agents/synthesis_agent.py` (enriched: confluence + new
+    prompt sections + 3 new output fields)
+  - `backend/config.py` (added `UNUSUAL_WHALES_API_KEY`)
+  - `backend/main.py` (2 new job functions + 3 scheduler entries)
+  - `backend/tests/test_phase_2c.py` (new — 15 tests)
+- **docs_updated:**
+  - `trading-docs/06-tracking/action-tracker.md` (this entry)
+  - `trading-docs/00-governance/what-is-actually-built.md` (flow +
+    sentiment agent rows added with Phase 2C activation status and the
+    two new feature-flag keys)
+- **foundation_impact:** NONE — no foundation, frontend, migration, or
+  shared-schema files touched
+- **verification:**
+  - `python -m pytest tests/ -v` → **227 passed, 1 skipped, 0 failures**
+    (Session 1 added 11 new tests; Session 2 added 4 more covering both
+    flag-OFF skip and flag-ON write paths for both agents).
+  - `git diff --name-only origin/main` confirms changes are scoped to
+    `backend/` (config + main + tests), `backend_agents/` (3 files), and
+    `trading-docs/` only — no production strategy/risk/order code
+    touched.
+  - All four feature flags relevant to Phase 2C
+    (`agents:ai_synthesis:enabled`, `agents:flow_agent:enabled`,
+    `agents:sentiment_agent:enabled`, plus the existing
+    `strategy:ai_hint_override:enabled` from Phase 2B) default OFF, so
+    deployment alone changes nothing; operator must enable explicitly.
+- **t_rules_checked:** T-Rule 1 (capital preservation — both new agents
+  wrap every external call in try/except with safe fallbacks; flag read
+  fails closed; Redis write failure is silently ignored), T-Rule 5
+  (every external dependency has a fallback — Unusual Whales failure →
+  Polygon-only; NewsAPI failure → F&G + gap only; F&G failure → 50;
+  every agent returns `_empty_brief()` on total failure), T-Rule 8
+  (modular separation — all new agent code lives exclusively in
+  `backend_agents/`; production `backend/` modules never import from
+  `backend_agents/` and only read the briefs through Redis)
+
+---
+
 ### T-ACT-037 — Phase 2A Complete: Economic Intelligence Layer (3 sessions)
 
 - **id:** T-ACT-037

@@ -99,15 +99,32 @@ def run_sentiment_agent(redis_client) -> dict:
             overnight_gap=gap_data.get("gap_pct", 0.0),
         )
 
+        # Phase 2C Session 2: per-agent feature flag gates the WRITE only.
+        # The brief is always returned to the caller; downstream synthesis
+        # consumes whatever is present in Redis, so flag OFF = no influence
+        # without losing the in-process brief.
         if redis_client:
+            flag_on = False
             try:
-                redis_client.setex(
-                    "ai:sentiment:brief",
-                    28800,  # 8 hours
-                    json.dumps(brief),
-                )
+                flag = redis_client.get("agents:sentiment_agent:enabled")
+                flag_on = flag in ("true", b"true")
             except Exception:
-                pass  # Redis write failure must never block return
+                flag_on = False  # fail closed — never write on flag-read error
+
+            if flag_on:
+                try:
+                    redis_client.setex(
+                        "ai:sentiment:brief",
+                        28800,  # 8 hours
+                        json.dumps(brief),
+                    )
+                except Exception:
+                    pass  # Redis write failure must never block return
+            else:
+                logger.debug(
+                    "sentiment_agent_flag_off_skipping_redis_write",
+                    sentiment_score=sentiment_score,
+                )
 
         return brief
 
