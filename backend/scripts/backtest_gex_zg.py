@@ -57,8 +57,8 @@ SLIPPAGE_PER_CONTRACT = 0.05 * 2  # $0.10 entry + exit
 SPREAD_WIDTH = 5.0
 
 # Exit thresholds
-PROFIT_TARGET_PCT = 0.50   # Take 50% of max profit
-STOP_LOSS_PCT = 2.00       # Stop at 2x credit received
+PROFIT_TARGET_PCT = 0.40   # B3: Take 40% of max profit
+STOP_LOSS_PCT     = 1.50   # B3: Stop at 1.5× credit received
 
 
 # -- Signal Logic (replicates prediction_engine.py exactly) ----------------
