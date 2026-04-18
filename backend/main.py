@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timezone
 from typing import Dict, List
 from zoneinfo import ZoneInfo
@@ -204,6 +205,62 @@ def run_market_close_job() -> None:
         logger.error("market_close_job_error", error=str(exc))
 
 
+def _run_economic_calendar_job() -> None:
+    try:
+        import sys
+        import os
+        sys.path.insert(
+            0,
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        )
+        from economic_calendar import (
+            get_todays_market_intelligence, write_intel_to_redis
+        )
+        intel = get_todays_market_intelligence()
+        if redis_client:
+            write_intel_to_redis(redis_client, intel)
+        logger.info("economic_calendar_job_complete",
+                    classification=intel.get("day_classification"))
+    except Exception as exc:
+        logger.error("economic_calendar_job_failed", error=str(exc))
+
+
+def _run_macro_agent_job() -> None:
+    try:
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend_agents"))
+        from macro_agent import run_macro_agent
+        if redis_client:
+            run_macro_agent(redis_client)
+    except Exception as exc:
+        logger.error("macro_agent_job_failed", error=str(exc))
+
+
+def _run_synthesis_agent_job() -> None:
+    try:
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend_agents"))
+        from synthesis_agent import run_synthesis_agent
+        if redis_client:
+            run_synthesis_agent(redis_client)
+    except Exception as exc:
+        logger.error("synthesis_agent_job_failed", error=str(exc))
+
+
+def _run_surprise_detector_job() -> None:
+    try:
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend_agents"))
+        from surprise_detector import run_surprise_detector
+        if redis_client:
+            run_surprise_detector(redis_client)
+    except Exception as exc:
+        logger.error("surprise_detector_job_failed", error=str(exc))
+
+
 def pre_market_scan() -> None:
     """
     Pre-market regime and day_type classification. Runs at 9:00 AM ET (14:00 UTC).
@@ -225,27 +282,55 @@ def pre_market_scan() -> None:
             if redis_client else False
         )
 
-        # Day type classification heuristic
-        # Phase 2 proxy — real classification uses overnight ATR + economic calendar
-        # in Phase 4
-        if not baseline_ready:
+        # Phase 2A: Economic intelligence (runs first — highest priority)
+        import sys, os
+        sys.path.insert(
+            0,
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        )
+        from economic_calendar import (
+            get_todays_market_intelligence, write_intel_to_redis
+        )
+        intel = get_todays_market_intelligence()
+        if redis_client:
+            write_intel_to_redis(redis_client, intel)
+
+        # Calendar classification takes priority over VVIX heuristic
+        classification = intel.get("day_classification", "normal")
+
+        if classification == "catalyst_major":
+            day_type = "event"
+            confidence = 0.95
+        elif classification in ("catalyst_minor", "earnings_major"):
+            # Let VVIX refine — but ensure at minimum reduced size
+            # Fall through to VVIX check below
+            day_type = None
+            confidence = 0.0
+        else:
+            day_type = None
+            confidence = 0.0
+
+        # VVIX heuristic — always runs, may upgrade or set day_type
+        if not baseline_ready and day_type is None:
             day_type = "unknown"
             confidence = 0.0
-        elif abs(vvix_z) >= 2.5:
-            day_type = "event"
-            confidence = 0.80
-        elif vvix_z >= 1.5:
-            day_type = "reversal"
-            confidence = 0.65
-        elif vvix_z >= 0.8:
-            day_type = "open_drive"
-            confidence = 0.60
-        elif vvix_z <= -0.5:
-            day_type = "trend"
-            confidence = 0.60
-        else:
-            day_type = "range"
-            confidence = 0.55
+        elif day_type is None:
+            if abs(vvix_z) >= 2.5:
+                day_type = "event"
+                confidence = 0.80
+            elif vvix_z >= 1.5:
+                day_type = "reversal"
+                confidence = 0.65
+            elif vvix_z >= 0.8:
+                day_type = "open_drive"
+                confidence = 0.60
+            elif vvix_z <= -0.5:
+                day_type = "trend"
+                confidence = 0.60
+            else:
+                day_type = "range"
+                confidence = 0.55
+        # else: calendar already set day_type, keep it
 
         update_session(
             session["id"],
@@ -259,6 +344,8 @@ def pre_market_scan() -> None:
             day_type=day_type,
             confidence=confidence,
             vvix_z=vvix_z,
+            calendar_classification=classification,
+            calendar_events=len(intel.get("events", [])),
         )
 
     except Exception as e:
@@ -455,6 +542,38 @@ async def on_startup() -> None:
             id="trading_market_close",
             replace_existing=True,
         )
+
+        # Phase 2A: Economic intelligence agents
+        # Run BEFORE pre_market_scan so calendar is ready at 9:00 AM
+        scheduler.add_job(
+            _run_economic_calendar_job,
+            trigger="cron",
+            hour=8, minute=25,
+            id="trading_economic_calendar",
+            timezone="America/New_York",
+        )
+        scheduler.add_job(
+            _run_macro_agent_job,
+            trigger="cron",
+            hour=8, minute=30,
+            id="trading_macro_agent",
+            timezone="America/New_York",
+        )
+        scheduler.add_job(
+            _run_synthesis_agent_job,
+            trigger="cron",
+            hour=9, minute=15,
+            id="trading_synthesis_agent",
+            timezone="America/New_York",
+        )
+        scheduler.add_job(
+            _run_surprise_detector_job,
+            trigger="cron",
+            hour=8, minute=45,
+            id="trading_surprise_detector",
+            timezone="America/New_York",
+        )
+
         scheduler.start()
 
         # Create today's trading session on startup

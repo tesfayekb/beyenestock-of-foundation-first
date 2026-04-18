@@ -29,5 +29,11 @@ TRADIER_API_KEY = os.getenv("TRADIER_API_KEY")
 TRADIER_ACCOUNT_ID = os.getenv("TRADIER_ACCOUNT_ID")
 TRADIER_SANDBOX = os.getenv("TRADIER_SANDBOX", "true").lower() == "true"
 POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
+
+# Phase 2A: Economic Intelligence Layer (all optional — system works without them)
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
+
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
