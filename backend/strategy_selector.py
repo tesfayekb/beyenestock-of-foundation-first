@@ -24,6 +24,7 @@ STATIC_SLIPPAGE_BY_STRATEGY = {
     "long_put": 0.05,
     "long_call": 0.05,
     "long_straddle": 0.15,
+    "calendar_spread": 0.30,  # two legs across two expiries → wider slippage
 }
 
 # Placeholder credits by strategy — Phase 2 proxy until real option pricer in Phase 4
@@ -38,6 +39,7 @@ PLACEHOLDER_CREDIT_BY_STRATEGY = {
     "long_put":          -3.00,
     "long_call":         -3.00,
     "long_straddle":     -4.00,  # debit — buy both ATM call and put
+    "calendar_spread":    1.50,  # net credit: near IV premium minus far cost
 }
 
 REGIME_STRATEGY_MAP = {
@@ -48,9 +50,10 @@ REGIME_STRATEGY_MAP = {
     "pin_range": ["iron_condor", "iron_butterfly", "put_credit_spread"],
     "range": ["iron_condor", "put_credit_spread", "call_credit_spread"],
     "crisis": ["put_credit_spread"],
-    # Phase 2B: catalyst days favour long_straddle (capture IV expansion,
-    # exit pre-announcement). iron_condor stays as fallback.
-    "event": ["long_straddle", "iron_condor"],
+    # Phase 2B/3C: catalyst days favour long_straddle (capture IV expansion,
+    # exit pre-announcement); calendar_spread only fires AFTER announcement
+    # (post-catalyst IV crush). iron_condor stays as fallback.
+    "event": ["long_straddle", "calendar_spread", "iron_condor"],
     "panic": [],
     "trend": ["debit_call_spread", "debit_put_spread", "long_call", "long_put"],
     "unknown": ["put_credit_spread"],
@@ -72,7 +75,9 @@ LONG_GAMMA_STRATEGIES = {
 
 _BULL_PREFERRED = {"call_credit_spread", "debit_call_spread", "long_call"}
 _BEAR_PREFERRED = {"put_credit_spread", "debit_put_spread", "long_put"}
-_NEUTRAL_PREFERRED = {"iron_condor", "iron_butterfly", "long_straddle"}
+_NEUTRAL_PREFERRED = {
+    "iron_condor", "iron_butterfly", "long_straddle", "calendar_spread",
+}
 
 
 class StrategySelector:
@@ -323,6 +328,67 @@ class StrategySelector:
                 )
                 # strategy_type already set to regime-based above — safe
 
+            # Phase 3C: Calendar spread only fires AFTER catalyst announcement.
+            # Placed BEFORE get_strikes()/sizing so the eventual strategy_type
+            # is final by the time strikes and contracts are computed.
+            # If calendar_spread is selected but the announcement hasn't
+            # happened yet, fall back to the next viable candidate
+            # (long_straddle preferred, otherwise iron_condor).
+            if strategy_type == "calendar_spread":
+                try:
+                    cal_flag = self._check_feature_flag(
+                        "strategy:calendar_spread:enabled"
+                    )
+                    if not cal_flag:
+                        ordered_remaining = [
+                            s for s in ordered if s != "calendar_spread"
+                        ]
+                        strategy_type = (
+                            ordered_remaining[0]
+                            if ordered_remaining else "iron_condor"
+                        )
+                    else:
+                        cal_raw = (
+                            self.redis_client.get("calendar:today:intel")
+                            if self.redis_client else None
+                        )
+                        if cal_raw:
+                            import json
+                            import zoneinfo
+                            cal = json.loads(cal_raw)
+                            now_et = datetime.now(
+                                zoneinfo.ZoneInfo("America/New_York")
+                            )
+                            event_passed = False
+                            for ev in cal.get("events", []):
+                                if ev.get("is_major") and ev.get("time"):
+                                    try:
+                                        h, m, *_ = map(
+                                            int, ev["time"].split(":")
+                                        )
+                                        event_et = now_et.replace(
+                                            hour=h, minute=m, second=0
+                                        )
+                                        if (
+                                            now_et >= event_et
+                                            and now_et.hour >= 14
+                                        ):
+                                            event_passed = True
+                                            break
+                                    except Exception:
+                                        pass
+                            if not event_passed:
+                                strategy_type = (
+                                    "long_straddle"
+                                    if "long_straddle" in ordered
+                                    else "iron_condor"
+                                )
+                                logger.info(
+                                    "calendar_spread_too_early_using_straddle"
+                                )
+                except Exception:
+                    strategy_type = "iron_condor"
+
             predicted_slippage = STATIC_SLIPPAGE_BY_STRATEGY.get(
                 strategy_type, 0.15
             )
@@ -410,6 +476,7 @@ class StrategySelector:
                 "short_strike_2": strikes.get("short_strike_2"),
                 "long_strike_2": strikes.get("long_strike_2"),
                 "expiry_date": strikes.get("expiry_date"),
+                "far_expiry_date": strikes.get("far_expiry"),
                 "target_credit": (
                     target_credit_from_chain
                     or PLACEHOLDER_CREDIT_BY_STRATEGY.get(strategy_type, 1.50)

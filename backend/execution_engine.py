@@ -107,6 +107,7 @@ class ExecutionEngine:
                 "entry_greeks": {},
                 "contracts": contracts,
                 "expiry_date": signal.get("expiry_date"),
+                "far_expiry_date": signal.get("far_expiry_date"),
                 "short_strike": signal.get("short_strike"),
                 "long_strike": signal.get("long_strike"),
                 "short_strike_2": signal.get("short_strike_2"),

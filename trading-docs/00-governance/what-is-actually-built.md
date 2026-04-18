@@ -40,7 +40,7 @@ until explicitly instructed in a Phase 3A task.
 | Long Straddle | ✅ wired (Phase 2B) | `strategy:long_straddle:enabled` (default OFF) | No | Phase 2B activation |
 | Bull Call Spread | ✅ wired via AI hint (Phase 2B) | `strategy:ai_hint_override:enabled` (default OFF) | No | Phase 2B activation |
 | Bear Put Spread | ✅ wired via AI hint (Phase 2B) | `strategy:ai_hint_override:enabled` (default OFF) | No | Phase 2B activation |
-| Calendar Spread | No | OFF | No | Phase 3C |
+| Calendar Spread | ✅ wired (Phase 3C) | `strategy:calendar_spread:enabled` (default OFF) | No | Phase 3C activation |
 
 ## Intelligence Agents — Actual Status (Phase 2A + 2C)
 

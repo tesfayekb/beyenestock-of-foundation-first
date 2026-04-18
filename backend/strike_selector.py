@@ -77,6 +77,18 @@ def _get_0dte_expiry() -> str:
     return (today + timedelta(days=days_ahead)).isoformat()
 
 
+def _get_next_friday_expiry() -> str:
+    """
+    Get next Friday's date for the calendar-spread far leg.
+    If today is Friday, returns the FOLLOWING Friday (always strictly future).
+    """
+    today = date.today()
+    days_ahead = (4 - today.weekday()) % 7  # 4 = Friday
+    if days_ahead == 0:
+        days_ahead = 7  # if today is Friday, use next Friday
+    return (today + timedelta(days=days_ahead)).isoformat()
+
+
 def _get_spx_price_from_redis(redis_client) -> float:
     """Read current SPX price from Redis. Returns 5200.0 if unavailable."""
     try:
@@ -237,6 +249,21 @@ def _fallback_strikes(
             "long_strike_2": atm_strike,  # both legs ATM
             "spread_width": 0,
             "target_credit": -4.00,       # typical SPX 0DTE straddle cost
+        })
+
+    elif strategy_type == "calendar_spread":
+        # Phase 3C: Sell near-term (0DTE) ATM straddle, buy far-term
+        # (next Friday) ATM straddle as the hedge. ATM rounded to $5.
+        atm_strike = round(spx_price / 5) * 5
+        result.update({
+            "short_strike":   atm_strike,  # near-term ATM call (sold)
+            "long_strike":    atm_strike,  # far-term ATM call (bought)
+            "short_strike_2": atm_strike,  # near-term ATM put  (sold)
+            "long_strike_2":  atm_strike,  # far-term ATM put   (bought)
+            "spread_width":   0,           # not spread-based
+            "target_credit":  1.50,        # typical net credit post-catalyst
+            "near_expiry":    _get_0dte_expiry(),
+            "far_expiry":     _get_next_friday_expiry(),
         })
 
     return result
@@ -421,6 +448,21 @@ def get_strikes(
                 "long_strike_2": atm_strike,
                 "spread_width": 0,
                 "target_credit": -4.00,
+            })
+
+        elif strategy_type == "calendar_spread":
+            # Phase 3C: post-catalyst calendar — sell near (0DTE) ATM
+            # straddle, buy far (next Friday) ATM straddle as hedge.
+            atm_strike = round(spx_price / 5) * 5
+            result.update({
+                "short_strike":   atm_strike,
+                "long_strike":    atm_strike,
+                "short_strike_2": atm_strike,
+                "long_strike_2":  atm_strike,
+                "spread_width":   0,
+                "target_credit":  1.50,
+                "near_expiry":    _get_0dte_expiry(),
+                "far_expiry":     _get_next_friday_expiry(),
             })
 
         # If strikes still None (chain had no greeks), use fallback

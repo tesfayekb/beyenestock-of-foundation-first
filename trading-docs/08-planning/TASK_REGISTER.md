@@ -148,6 +148,7 @@ print('Thresholds: 5=butterfly, 20=kelly+straddle+flow+sentiment, 40=ai_hint, 10
 
 ### 3C — Calendar Spread (Post-Catalyst IV Crush)
 
+- [x] Phase 3C Calendar Spread built and wired (feature/phase-3c-calendar-spread)
 - [ ] Generate CURSOR_TASK_PHASE_3C_CALENDAR_SPREAD.md
 - [ ] More complex (two expirations, vega management)
 - [ ] Lower priority than 3A/3B

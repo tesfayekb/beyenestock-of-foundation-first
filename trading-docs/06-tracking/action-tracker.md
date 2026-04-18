@@ -29,6 +29,93 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-039 — Phase 3C: Calendar Spread (post-catalyst IV crush)
+
+- **id:** T-ACT-039
+- **date:** 2026-04-19
+- **action:** Phase 3C — added calendar_spread strategy on branch
+  `feature/phase-3c-calendar-spread`. Structure: SELL near-term (0DTE)
+  ATM straddle + BUY far-term (next-Friday) ATM straddle as the hedge,
+  net credit ≈ $1.50 per contract when near-term IV is still elevated
+  relative to next-week IV (typical post-catalyst condition).
+  - Selector wiring: `strategy_selector.py` adds `calendar_spread` to
+    `STATIC_SLIPPAGE_BY_STRATEGY` (0.30), `PLACEHOLDER_CREDIT_BY_STRATEGY`
+    (1.50), `_NEUTRAL_PREFERRED`, and `REGIME_STRATEGY_MAP["event"]`
+    (now `["long_straddle", "calendar_spread", "iron_condor"]`).
+  - Post-announcement gate: a new block AFTER the AI-hint override and
+    BEFORE `get_strikes()`/sizing checks the
+    `strategy:calendar_spread:enabled` flag and reads
+    `calendar:today:intel` from Redis. Calendar fires only when the
+    flag is ON AND a major event has already announced
+    (`now_et >= event_et AND now_et.hour >= 14`). Otherwise it falls
+    back to `long_straddle` (preferred) or `iron_condor`. Logs
+    `calendar_spread_too_early_using_straddle` when the timing gate
+    downgrades. NOTE: spec said "after event_size_mult block" but that
+    block runs AFTER strikes/sizing — placement was moved earlier so
+    strikes and sizing always see the final strategy_type.
+  - Strikes: `strike_selector.py` adds `_get_next_friday_expiry()`
+    helper and ATM-strike calendar-spread branches in BOTH `get_strikes`
+    (chain path) and `_fallback_strikes`. All four legs at the same
+    ATM strike (rounded to $5), `spread_width=0`, `near_expiry`
+    (today/0DTE) and `far_expiry` (next Friday) returned alongside.
+  - Sizing: `risk_engine.py` adds `calendar_spread: 0.003` to
+    `_DEBIT_RISK_PCT` and a cost-based sizing branch BEFORE the
+    `spread_width <= 0` guard (same pattern as long_straddle):
+    contracts = `account_value × 0.3% / $150 per contract`.
+  - DB persistence: `execution_engine.py` passes
+    `signal.get("far_expiry_date")` into the `trading_positions` insert
+    so calendar near/far legs are both tracked. The new column was
+    added by migration `20260419_add_strategy_types.sql` (committed to
+    main, must be applied via Supabase dashboard before Monday).
+  - Feature flag: `strategy:calendar_spread:enabled` (default OFF).
+- **type:** code
+- **phase:** phase_3c
+- **impact:** MEDIUM — adds post-catalyst alpha capture (~15–20 trading
+  days/year on FOMC/CPI/NFP/PCE/PPI). Zero impact in production until
+  the operator flips the flag, and even then only fires after a major
+  catalyst has already announced.
+- **owner:** Cursor
+- **modules_affected:**
+  - `backend/strategy_selector.py` (constants + post-announcement gate
+    + far_expiry_date in signal)
+  - `backend/strike_selector.py` (`_get_next_friday_expiry` + calendar
+    branches in `get_strikes` and `_fallback_strikes`)
+  - `backend/risk_engine.py` (debit risk pct + cost-based sizing)
+  - `backend/execution_engine.py` (far_expiry_date in DB insert)
+  - `backend/tests/test_phase_3c.py` (new — 7 tests)
+- **docs_updated:**
+  - `trading-docs/00-governance/what-is-actually-built.md` (Calendar
+    Spread row updated to ✅ wired Phase 3C)
+  - `trading-docs/08-planning/TASK_REGISTER.md` (Section 3C marked
+    built; Section 7 already records the 20260419 migration)
+  - `trading-docs/06-tracking/action-tracker.md` (this entry)
+- **foundation_impact:** NONE — no foundation, frontend, or shared
+  schema files touched. The Supabase schema change ships separately as
+  `supabase/migrations/20260419_add_strategy_types.sql` (committed to
+  main) and must be applied via the dashboard SQL editor before Monday.
+- **verification:**
+  - `python -m pytest tests/ -q` → **238 passed, 1 skipped, 0 failures**
+    (231 pre-3C + 7 new Phase 3C tests).
+  - `git diff --name-only main` confirms changes scoped to four
+    `backend/` files + one new test + the three docs files.
+  - All new behavior is gated behind
+    `strategy:calendar_spread:enabled = true` (default OFF) — calendar
+    spread can never enter the strategy pipeline by accident in
+    production.
+  - Pre-flight: the post-announcement gate is wrapped in try/except
+    that falls back to `iron_condor` on any failure, so a malformed
+    `calendar:today:intel` payload or a Redis outage cannot cause
+    strategy selection to crash.
+- **t_rules_checked:** T-Rule 1 (capital preservation — calendar
+  sizing is cost-based at 0.3% account risk; the post-announcement
+  gate prevents firing before IV crush actually starts), T-Rule 5
+  (every external dependency has a fallback — Redis miss / malformed
+  intel / parse error all fall back to iron_condor), T-Rule 8
+  (modular separation — only the four allowed backend modules and the
+  new test file are touched; no agents and no foundation files)
+
+---
+
 ### T-ACT-038 — Phase 2C: Options Flow + Sentiment Agents + Enriched Synthesis
 
 - **id:** T-ACT-038
