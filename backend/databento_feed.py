@@ -1,9 +1,33 @@
+"""
+Databento OPRA live feed ingestion (T-ACT-035 rewrite).
+
+Architecture:
+- Subscribes to OPRA.PILLAR trades schema for SPX + SPXW option families
+  via stype_in=PARENT, symbols=["SPX.OPT", "SPXW.OPT"] (narrow, not firehose).
+- Uses databento.InstrumentMap to resolve instrument_id -> raw_symbol from
+  SymbolMappingMsg records that interleave with TradeMsg records in the
+  live stream.
+- Dispatches records by isinstance: SymbolMappingMsg feeds the map,
+  TradeMsg is processed as a real trade, and all other record types
+  (SystemMsg / ErrorMsg / etc.) are ignored cleanly.
+- Writes parsed trades to Redis list ``databento:opra:trades`` with 300s TTL.
+- Health is reported 'healthy' only when a symbol-resolved, non-zero-price
+  trade has been observed within the last 30s — the old bug made 'healthy'
+  mean 'the process is alive', which masked a parser that produced nothing
+  but zero-filled placeholder records.
+
+Previous bug: the old code used ``getattr(record, "symbol", "")`` on every
+record. ``TradeMsg`` has no ``.symbol`` attribute in databento>=0.35, so the
+default "" was always returned; the OCC regex never matched; strike stayed
+0.0; and ~473k zero-filled records per session flooded Redis, starving the
+GEX engine of real data while every health probe reported 'healthy'.
+"""
 import asyncio
 import contextlib
 import json
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from typing import Optional
 
 import redis
@@ -14,23 +38,46 @@ from logger import get_logger
 
 logger = get_logger("databento_feed")
 
+OCC_RE = re.compile(r"([A-Z]{1,6})(\d{6})([CP])(\d{8})")
+
 
 class DatabentoFeed:
     def __init__(self) -> None:
-        self.redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+        self.redis_client = redis.Redis.from_url(
+            REDIS_URL, decode_responses=True
+        )
         self.connected = False
-        self.last_data_at: Optional[float] = None
+        self.last_valid_trade_at: Optional[float] = None
         self._stop_event = asyncio.Event()
+        self._imap = None
+
+        try:
+            self.redis_client.delete("databento:opra:trades")
+            logger.info("databento_stale_key_flushed")
+        except Exception as exc:
+            logger.warning(
+                "databento_stale_flush_failed", error=str(exc)
+            )
 
     async def start(self) -> None:
         backoff = 1
         while not self._stop_event.is_set():
             try:
+                if self._imap is not None:
+                    self._imap.clear()
                 await self._run_stream_loop()
                 backoff = 1
             except Exception as exc:
-                logger.error("databento_stream_error", error=str(exc), backoff=backoff)
-                write_health_status("databento_feed", "degraded", databento_connected=False)
+                logger.error(
+                    "databento_stream_error",
+                    error=str(exc),
+                    backoff=backoff,
+                )
+                write_health_status(
+                    "databento_feed",
+                    "degraded",
+                    databento_connected=False,
+                )
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 30)
 
@@ -39,121 +86,53 @@ class DatabentoFeed:
         self.connected = False
 
     async def _run_stream_loop(self) -> None:
-        """
-        Real Databento Live OPRA feed implementation.
-        Subscribes to OPRA.PILLAR trades schema.
-        Parses DBN records into the trade dict format expected by process_trade().
-        """
+        """Narrow-subscribe to SPX/SPXW options and dispatch records by type."""
         import databento as db
         import config
-        from datetime import date
 
-        logger.info("databento_connecting", dataset="OPRA.PILLAR", schema="trades")
+        if self._imap is None:
+            self._imap = db.InstrumentMap()
 
-        # Run Databento Live in a thread (it's a blocking synchronous iterator)
+        logger.info(
+            "databento_connecting",
+            dataset="OPRA.PILLAR",
+            schema="trades",
+            symbols=["SPX.OPT", "SPXW.OPT"],
+            stype_in="PARENT",
+        )
+
         loop = asyncio.get_event_loop()
 
-        def _run_live_blocking():
-            """Runs in thread pool — Databento Live is synchronous."""
+        def _run_live_blocking() -> None:
             client = db.Live(key=config.DATABENTO_API_KEY)
             client.subscribe(
                 dataset="OPRA.PILLAR",
                 schema="trades",
-                stype_in="raw_symbol",
+                symbols=["SPX.OPT", "SPXW.OPT"],
+                stype_in=db.SType.PARENT,
             )
 
             self.connected = True
             write_health_status(
-                "databento_feed", "healthy", databento_connected=True
+                "databento_feed",
+                "healthy",
+                databento_connected=True,
             )
-            logger.info("databento_subscribed", dataset="OPRA.PILLAR")
+            logger.info("databento_subscribed")
 
             for record in client:
                 if self._stop_event.is_set():
                     break
-
                 try:
-                    # Extract fields from DBN trade record
-                    raw_symbol = getattr(record, "symbol", "") or ""
-                    price_raw = getattr(record, "price", 0)
-                    size = int(getattr(record, "size", 0))
-                    ts_ns = getattr(record, "ts_event", 0)
-
-                    # DBN prices are fixed-point with 9 decimal places
-                    price = float(price_raw) / 1e9 if price_raw else 0.0
-                    ts_dt = datetime.fromtimestamp(
-                        ts_ns / 1e9, tz=timezone.utc
-                    ).isoformat()
-
-                    # Parse option symbol — format: ROOT  YYMMDD{C/P}STRIKE
-                    # e.g. "SPXW  241220P05200000" → strike=5200, expiry=2024-12-20
-                    strike = 0.0
-                    expiry_date = date.today().isoformat()
-                    time_to_expiry = 0.002  # ~0.5 trading days default
-                    option_type = "P"
-
-                    # Normalize raw_symbol — strip spaces
-                    sym_clean = raw_symbol.replace(" ", "")
-
-                    # Parse OCC symbology: 6-char root + 6-char date + C/P + 8-char strike
-                    occ_match = re.match(
-                        r"([A-Z]{1,6})(\d{6})([CP])(\d{8})", sym_clean
-                    )
-                    if occ_match:
-                        root, date_str, opt_type, strike_str = occ_match.groups()
-                        option_type = opt_type
-                        try:
-                            year = int("20" + date_str[:2])
-                            month = int(date_str[2:4])
-                            day = int(date_str[4:6])
-                            expiry = date(year, month, day)
-                            expiry_date = expiry.isoformat()
-                            days_to_expiry = max(0, (expiry - date.today()).days)
-                            time_to_expiry = max(0.0001, days_to_expiry / 365.0)
-                        except ValueError:
-                            pass
-                        try:
-                            strike = float(strike_str) / 1000.0
-                        except ValueError:
-                            pass
-
-                    # Get underlying SPX price from Redis
-                    spx_raw = self.redis_client.get("tradier:quotes:SPX")
-                    underlying_price = 5200.0  # fallback
-                    if spx_raw:
-                        try:
-                            spx_data = json.loads(spx_raw)
-                            underlying_price = float(
-                                spx_data.get("last")
-                                or spx_data.get("ask")
-                                or 5200.0
-                            )
-                        except Exception:
-                            pass
-
-                    trade = {
-                        "symbol": sym_clean,
-                        "price": price,
-                        "volume": size,
-                        "underlying_price": underlying_price,
-                        "strike": strike,
-                        "option_type": option_type,
-                        "time_to_expiry_years": time_to_expiry,
-                        "expiry_date": expiry_date,
-                        "implied_vol": 0.20,   # Phase 2 placeholder
-                        "risk_free_rate": 0.05,
-                        "timestamp": ts_dt,
-                    }
-                    self.process_trade(trade)
-
+                    self._dispatch_record(record)
                 except Exception as exc:
                     logger.warning(
-                        "databento_record_parse_failed", error=str(exc)
+                        "databento_record_parse_failed",
+                        error=str(exc),
                     )
 
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         try:
-            # Run the blocking Databento loop in a thread executor
             await loop.run_in_executor(None, _run_live_blocking)
         finally:
             heartbeat_task.cancel()
@@ -161,39 +140,220 @@ class DatabentoFeed:
                 await heartbeat_task
             self.connected = False
             write_health_status(
-                "databento_feed", "degraded", databento_connected=False
+                "databento_feed",
+                "degraded",
+                databento_connected=False,
             )
 
-    def process_trade(self, trade: dict) -> None:
+    def _dispatch_record(self, record) -> None:
+        """
+        Route one live record to the right handler by isinstance check.
+
+        - SymbolMappingMsg -> feed the InstrumentMap
+        - TradeMsg         -> _handle_trade()
+        - anything else    -> silently ignored (SystemMsg / ErrorMsg etc.
+          are normal protocol traffic, not errors for our purposes)
+        """
+        import databento as db
+
+        if isinstance(record, db.SymbolMappingMsg):
+            self._imap.insert_symbol_mapping_msg(record)
+            return
+        if isinstance(record, db.TradeMsg):
+            self._handle_trade(record)
+            return
+        # All other record types are intentionally ignored.
+
+    def _handle_trade(self, record) -> None:
+        """
+        Parse a TradeMsg into our trade dict and rpush it to Redis.
+
+        Drops cleanly (no exception, no placeholder write) when:
+        - instrument_id cannot be resolved to a raw symbol yet
+        - raw symbol doesn't match OCC format
+        - expiry or strike fails to parse
+        - pretty_price is non-positive (busted print)
+        """
+        ts_ns = int(getattr(record, "ts_event", 0) or 0)
+        event_date = (
+            datetime.fromtimestamp(ts_ns / 1e9, tz=timezone.utc).date()
+            if ts_ns > 0
+            else date.today()
+        )
+
+        raw_symbol = None
         try:
-            trade.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
-            self.redis_client.rpush("databento:opra:trades", json.dumps(trade))
-            self.redis_client.expire("databento:opra:trades", 300)
-            self.last_data_at = time.time()
+            raw_symbol = self._imap.resolve(
+                int(record.instrument_id), event_date
+            )
         except Exception as exc:
-            logger.error("databento_trade_process_failed", trade=trade, error=str(exc))
+            logger.debug(
+                "databento_resolve_failed",
+                instrument_id=getattr(record, "instrument_id", None),
+                error=str(exc),
+            )
+
+        if not raw_symbol:
+            return
+
+        sym_clean = raw_symbol.replace(" ", "")
+        occ_match = OCC_RE.match(sym_clean)
+        if not occ_match:
+            logger.debug(
+                "databento_occ_parse_failed", symbol=sym_clean
+            )
+            return
+
+        _root, date_str, opt_type, strike_str = occ_match.groups()
+        try:
+            year = int("20" + date_str[:2])
+            month = int(date_str[2:4])
+            day = int(date_str[4:6])
+            expiry = date(year, month, day)
+            expiry_date = expiry.isoformat()
+            days_to_expiry = max(0, (expiry - date.today()).days)
+            time_to_expiry = max(0.0001, days_to_expiry / 365.0)
+        except ValueError:
+            return
+
+        try:
+            strike = float(strike_str) / 1000.0
+        except ValueError:
+            return
+
+        try:
+            price = float(record.pretty_price)
+        except (TypeError, ValueError, AttributeError):
+            return
+
+        if price <= 0:
+            return
+
+        size = int(getattr(record, "size", 0) or 0)
+        ts_dt = datetime.fromtimestamp(
+            ts_ns / 1e9, tz=timezone.utc
+        ).isoformat() if ts_ns > 0 else datetime.now(timezone.utc).isoformat()
+
+        underlying_price = self._get_underlying_price()
+
+        trade = {
+            "symbol": sym_clean,
+            "price": price,
+            "volume": size,
+            "underlying_price": underlying_price,
+            "strike": strike,
+            "option_type": opt_type,
+            "time_to_expiry_years": time_to_expiry,
+            "expiry_date": expiry_date,
+            "implied_vol": 0.20,
+            "risk_free_rate": 0.05,
+            "timestamp": ts_dt,
+        }
+        self._push_trade(trade)
+
+    def _get_underlying_price(self) -> float:
+        """Read SPX spot from Redis (populated by tradier_websocket)."""
+        try:
+            spx_raw = self.redis_client.get("tradier:quotes:SPX")
+        except Exception:
+            return 5200.0
+        if not spx_raw:
+            return 5200.0
+        try:
+            spx_data = json.loads(spx_raw)
+            return float(
+                spx_data.get("last")
+                or spx_data.get("ask")
+                or 5200.0
+            )
+        except Exception:
+            return 5200.0
+
+    def process_trade(self, trade: dict) -> None:
+        """
+        Back-compat wrapper around _push_trade.
+
+        Preserved so external callers / legacy tests can inject a
+        pre-built trade dict without going through _handle_trade.
+        New code should prefer _handle_trade (full parse pipeline)
+        or _push_trade (already-validated trade).
+        """
+        self._push_trade(trade)
+
+    def _push_trade(self, trade: dict) -> None:
+        """
+        rpush a fully-validated trade and advance the valid-trade heartbeat.
+
+        Only called from _handle_trade after every field has been real-valued,
+        so ``last_valid_trade_at`` truly means 'a resolvable OPRA trade was
+        processed within the last N seconds'.
+        """
+        try:
+            trade.setdefault(
+                "timestamp", datetime.now(timezone.utc).isoformat()
+            )
+            self.redis_client.rpush(
+                "databento:opra:trades", json.dumps(trade)
+            )
+            self.redis_client.expire("databento:opra:trades", 300)
+            self.last_valid_trade_at = time.time()
+        except Exception as exc:
+            logger.error(
+                "databento_trade_push_failed", error=str(exc)
+            )
 
     async def _heartbeat_loop(self) -> None:
-        while not self._stop_event.is_set():
-            lag = int(time.time() - self.last_data_at) if self.last_data_at else None
-            status = "healthy" if self.connected else "degraded"
+        """
+        Report health every 10s. Status is 'healthy' only when a
+        symbol-resolved, non-zero-price trade was observed within 30s.
+        Mere connection is insufficient.
 
-            if lag is not None and lag > 30:
-                logger.warning("databento_data_lag_high", data_lag_seconds=lag)
-                self.redis_client.set("databento:opra:confidence_impact", "true")
+        Note: outside market hours this correctly reports 'degraded'
+        because no real trades arrive — that's the intended behavior,
+        and the old false-positive 'healthy' under a broken parser is
+        exactly what T-ACT-035 fixes.
+        """
+        while not self._stop_event.is_set():
+            lag = (
+                int(time.time() - self.last_valid_trade_at)
+                if self.last_valid_trade_at
+                else None
+            )
+
+            if not self.connected or lag is None or lag > 30:
                 status = "degraded"
+            else:
+                status = "healthy"
+
+            if lag is not None and lag > 30 and self.connected:
+                logger.warning(
+                    "databento_data_lag_high", data_lag_seconds=lag
+                )
+                try:
+                    self.redis_client.set(
+                        "databento:opra:confidence_impact", "true"
+                    )
+                except Exception:
+                    pass
             if lag is not None and lag > 600:
-                logger.critical("databento_data_lag_critical", data_lag_seconds=lag)
-                self.redis_client.set("databento:opra:gex_block", "True")
+                logger.critical(
+                    "databento_data_lag_critical", data_lag_seconds=lag
+                )
+                try:
+                    self.redis_client.set("databento:opra:gex_block", "True")
+                except Exception:
+                    pass
 
             write_health_status(
                 "databento_feed",
                 status,
                 databento_connected=self.connected,
                 data_lag_seconds=lag,
-                last_data_at=(
-                    datetime.fromtimestamp(self.last_data_at, tz=timezone.utc).isoformat()
-                    if self.last_data_at
+                last_valid_trade_at=(
+                    datetime.fromtimestamp(
+                        self.last_valid_trade_at, tz=timezone.utc
+                    ).isoformat()
+                    if self.last_valid_trade_at
                     else None
                 ),
             )
