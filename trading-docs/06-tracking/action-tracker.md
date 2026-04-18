@@ -959,3 +959,32 @@ Single register of every trading change action. Every change to trading code, sc
   zeros), (c) `trading_system_health` shows databento_feed=degraded
   outside market hours, healthy during RTH once trades flow.
 
+### T-ACT-036 — B2 Backtest Fix: Asymmetric Iron Condor Wings
+
+- **id:** T-ACT-036
+- **date:** 2026-04-18
+- **action:** B2 backtest fix — asymmetric iron condor wings in
+  simulation. backtest_gex_zg.py: new get_backtest_asymmetry(dist_pct,
+  spread_width) replicates _get_gex_asymmetry() from strike_selector.py
+  using dist_pct as GEX wall proxy. simulate_trade() iron_condor branch
+  now uses asymmetric put/call widths and computes credit per side
+  separately. Makes backtest more faithful to Phase B2 production
+  behavior. 6 new unit tests.
+- **phase:** phase_b
+- **impact:** MEDIUM — improves backtest accuracy, no production change
+- **t_rules_checked:** T-Rule 1 ✅ (no production files modified;
+  strictly backend/scripts/backtest_gex_zg.py + new test file +
+  trading-docs)
+- **files_touched:** backend/scripts/backtest_gex_zg.py,
+  backend/tests/test_b2_backtest.py
+- **tests:** tests/test_b2_backtest.py — 6 tests (wall below widens
+  put, wall above widens call, symmetric near zero, symmetric too far,
+  floor at $2.50, iron_condor with asymmetric credit). Full suite:
+  186 passed, 1 skipped.
+- **implementation_note:** Helper uses int() (truncation) rather than
+  the round() shown in the original task spec. This was an approved
+  deviation after a pre-write ambiguity check: spec's round() formula
+  produces call_w=5.0 for (0.005, 5.0), but the spec's own test
+  asserts call_w=2.5. int() truncation reconciles both — matches the
+  "floor at $2.50" comment intent and passes all 6 tests as written.
+

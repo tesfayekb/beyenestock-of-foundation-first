@@ -66,6 +66,41 @@ def get_backtest_spread_width(iv_atm: float) -> float:
     return 10.00
 
 
+def get_backtest_asymmetry(dist_pct: float, spread_width: float) -> tuple:
+    """
+    Approximate B2 asymmetric wing widths from dist_pct.
+    Replicates _get_gex_asymmetry() from strike_selector.py
+    using dist_pct (SPX vs zero-gamma) as the GEX wall proxy.
+
+    dist_pct > 0: SPX above ZG -> wall is below -> widen put side
+    dist_pct < 0: SPX below ZG -> wall is above -> widen call side
+
+    Only applies when |dist_pct| is between 0.001 and 0.02.
+    Returns (put_width, call_width) in points.
+    """
+    abs_dist = abs(dist_pct)
+
+    # Only apply asymmetry when SPX is meaningfully offset from ZG
+    # but not so far that GEX confidence would be low
+    if abs_dist < 0.001 or abs_dist > 0.02:
+        return spread_width, spread_width
+
+    if dist_pct > 0:
+        # SPX above ZG -- wall is below -- widen put spread
+        put_mult  = 1.5
+        call_mult = 0.75
+    else:
+        # SPX below ZG -- wall is above -- widen call spread
+        put_mult  = 0.75
+        call_mult = 1.5
+
+    # Floor to nearest $2.50 increment (truncation), floor at $2.50
+    put_width  = max(2.5, int(spread_width * put_mult  / 2.5) * 2.5)
+    call_width = max(2.5, int(spread_width * call_mult / 2.5) * 2.5)
+
+    return put_width, call_width
+
+
 # Exit thresholds
 PROFIT_TARGET_PCT = 0.40   # B3: Take 40% of max profit
 STOP_LOSS_PCT     = 1.50   # B3: Stop at 1.5× credit received
@@ -145,6 +180,7 @@ def simulate_trade(
     zero_gamma: float,
     strategy: str,
     spread_width: float,
+    dist_pct: float = 0.0,
 ) -> dict:
     """
     Simulate one 0DTE credit spread trade.
@@ -187,17 +223,25 @@ def simulate_trade(
             gross_pnl = credit - loss
 
     elif strategy == "iron_condor":
-        put_short = round((spx_open - one_sigma) / 5) * 5
+        # B2: asymmetric wings based on ZG position
+        put_width, call_width = get_backtest_asymmetry(dist_pct, spread_width)
+        put_short  = round((spx_open - one_sigma) / 5) * 5
         call_short = round((spx_open + one_sigma) / 5) * 5
+
+        # Credit reflects asymmetric widths
+        put_credit  = estimate_credit(iv_atm, put_width,  "put_credit_spread")
+        call_credit = estimate_credit(iv_atm, call_width, "call_credit_spread")
+        credit = put_credit + call_credit
+
         if put_short <= spx_close <= call_short:
             gross_pnl = credit  # both spreads expire worthless
         elif spx_close < put_short:
             breach = put_short - spx_close
-            loss = min(breach / spread_width, 1.0) * spread_width * 100
+            loss = min(breach / put_width, 1.0) * put_width * 100
             gross_pnl = credit - loss
         else:
             breach = spx_close - call_short
-            loss = min(breach / spread_width, 1.0) * spread_width * 100
+            loss = min(breach / call_width, 1.0) * call_width * 100
             gross_pnl = credit - loss
     else:
         return {"date": date, "strategy": strategy, "result": "skip",
@@ -312,6 +356,7 @@ def main() -> None:
         trade = simulate_trade(
             date_str, spx_open, spx_close, iv_atm, zero_gamma, strategy,
             spread_width=get_backtest_spread_width(iv_atm),
+            dist_pct=dist_pct,
         )
         if trade["result"] != "skip":
             trades.append(trade)
