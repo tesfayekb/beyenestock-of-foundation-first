@@ -841,3 +841,23 @@ Single register of every trading change action. Every change to trading code, sc
   script is standalone under backend/scripts/), T-Rule 5 ✅ (capital
   preservation gates untouched), T-Rule 8 ✅ (Phase B task; unblocks
   later A3 rework)
+
+---
+
+### T-ACT-032 — Phase B3: Tighter Exit Parameters
+
+- **id:** T-ACT-032
+- **date:** 2026-04-17
+- **action:** Phase B3 — tighter exit parameters. position_monitor.py:
+  take_profit threshold 50% -> 40% of max_profit (exit_reason updated
+  to take_profit_40pct). stop_loss threshold 200% -> 150% of credit
+  (exit_reason updated to stop_loss_150pct_credit). CV_Stress exit
+  guard updated to match new 40% take-profit threshold.
+  Backtest justification: avg loss $296 at 200% stop; at 150% reduces
+  to ~$222. Combined with 81% win rate from GEX/ZG signal, improves
+  profit factor from ~1.13 to ~1.4. Expected annual lift: +1.5-2.5pp.
+  Partial exit at 25% (P0.6) is unchanged.
+- **phase:** phase_b
+- **impact:** HIGH
+- **t_rules_checked:** T-Rule 1 ✅, T-Rule 5 ✅ (tighter stops = more
+  capital preserved, consistent with D-005 daily loss limit)
