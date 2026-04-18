@@ -150,7 +150,11 @@ class PredictionEngine:
             # SPX position relative to zero-gamma level
             dist_pct = (spx_price - flip_zone) / flip_zone  # positive = above ZG
 
-            if dist_pct > 0.003 and abs(vvix_z) < 1.5:
+            if abs(vvix_z) > 2.5:
+                # Crisis override regardless of ZG position
+                regime_lgbm = "crisis"
+                rcs_lgbm = 25.0
+            elif dist_pct > 0.003 and abs(vvix_z) < 1.5:
                 # SPX above ZG, low vol → dealers long gamma → mean-reversion
                 regime_lgbm = "pin_range"
                 rcs_lgbm = 70.0
@@ -166,10 +170,6 @@ class PredictionEngine:
                 # SPX below ZG → trend-following regime
                 regime_lgbm = "trend"
                 rcs_lgbm = 55.0
-            elif abs(vvix_z) > 2.5:
-                # Crisis override regardless of ZG position
-                regime_lgbm = "crisis"
-                rcs_lgbm = 25.0
             else:
                 # Near ZG, uncertain
                 regime_lgbm = "range"
