@@ -325,7 +325,38 @@ class DatabentoFeed:
             else:
                 status = "healthy"
 
-            if lag is not None and lag > 30 and self.connected:
+            # Bug 3: clear gex_block / confidence_impact when feed recovers.
+            # Old behavior set these on lag spikes but never cleared them,
+            # leaving the GEX engine permanently blocked after one bad window.
+            if status == "healthy":
+                try:
+                    self.redis_client.delete("databento:opra:gex_block")
+                    self.redis_client.delete(
+                        "databento:opra:confidence_impact"
+                    )
+                except Exception:
+                    pass
+
+            # Bug 2: only log lag warnings during US market hours
+            # (Mon-Fri 09:30-16:15 ET). Outside market hours, no trades
+            # arrive by design; logging warnings/criticals there pollutes
+            # logs with false alarms.
+            from datetime import datetime as dt
+            import pytz
+            et = pytz.timezone("America/New_York")
+            now_et = dt.now(et)
+            is_market_hours = (
+                now_et.weekday() < 5
+                and (now_et.hour, now_et.minute) >= (9, 30)
+                and (now_et.hour, now_et.minute) < (16, 15)
+            )
+
+            if (
+                lag is not None
+                and lag > 30
+                and self.connected
+                and is_market_hours
+            ):
                 logger.warning(
                     "databento_data_lag_high", data_lag_seconds=lag
                 )
@@ -335,7 +366,7 @@ class DatabentoFeed:
                     )
                 except Exception:
                     pass
-            if lag is not None and lag > 600:
+            if lag is not None and lag > 600 and is_market_hours:
                 logger.critical(
                     "databento_data_lag_critical", data_lag_seconds=lag
                 )
@@ -344,17 +375,19 @@ class DatabentoFeed:
                 except Exception:
                     pass
 
-            write_health_status(
-                "databento_feed",
-                status,
-                databento_connected=self.connected,
-                data_lag_seconds=lag,
-                last_valid_trade_at=(
+            # Bug 1B: only include last_valid_trade_at when set, so a
+            # missing column or null value can never crash the heartbeat
+            # write. Migration 20260418_add_last_valid_trade_at adds the
+            # column; this guard keeps writes safe pre-migration too.
+            health_kwargs = {
+                "databento_connected": self.connected,
+                "data_lag_seconds": lag,
+            }
+            if self.last_valid_trade_at:
+                health_kwargs["last_valid_trade_at"] = (
                     datetime.fromtimestamp(
                         self.last_valid_trade_at, tz=timezone.utc
                     ).isoformat()
-                    if self.last_valid_trade_at
-                    else None
-                ),
-            )
+                )
+            write_health_status("databento_feed", status, **health_kwargs)
             await asyncio.sleep(10)
