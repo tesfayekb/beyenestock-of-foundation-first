@@ -200,6 +200,9 @@ This is an institutional-grade project. Every output must meet A+ / 100/100 stan
 
 ### Quality Standard (Every Task)
 
+# Note: docs/02-security/ and docs/03-performance/ are foundation-layer docs.
+# No trading-docs equivalents exist. These references are intentionally kept.
+
 1. **Security-first**: Every task must assess security implications. Read and follow `docs/02-security/` guidelines. Auth, RBAC, input validation, and data access are never optional considerations.
 2. **Performance-aware**: Every task must assess performance implications. Read and follow `docs/03-performance/` guidelines. No unoptimized queries, unbounded lists, or missing indexes.
 3. **Auditable**: Every piece of code must have a clear audit trail — who did what, when, why. Logging, structured errors, and action tracking are mandatory.

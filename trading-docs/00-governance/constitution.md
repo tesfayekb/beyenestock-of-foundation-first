@@ -21,7 +21,7 @@ All new trading tables use the `trading_` prefix. Trading tables are completely 
 The system supports 1-3 invited users maximum with read-only access and optional paper trade mirroring. No public enrollment, no subscription billing, no social features. Real-broker mirroring for non-admin users requires a governance/disclaimer review before implementation. Revenue model and public SaaS features are deferred to Year 2.
 
 ### T-Rule 4: Locked Decisions Are Final
-All 22 locked decisions (D-001 through D-022) in MARKETMUSE_MASTER.md Part 3 are binding. They cannot be modified, deferred, or reinterpreted without explicit owner approval and a new decision record.
+All locked decisions (D-001 through D-022) in trading-docs/08-planning/approved-decisions.md are binding. They cannot be modified, deferred, or reinterpreted without explicit owner approval and a new decision record.
 
 ### T-Rule 5: Capital Preservation Is Absolute
 The −3% daily loss limit (D-005) is hardcoded. No override. No configuration. No exception. The consecutive loss rules (D-022) are automated and mandatory. Capital preservation mode cannot be disabled.
@@ -47,7 +47,7 @@ Nothing in the trading engine may fail silently. Every failure mode has a detect
 
 - **In scope (V1):** SPX, XSP, NDX, RUT options. 0DTE primary, 1–5 day swing secondary. Single operator. Tradier API. Fully automated with kill-switch.
 - **Out of scope (V2):** Multi-user mirroring, subscriptions, social features, futures, crypto, international instruments.
-- **Deferred features:** See MARKETMUSE_MASTER.md Part 14.
+- **Deferred features:** See trading-docs/08-planning/deferred-work-register.md and the Year-2/Year-3+ backlog in trading-docs/08-planning/MASTER_PLAN.md.
 
 ## Authority Hierarchy
 
