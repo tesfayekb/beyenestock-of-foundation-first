@@ -242,7 +242,14 @@ def download_spx_daily_stooq() -> pd.DataFrame:
         raise RuntimeError(f"Stooq SPX download failed: HTTP {resp.status_code}")
 
     from io import StringIO
-    df = pd.read_csv(StringIO(resp.text))
+    # Stooq sometimes prepends metadata lines before the CSV header.
+    # Find the actual header row by scanning for 'Date' at line start.
+    lines = resp.text.splitlines()
+    header_idx = next(
+        (i for i, line in enumerate(lines) if line.strip().lower().startswith("date")),
+        0,
+    )
+    df = pd.read_csv(StringIO("\n".join(lines[header_idx:])))
     df.columns = [c.lower() for c in df.columns]
     df["date"] = pd.to_datetime(df["date"]).dt.date
     df = df.sort_values("date")
