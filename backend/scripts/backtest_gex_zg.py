@@ -53,8 +53,18 @@ COMMISSION_PER_CONTRACT = 0.35 * 4  # $1.40 total
 # Slippage: 1 tick = $0.05 per spread side (conservative)
 SLIPPAGE_PER_CONTRACT = 0.05 * 2  # $0.10 entry + exit
 
-# Spread width in points (use $5 base -- Phase B1 dynamic width not in backtest)
-SPREAD_WIDTH = 5.0
+# B1: Dynamic spread width table (matches production get_dynamic_spread_width)
+VIX_WIDTH_TABLE = [(15.0, 2.50), (20.0, 5.00), (30.0, 7.50), (float("inf"), 10.00)]
+
+
+def get_backtest_spread_width(iv_atm: float) -> float:
+    """Approximate VIX from iv_atm (iv_atm * 100 ≈ VIX) and return dynamic width."""
+    vix_approx = iv_atm * 100
+    for threshold, width in VIX_WIDTH_TABLE:
+        if vix_approx < threshold:
+            return width
+    return 10.00
+
 
 # Exit thresholds
 PROFIT_TARGET_PCT = 0.40   # B3: Take 40% of max profit
@@ -134,7 +144,7 @@ def simulate_trade(
     iv_atm: float,
     zero_gamma: float,
     strategy: str,
-    spread_width: float = SPREAD_WIDTH,
+    spread_width: float,
 ) -> dict:
     """
     Simulate one 0DTE credit spread trade.
@@ -239,14 +249,22 @@ def main() -> None:
     print(f"\nOptions features: {len(features)} days, "
           f"{features['date'].min()} -> {features['date'].max()}")
 
-    # Load SPX daily prices
-    spx_path = DATA_DIR / "spx_daily.parquet"
-    if not spx_path.exists():
+    # Load SPX daily prices — prefer CBOE (full history back to 2010)
+    # over Polygon (only ~2 years due to plan limitation)
+    spx_cboe_path = DATA_DIR / "spx_daily_cboe.parquet"
+    spx_poly_path = DATA_DIR / "spx_daily.parquet"
+
+    if spx_cboe_path.exists():
+        spx = pd.read_parquet(spx_cboe_path)
+        print(f"SPX daily (CBOE): {len(spx)} rows")
+    elif spx_poly_path.exists():
+        spx = pd.read_parquet(spx_poly_path)
+        print(f"SPX daily (Polygon): {len(spx)} rows")
+    else:
         raise RuntimeError(
-            "spx_daily.parquet not found. "
-            "Run: python -m scripts.download_historical_data"
+            "No SPX daily data found. Run: python -m scripts.download_historical_data"
         )
-    spx = pd.read_parquet(spx_path)
+
     # Normalize date column
     if "date" in spx.columns:
         spx["date"] = pd.to_datetime(spx["date"]).dt.date
@@ -255,8 +273,7 @@ def main() -> None:
             spx["timestamp_ms"], unit="ms", utc=True
         ).dt.tz_convert("America/New_York").dt.date
     spx = spx.sort_values("date")
-    print(f"SPX daily: {len(spx)} rows, "
-          f"{spx['date'].min()} -> {spx['date'].max()}")
+    print(f"SPX date range: {spx['date'].min()} -> {spx['date'].max()}")
 
     # Compute VVIX Z-score (20-day rolling) from options features
     features = features.sort_values("date").reset_index(drop=True)
@@ -300,7 +317,8 @@ def main() -> None:
             continue
 
         trade = simulate_trade(
-            date_str, spx_open, spx_close, iv_atm, zero_gamma, strategy
+            date_str, spx_open, spx_close, iv_atm, zero_gamma, strategy,
+            spread_width=get_backtest_spread_width(iv_atm),
         )
         if trade["result"] != "skip":
             trades.append(trade)

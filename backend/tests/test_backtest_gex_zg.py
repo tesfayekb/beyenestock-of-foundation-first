@@ -54,6 +54,7 @@ def test_simulate_trade_win():
         iv_atm=0.20,
         zero_gamma=5150.0,
         strategy="put_credit_spread",
+        spread_width=5.0,
     )
     assert result["result"] == "win"
     assert result["net_pnl"] > 0
@@ -71,6 +72,7 @@ def test_simulate_trade_loss():
         iv_atm=0.20,
         zero_gamma=5150.0,
         strategy="put_credit_spread",
+        spread_width=5.0,
     )
     assert result["result"] == "loss"
     assert result["net_pnl"] < 0
