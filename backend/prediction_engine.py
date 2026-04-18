@@ -272,6 +272,54 @@ class PredictionEngine:
         """
         import math
 
+        # --- Priority 0: AI synthesis agent (Phase 2A) ---
+        # Only activates when: (a) agents:ai_synthesis:enabled = true in Redis
+        # and (b) ai:synthesis:latest key is fresh (< 30 min old)
+        ai_synthesis = None
+        try:
+            reader = getattr(self, "_read_redis", None)
+            if reader is not None and getattr(self, "redis_client", None):
+                ai_synthesis = reader("ai:synthesis:latest", None)
+        except Exception:
+            ai_synthesis = None
+        if ai_synthesis:
+            try:
+                import json, time
+                from datetime import datetime, timezone
+                synth = json.loads(ai_synthesis)
+                # Check freshness (must be < 30 minutes old)
+                gen_at = synth.get("generated_at", "")
+                if gen_at:
+                    age_s = (
+                        datetime.now(timezone.utc)
+                        - datetime.fromisoformat(gen_at)
+                    ).total_seconds()
+                    if age_s < 1800:  # 30 min
+                        direction = synth.get("direction", "neutral")
+                        confidence = float(synth.get("confidence", 0.0))
+                        strategy_hint = synth.get("strategy", "")
+                        sizing_modifier = float(synth.get("sizing_modifier", 1.0))
+                        if confidence >= 0.55 and direction in ("bull", "bear", "neutral"):
+                            logger.info(
+                                "prediction_from_ai_synthesis",
+                                direction=direction,
+                                confidence=confidence,
+                                strategy_hint=strategy_hint,
+                                age_seconds=int(age_s),
+                            )
+                            return {
+                                "direction": direction,
+                                "p_bull": confidence if direction == "bull" else (1 - confidence) * 0.5,
+                                "p_bear": confidence if direction == "bear" else (1 - confidence) * 0.5,
+                                "confidence": confidence,
+                                "strategy_hint": strategy_hint,
+                                "sizing_modifier": sizing_modifier,
+                                "source": "ai_synthesis",
+                            }
+            except Exception as e:
+                logger.warning("ai_synthesis_parse_failed", error=str(e))
+        # Priority 0 not used — fall through to LightGBM / GEX/ZG
+
         # --- Priority 1: LightGBM model inference ---
         # Use getattr to support tests that bypass __init__ via __new__.
         direction_model = getattr(self, "_direction_model", None)

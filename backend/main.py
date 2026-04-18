@@ -205,6 +205,62 @@ def run_market_close_job() -> None:
         logger.error("market_close_job_error", error=str(exc))
 
 
+def _run_economic_calendar_job() -> None:
+    try:
+        import sys
+        import os
+        sys.path.insert(
+            0,
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        )
+        from economic_calendar import (
+            get_todays_market_intelligence, write_intel_to_redis
+        )
+        intel = get_todays_market_intelligence()
+        if redis_client:
+            write_intel_to_redis(redis_client, intel)
+        logger.info("economic_calendar_job_complete",
+                    classification=intel.get("day_classification"))
+    except Exception as exc:
+        logger.error("economic_calendar_job_failed", error=str(exc))
+
+
+def _run_macro_agent_job() -> None:
+    try:
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend_agents"))
+        from macro_agent import run_macro_agent
+        if redis_client:
+            run_macro_agent(redis_client)
+    except Exception as exc:
+        logger.error("macro_agent_job_failed", error=str(exc))
+
+
+def _run_synthesis_agent_job() -> None:
+    try:
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend_agents"))
+        from synthesis_agent import run_synthesis_agent
+        if redis_client:
+            run_synthesis_agent(redis_client)
+    except Exception as exc:
+        logger.error("synthesis_agent_job_failed", error=str(exc))
+
+
+def _run_surprise_detector_job() -> None:
+    try:
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend_agents"))
+        from surprise_detector import run_surprise_detector
+        if redis_client:
+            run_surprise_detector(redis_client)
+    except Exception as exc:
+        logger.error("surprise_detector_job_failed", error=str(exc))
+
+
 def pre_market_scan() -> None:
     """
     Pre-market regime and day_type classification. Runs at 9:00 AM ET (14:00 UTC).
@@ -486,6 +542,38 @@ async def on_startup() -> None:
             id="trading_market_close",
             replace_existing=True,
         )
+
+        # Phase 2A: Economic intelligence agents
+        # Run BEFORE pre_market_scan so calendar is ready at 9:00 AM
+        scheduler.add_job(
+            _run_economic_calendar_job,
+            trigger="cron",
+            hour=8, minute=25,
+            id="trading_economic_calendar",
+            timezone="America/New_York",
+        )
+        scheduler.add_job(
+            _run_macro_agent_job,
+            trigger="cron",
+            hour=8, minute=30,
+            id="trading_macro_agent",
+            timezone="America/New_York",
+        )
+        scheduler.add_job(
+            _run_synthesis_agent_job,
+            trigger="cron",
+            hour=9, minute=15,
+            id="trading_synthesis_agent",
+            timezone="America/New_York",
+        )
+        scheduler.add_job(
+            _run_surprise_detector_job,
+            trigger="cron",
+            hour=8, minute=45,
+            id="trading_surprise_detector",
+            timezone="America/New_York",
+        )
+
         scheduler.start()
 
         # Create today's trading session on startup
