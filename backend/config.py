@@ -35,5 +35,9 @@ FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
 
+# Phase 2C: Options flow + sentiment intelligence (optional)
+# Without UNUSUAL_WHALES_API_KEY, flow_agent falls back to Polygon put/call only.
+UNUSUAL_WHALES_API_KEY = os.getenv("UNUSUAL_WHALES_API_KEY", "")
+
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
