@@ -227,6 +227,17 @@ def _fallback_strikes(
         result.update({"short_strike": put_short, "long_strike": None})
     elif strategy_type in ("long_call",):
         result.update({"short_strike": call_short, "long_strike": None})
+    elif strategy_type == "long_straddle":
+        # Phase 2B: ATM call + ATM put at the same strike (round to $5).
+        # spread_width=0 because there is no spread — both legs are long.
+        atm_strike = round(spx_price / 5) * 5
+        result.update({
+            "long_strike": atm_strike,    # the call leg
+            "short_strike": atm_strike,   # the put leg (same strike)
+            "long_strike_2": atm_strike,  # both legs ATM
+            "spread_width": 0,
+            "target_credit": -4.00,       # typical SPX 0DTE straddle cost
+        })
 
     return result
 
@@ -400,6 +411,17 @@ def get_strikes(
                 result["short_strike"] = short
                 if strategy_type == "debit_call_spread":
                     result["long_strike"] = short - dynamic_width
+
+        elif strategy_type == "long_straddle":
+            # Phase 2B: ATM straddle — call + put at same strike, round to $5.
+            atm_strike = round(spx_price / 5) * 5
+            result.update({
+                "long_strike": atm_strike,
+                "short_strike": atm_strike,
+                "long_strike_2": atm_strike,
+                "spread_width": 0,
+                "target_credit": -4.00,
+            })
 
         # If strikes still None (chain had no greeks), use fallback
         if result["short_strike"] is None:

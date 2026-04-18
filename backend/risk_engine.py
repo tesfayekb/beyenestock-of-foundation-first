@@ -28,6 +28,18 @@ _RISK_PCT = {
     4: {"core": 0.010, "satellite": 0.005},
 }
 
+# Phase 2B: Strategy-specific risk overrides
+# Debit strategies risk smaller % because loss = 100% of premium paid.
+# Credit strategies can risk more because max loss = spread width (known).
+_DEBIT_RISK_PCT = {
+    "iron_butterfly":    0.004,   # 0.4% — ATM shorts lose fast
+    "debit_call_spread": 0.003,   # 0.3% — full premium at risk
+    "debit_put_spread":  0.003,   # 0.3% — full premium at risk
+    "long_call":         0.003,   # 0.3%
+    "long_put":          0.003,   # 0.3%
+    "long_straddle":     0.0025,  # 0.25% — highest uncertainty
+}
+
 # B4: Kelly normalization baseline
 # Calibrated for 65% WR with 0.5 win/loss ratio → quarter-Kelly ≈ 0.0375
 # Revisit if steady-state win rate drifts materially from 65%.
@@ -127,6 +139,7 @@ def compute_position_size(
     position_type: str = "core",
     allocation_tier: str = "full",
     kelly_multiplier: float = 1.0,
+    strategy_type: str = "iron_condor",
 ) -> dict:
     """
     Compute number of contracts and risk metadata.
@@ -150,6 +163,18 @@ def compute_position_size(
         pos_key = position_type if position_type in ("core", "satellite") else "core"
         risk_pct = _RISK_PCT[phase_key][pos_key]
         size_reduction_reason = None
+
+        # Phase 2B: Override risk_pct for debit/high-risk strategies.
+        # Debit strategies lose 100% of premium when wrong, so they get
+        # tighter sizing than credit spreads (which lose only the spread
+        # width minus credit collected).
+        if strategy_type in _DEBIT_RISK_PCT:
+            risk_pct = _DEBIT_RISK_PCT[strategy_type]
+            logger.info(
+                "debit_strategy_sizing",
+                strategy_type=strategy_type,
+                risk_pct=risk_pct,
+            )
 
         # D-021: regime disagreement → 50% size reduction
         if not regime_agreement:
