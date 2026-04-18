@@ -230,35 +230,35 @@ def download_spx_daily_cboe() -> pd.DataFrame:
     return download_cboe_csv(CBOE_SPX_URL, "SPX", "spx_daily_cboe.parquet")
 
 
-def download_spx_daily_stooq() -> pd.DataFrame:
+def download_spx_daily_yfinance() -> pd.DataFrame:
     """
-    Download SPX daily OHLC from Stooq (free, back to 1928, no auth).
-    Returns open/high/low/close/volume columns with date index.
+    Download SPX daily OHLC from Yahoo Finance via yfinance.
+    Ticker: ^GSPC (S&P 500 index). Free, no auth, back to 1950s.
+    Saves to spx_daily_stooq.parquet (same filename so backtest loader
+    requires no changes).
     """
-    print(f"\nDownloading SPX OHLC from Stooq...")
-    with httpx.Client(timeout=30.0) as client:
-        resp = client.get(STOOQ_SPX_URL)
-    if resp.status_code != 200:
-        raise RuntimeError(f"Stooq SPX download failed: HTTP {resp.status_code}")
+    print(f"\nDownloading SPX OHLC from Yahoo Finance (yfinance)...")
+    import yfinance as yf
+    ticker = yf.Ticker("^GSPC")
+    df = ticker.history(start=DAILY_START, end=END_DATE, interval="1d")
+    if df.empty:
+        raise RuntimeError("yfinance returned empty data for ^GSPC")
 
-    from io import StringIO
-    # Stooq sometimes prepends metadata lines before the CSV header.
-    # Find the actual header row by scanning for 'Date' at line start.
-    lines = resp.text.splitlines()
-    header_idx = next(
-        (i for i, line in enumerate(lines) if line.strip().lower().startswith("date")),
-        0,
-    )
-    df = pd.read_csv(StringIO("\n".join(lines[header_idx:])))
+    df = df.reset_index()
     df.columns = [c.lower() for c in df.columns]
-    df["date"] = pd.to_datetime(df["date"]).dt.date
-    df = df.sort_values("date")
-    df = df[df["date"] >= pd.Timestamp(DAILY_START).date()]
-    df = df.dropna(subset=["open", "close"])
+
+    # yfinance returns 'date' as datetime — normalize to date
+    date_col = "date" if "date" in df.columns else df.columns[0]
+    df[date_col] = pd.to_datetime(df[date_col]).dt.date
+    df = df.rename(columns={date_col: "date"})
+    df = df[["date", "open", "high", "low", "close", "volume"]].copy()
+    df = df.sort_values("date").dropna(subset=["open", "close"])
 
     out = DATA_DIR / "spx_daily_stooq.parquet"
     df.to_parquet(out, index=False)
     print(f"  [OK] Saved {len(df):,} rows -> {out}")
+    print(f"  Date range: {df['date'].min()} -> {df['date'].max()}")
+    print(f"  Close range: {df['close'].min():.0f} - {df['close'].max():.0f}")
     return df
 
 
@@ -373,11 +373,11 @@ def main() -> None:
         print(f"  ERROR: SPX daily download failed: {e}")
         errors.append(("spx_daily", str(e)))
 
-    # 2a. SPX daily OHLC from Stooq (free, back to 1928, has open/close)
+    # 2a. SPX daily OHLC from Yahoo Finance (free, back to 1950s, has open/close)
     try:
-        dfs["spx_daily_stooq"] = download_spx_daily_stooq()
+        dfs["spx_daily_stooq"] = download_spx_daily_yfinance()
     except Exception as e:
-        print(f"  WARNING: Stooq SPX download failed (optional): {e}")
+        print(f"  WARNING: yfinance SPX download failed (optional): {e}")
 
     # 2b. SPX daily (CBOE free CSV — covers 2022+ regardless of Polygon plan)
     try:
