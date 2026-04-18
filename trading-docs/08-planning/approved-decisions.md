@@ -81,6 +81,8 @@ All 22 locked decisions governing the MarketMuse trading system. These are **fin
 - **Affected Modules:** risk_engine, trading_operator_config
 
 ### D-015: Slippage Model
+> **IMPLEMENTATION NOTE (April 2026):** The predictive LightGBM slippage model was never built. Current implementation uses a static slippage dict by strategy type. This remains acceptable for paper phase. Meta-label model in Phase 3A will capture real slippage data for future training.
+
 - **Decision:** Predictive LightGBM, not static
 - **Rationale:** Static slippage assumptions are inaccurate across market conditions. LightGBM regressor trained on actual fills predicts slippage based on current conditions (spread, volume, volatility).
 - **Affected Modules:** learning_engine, strategy_selector, risk_engine
@@ -111,6 +113,8 @@ All 22 locked decisions governing the MarketMuse trading system. These are **fin
 - **Affected Modules:** strategy_selector, risk_engine
 
 ### D-021: Regime Guard
+> **IMPLEMENTATION NOTE (April 2026):** The HMM and LightGBM models referenced in this decision were never built. The current implementation uses VVIX Z-score rule-based regime classification with a `regime_agreement` flag that achieves the same 50% size reduction when signals disagree. Do not attempt to build HMM or LightGBM until explicitly tasked in Phase 3A.
+
 - **Decision:** HMM ≠ LightGBM → size 50% reduction
 - **Rationale:** When the two independent regime classifiers disagree, regime certainty is low. 50% size reduction protects capital during ambiguous market conditions.
 - **Affected Modules:** prediction_engine, risk_engine

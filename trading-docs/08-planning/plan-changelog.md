@@ -10,6 +10,11 @@ Records all changes to the trading system master plan with version, date, and de
 
 ## Changelog
 
+## v3.2 — April 2026
+**Status:** Active — supersedes all prior versions
+**Change:** Complete rewrite. Adopts 5-phase roadmap, modular backend architecture (backend_agents/, backend_earnings/, backend_futures/), feature-flag strategy library, full profit register with nothing dropped, honest overlap-adjusted ROI projections, console architecture with trading module panels, and six non-negotiable architecture rules. See trading-docs/08-planning/MASTER_PLAN.md.
+**Supersedes:** profit-maximization-roadmap.md v1/v2, master-plan.md v1
+
 ### v1.0 — 2026-04-16
 - **Author:** tesfayekb
 - **Source:** MARKETMUSE_MASTER.md v4.0 (FINAL SINGLE SOURCE OF TRUTH)
