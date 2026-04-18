@@ -27,30 +27,15 @@ Cursor must update checkboxes after completing any item.
 
 ### 1B — At 9:40 AM ET (Run Diagnostic)
 
-Run this command and paste output:
+Run this command from the repo root and paste output:
 ```powershell
-railway run python -c "
-import sys, json; sys.path.insert(0,'backend')
-import os, redis
-from db import get_client
-r = redis.from_url(os.environ['REDIS_URL'])
-entries = r.lrange('databento:opra:trades', -3, -1)
-print('=== Databento ===')
-for e in entries:
-    d = json.loads(e)
-    print(f'  symbol={d.get(chr(34)+\"symbol\"+chr(34))!r} price={d.get(chr(34)+\"price\"+chr(34))} strike={d.get(chr(34)+\"strike\"+chr(34))}')
-cal = r.get('calendar:today:intel')
-if cal:
-    c = json.loads(cal)
-    print(f'Calendar: {c[\"day_classification\"]} ({len(c[\"events\"])} events)')
-r2 = get_client().table('trading_prediction_outputs').select('predicted_at,no_trade_signal,direction').order('predicted_at',desc=True).limit(3).execute()
-print('=== Predictions ===')
-for p in r2.data or []: print(f'  {p[\"predicted_at\"]} no_trade={p[\"no_trade_signal\"]} dir={p[\"direction\"]}')
-r3 = get_client().table('trading_positions').select('id,strategy_type,entry_at,status').order('entry_at',desc=True).limit(3).execute()
-print('=== Positions ===')
-for p in r3.data or []: print(f'  {p[\"entry_at\"]} {p[\"strategy_type\"]} {p[\"status\"]}')
-"
+railway run python -m scripts.diagnostic
 ```
+
+The script lives at `backend/scripts/diagnostic.py` and reports:
+Databento OPRA tail, today's calendar intel, last 3 predictions,
+last 3 positions, GEX values, all 6 feature-flag states, and the
+closed paper-trade count vs activation thresholds.
 
 Expected: real SPXW symbols, predictions in DB, positions opening.
 
