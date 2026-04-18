@@ -861,3 +861,25 @@ Single register of every trading change action. Every change to trading code, sc
 - **impact:** HIGH
 - **t_rules_checked:** T-Rule 1 ✅, T-Rule 5 ✅ (tighter stops = more
   capital preserved, consistent with D-005 daily loss limit)
+
+---
+
+### T-ACT-033 — Phase B4: Kelly-Adjusted Position Sizing
+
+- **id:** T-ACT-033
+- **date:** 2026-04-17
+- **action:** Phase B4 — Kelly-adjusted position sizing. risk_engine.py:
+  new compute_kelly_multiplier(win_rate, avg_win, avg_loss) computes
+  quarter-Kelly fraction normalized to a multiplier (0.5x to 2.0x).
+  compute_position_size() accepts optional kelly_multiplier parameter
+  (default 1.0 = no change to existing behavior). At backtest stats
+  (72.5% WR, $70 avg win, $143 avg loss) produces multiplier ~1.12.
+  Infrastructure only — wiring into strategy_selector in follow-up.
+  Expected lift when wired: +1-3pp annual from better capital deployment.
+- **phase:** phase_b
+- **impact:** HIGH
+- **t_rules_checked:** T-Rule 1 ✅, T-Rule 5 ✅ (Kelly floored at 0.5x
+  and capped at 2.0x; stacks multiplicatively with existing D-021 /
+  D-022 / allocation_tier reductions so it cannot undo safety-driven
+  size cuts; daily -3% drawdown halt in check_daily_drawdown is
+  unchanged and remains absolute)

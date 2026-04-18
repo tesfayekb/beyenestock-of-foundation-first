@@ -39,7 +39,6 @@ CBOE_VIX_URL   = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_Hi
 CBOE_VVIX_URL  = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VVIX_History.csv"
 CBOE_VIX9D_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX9D_History.csv"
 CBOE_SPX_URL   = "https://cdn.cboe.com/api/global/us_indices/daily_prices/SPX_History.csv"
-STOOQ_SPX_URL  = "https://stooq.com/q/d/l/?s=%5espx&i=d"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

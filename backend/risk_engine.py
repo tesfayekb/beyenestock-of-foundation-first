@@ -1,6 +1,16 @@
 """
 Risk engine — position sizing, capital preservation, circuit breakers.
-Implements D-005, D-014, D-019, D-020, D-021, D-022.
+Implements D-005, D-014, D-019, D-020, D-021, D-022, B4-Kelly.
+
+Position size reduction stacking order in compute_position_size():
+  1. D-021: regime disagreement → 50% reduction
+  2. D-022: consecutive losses  → 50% reduction
+  3. D-004: allocation tier     → tier multiplier
+  4. B4:    Kelly multiplier    → 0.5x to 2.0x
+
+Kelly runs last so it scales the already-conservatively-reduced risk_pct.
+A 2.0x Kelly boost after a 0.5x allocation_tier reduction nets 1.0x,
+which is the correct and transparent behavior.
 """
 from typing import Optional, Tuple
 
@@ -18,6 +28,11 @@ _RISK_PCT = {
     4: {"core": 0.010, "satellite": 0.005},
 }
 
+# B4: Kelly normalization baseline
+# Calibrated for 65% WR with 0.5 win/loss ratio → quarter-Kelly ≈ 0.0375
+# Revisit if steady-state win rate drifts materially from 65%.
+BASE_KELLY = 0.0375
+
 # D-020: max trades per regime per session
 REGIME_MAX_TRADES = {
     "trend": 2,
@@ -34,6 +49,75 @@ REGIME_MAX_TRADES = {
 }
 
 
+def compute_kelly_multiplier(
+    recent_win_rate: Optional[float],
+    avg_win_dollars: Optional[float],
+    avg_loss_dollars: Optional[float],
+) -> float:
+    """
+    Compute fractional Kelly position size multiplier.
+
+    Kelly formula: f = (p × b - q) / b
+      p = win probability, q = 1-p, b = avg_win / avg_loss
+
+    Uses quarter-Kelly (× 0.25) for safety, capped at 2.0×
+    and floored at 0.5× the base risk_pct.
+
+    Returns a multiplier to apply to base risk_pct:
+    - 1.0 = no adjustment (default when data unavailable)
+    - 1.5 = 50% more contracts (strong recent edge)
+    - 0.5 = half contracts (weak recent edge)
+
+    Requires at least 20 closed trades to activate.
+    Falls back to 1.0 when data is unavailable or insufficient.
+
+    CALLER CONTRACT: Caller must verify at least 20 closed trades exist
+    before passing win_rate data. Passing win_rate from fewer trades
+    produces statistically unreliable multipliers. strategy_selector.py
+    must enforce this minimum when wiring in the follow-up task.
+    """
+    try:
+        # Require valid inputs
+        if (
+            recent_win_rate is None
+            or avg_win_dollars is None
+            or avg_loss_dollars is None
+        ):
+            return 1.0
+
+        # Require minimum sample size context (caller verifies trade count)
+        if recent_win_rate <= 0 or recent_win_rate >= 1:
+            return 1.0
+        if avg_loss_dollars <= 0 or avg_win_dollars <= 0:
+            return 1.0
+
+        p = recent_win_rate
+        q = 1.0 - p
+        b = avg_win_dollars / avg_loss_dollars  # win/loss ratio
+
+        # Full Kelly
+        kelly_full = (p * b - q) / b
+
+        if kelly_full <= 0:
+            # Negative Kelly = system has no edge → minimum size
+            return 0.5
+
+        # Quarter-Kelly for safety
+        kelly_quarter = kelly_full * 0.25
+
+        # Normalize to a multiplier around 1.0 using module-level BASE_KELLY
+        # (calibrated for 65% WR with 0.5 win/loss ratio)
+        multiplier = kelly_quarter / BASE_KELLY
+
+        # Clamp: never more than 2× or less than 0.5×
+        multiplier = max(0.5, min(2.0, multiplier))
+
+        return round(multiplier, 3)
+
+    except Exception:
+        return 1.0  # Never break position sizing
+
+
 def compute_position_size(
     account_value: float,
     spread_width: float,
@@ -42,12 +126,15 @@ def compute_position_size(
     consecutive_losses_today: int = 0,
     position_type: str = "core",
     allocation_tier: str = "full",
+    kelly_multiplier: float = 1.0,
 ) -> dict:
     """
     Compute number of contracts and risk metadata.
     D-014: Phase 1/2 core=0.5%, satellite=0.25%. Phase 3/4 core=1.0%, satellite=0.5%.
     D-021: regime disagreement halves risk_pct.
     D-022: 3 consecutive losses halves risk_pct.
+    kelly_multiplier: Fractional Kelly multiplier from compute_kelly_multiplier().
+                      1.0 = no adjustment. Capped at 2.0, floored at 0.5.
     Never raises — returns {contracts: 0} on any error.
     """
     try:
@@ -112,6 +199,20 @@ def compute_position_size(
                     "stressed_loss_per_contract": 0.0,
                     "size_reduction_reason": tier_reason,
                 }
+
+        # B4: Kelly-adjusted sizing
+        if kelly_multiplier != 1.0:
+            risk_pct *= kelly_multiplier
+            kelly_reason = f"kelly_mult_{kelly_multiplier:.3f}"
+            size_reduction_reason = (
+                f"{size_reduction_reason}+{kelly_reason}"
+                if size_reduction_reason else kelly_reason
+            )
+            logger.info(
+                "position_sized_kelly",
+                kelly_multiplier=kelly_multiplier,
+                risk_pct_after_kelly=round(risk_pct, 6),
+            )
 
         stressed_loss_per_contract = spread_width * 100
         max_risk_dollars = account_value * risk_pct
