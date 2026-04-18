@@ -38,6 +38,7 @@ _DEBIT_RISK_PCT = {
     "long_call":         0.003,   # 0.3%
     "long_put":          0.003,   # 0.3%
     "long_straddle":     0.0025,  # 0.25% — highest uncertainty
+    "calendar_spread":   0.003,   # 0.3% — defined risk, two-leg structure
 }
 
 # B4: Kelly normalization baseline
@@ -165,6 +166,22 @@ def compute_position_size(
                 "contracts": contracts,
                 "risk_pct": straddle_risk_pct,
                 "stressed_loss_per_contract": straddle_cost_per_contract,
+                "size_reduction_reason": None,
+            }
+
+        # Phase 3C: Calendar spread sizing — cost-based, not spread-based.
+        # Net cost per contract ≈ $1.50 × 100 = $150 typical post-catalyst.
+        # Same pattern as long_straddle: must run BEFORE the spread_width <= 0
+        # guard since calendar spread reports spread_width=0.
+        if strategy_type == "calendar_spread":
+            calendar_cost_per_contract = 150.0
+            calendar_risk_pct = _DEBIT_RISK_PCT.get("calendar_spread", 0.003)
+            max_risk_dollars = account_value * calendar_risk_pct
+            contracts = max(1, int(max_risk_dollars / calendar_cost_per_contract))
+            return {
+                "contracts": contracts,
+                "risk_pct": calendar_risk_pct,
+                "stressed_loss_per_contract": calendar_cost_per_contract,
                 "size_reduction_reason": None,
             }
 
