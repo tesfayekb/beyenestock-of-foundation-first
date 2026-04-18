@@ -42,13 +42,22 @@ def get_or_create_session(session_date: Optional[date] = None) -> Optional[dict]
             "virtual_losses": 0,
         }
         created = (
-            get_client().table("trading_sessions").insert(new_session).execute()
+            get_client()
+            .table("trading_sessions")
+            .upsert(new_session, on_conflict="session_date")
+            .execute()
         )
         write_audit_log(
             action="trading.session_created",
             metadata={"session_date": date_str},
         )
         logger.info("session_created", session_date=date_str)
+        if created is None:
+            logger.error(
+                "session_create_failed_null_response",
+                session_date=date_str,
+            )
+            return None
         return created.data[0] if created.data else None
 
     except Exception as e:
