@@ -273,6 +273,9 @@ def main() -> None:
             spx["timestamp_ms"], unit="ms", utc=True
         ).dt.tz_convert("America/New_York").dt.date
     spx = spx.sort_values("date")
+    # Normalize column names — CBOE uses uppercase (OPEN/HIGH/LOW/CLOSE)
+    # Polygon uses lowercase (open/close). Standardize to lowercase.
+    spx.columns = [c.lower() for c in spx.columns]
     print(f"SPX date range: {spx['date'].min()} -> {spx['date'].max()}")
 
     # Compute VVIX Z-score (20-day rolling) from options features
