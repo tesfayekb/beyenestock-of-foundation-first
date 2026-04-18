@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timezone
 from typing import Dict, List
 from zoneinfo import ZoneInfo
@@ -225,27 +226,55 @@ def pre_market_scan() -> None:
             if redis_client else False
         )
 
-        # Day type classification heuristic
-        # Phase 2 proxy — real classification uses overnight ATR + economic calendar
-        # in Phase 4
-        if not baseline_ready:
+        # Phase 2A: Economic intelligence (runs first — highest priority)
+        import sys, os
+        sys.path.insert(
+            0,
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        )
+        from economic_calendar import (
+            get_todays_market_intelligence, write_intel_to_redis
+        )
+        intel = get_todays_market_intelligence()
+        if redis_client:
+            write_intel_to_redis(redis_client, intel)
+
+        # Calendar classification takes priority over VVIX heuristic
+        classification = intel.get("day_classification", "normal")
+
+        if classification == "catalyst_major":
+            day_type = "event"
+            confidence = 0.95
+        elif classification in ("catalyst_minor", "earnings_major"):
+            # Let VVIX refine — but ensure at minimum reduced size
+            # Fall through to VVIX check below
+            day_type = None
+            confidence = 0.0
+        else:
+            day_type = None
+            confidence = 0.0
+
+        # VVIX heuristic — always runs, may upgrade or set day_type
+        if not baseline_ready and day_type is None:
             day_type = "unknown"
             confidence = 0.0
-        elif abs(vvix_z) >= 2.5:
-            day_type = "event"
-            confidence = 0.80
-        elif vvix_z >= 1.5:
-            day_type = "reversal"
-            confidence = 0.65
-        elif vvix_z >= 0.8:
-            day_type = "open_drive"
-            confidence = 0.60
-        elif vvix_z <= -0.5:
-            day_type = "trend"
-            confidence = 0.60
-        else:
-            day_type = "range"
-            confidence = 0.55
+        elif day_type is None:
+            if abs(vvix_z) >= 2.5:
+                day_type = "event"
+                confidence = 0.80
+            elif vvix_z >= 1.5:
+                day_type = "reversal"
+                confidence = 0.65
+            elif vvix_z >= 0.8:
+                day_type = "open_drive"
+                confidence = 0.60
+            elif vvix_z <= -0.5:
+                day_type = "trend"
+                confidence = 0.60
+            else:
+                day_type = "range"
+                confidence = 0.55
+        # else: calendar already set day_type, keep it
 
         update_session(
             session["id"],
@@ -259,6 +288,8 @@ def pre_market_scan() -> None:
             day_type=day_type,
             confidence=confidence,
             vvix_z=vvix_z,
+            calendar_classification=classification,
+            calendar_events=len(intel.get("events", [])),
         )
 
     except Exception as e:

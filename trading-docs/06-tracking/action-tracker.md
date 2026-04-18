@@ -29,6 +29,57 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-037 — Phase 2A Session 1: Economic Calendar Intelligence Layer
+
+- **id:** T-ACT-037
+- **date:** 2026-04-19
+- **action:** Phase 2A — Session 1 of 3. Built Tier 1 of the Economic
+  Intelligence Layer: an isolated `backend_agents/economic_calendar.py`
+  module that fetches today's macro events from Finnhub (paid, primary)
+  with an FRED release-dates fallback (free) and a major earnings filter
+  (NVDA/AAPL/MSFT/META/AMZN/GOOGL/GOOG/TSLA/NFLX/AMD/AVGO). Output is a
+  classified intel dict written to Redis key `calendar:today:intel`
+  (TTL 24hr). Day classifications: `catalyst_major`, `catalyst_minor`,
+  `earnings_major`, `normal`. Recommended postures: `straddle`,
+  `reduced_size`, `normal`, `sit_out`. `pre_market_scan()` in
+  `backend/main.py` now reads the calendar BEFORE the VVIX heuristic;
+  major catalysts force `day_type=event` with confidence 0.95, otherwise
+  the existing VVIX classifier runs unchanged. Every external call has
+  try/except — Finnhub failure falls back to FRED; all failures fall back
+  to empty intel. Never blocks trading. Sessions 2 and 3 (macro agent +
+  Claude synthesis + surprise detector + Priority 0 prediction wiring)
+  are pending on the same feature branch.
+- **type:** code
+- **phase:** phase_2a
+- **impact:** HIGH — first macro-aware classifier in the trading system
+- **owner:** Cursor
+- **modules_affected:**
+  - Trading: `backend_agents/__init__.py` (new directory),
+    `backend_agents/economic_calendar.py` (new),
+    `backend/main.py` (pre_market_scan reads calendar, json import),
+    `backend/config.py` (FINNHUB_API_KEY, ANTHROPIC_API_KEY, NEWSAPI_KEY
+    — all optional, default empty),
+    `backend/requirements.txt` (anthropic>=0.40.0, finnhub-python>=2.4.19),
+    `backend/tests/test_phase_2a_calendar.py` (6 new tests)
+- **docs_updated:**
+  - trading-docs/06-tracking/action-tracker.md (this entry)
+- **foundation_impact:** NONE — no files outside `backend/`,
+  `backend_agents/`, or trading-docs/ modified
+- **verification:** 192/192 unit tests passing (1 skipped). 6 new Session 1
+  tests cover network-error fallback, major/minor/earnings/normal
+  classification, and Redis write contract (key + TTL + JSON payload).
+  All API keys default to empty — system functions identically to current
+  behaviour until keys are added to Railway. Feature flag
+  `agents:ai_synthesis:enabled` will be added in Session 2 and defaults
+  OFF.
+- **t_rules_checked:** T-Rule 1 (capital preservation — never blocks
+  trading on any failure), T-Rule 5 (every external dependency has a
+  fallback), T-Rule 8 (modular separation — agent code lives in
+  `backend_agents/`, never imported directly by `backend/` modules
+  except via the inline import inside `pre_market_scan`)
+
+---
+
 ### T-ACT-017 — Fix Group 5: Paper Phase Critical
 
 - **id:** T-ACT-017
