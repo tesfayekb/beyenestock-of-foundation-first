@@ -1,7 +1,7 @@
 # Trading System Constitution
 
 > **Owner:** tesfayekb | **Version:** 1.0 | **Status:** ACTIVE
-> **Authority:** trading-docs/08-planning/MASTER_PLAN.md v3.2 is the single source of truth. MARKETMUSE_MASTER.md v4.0 is the historical specification — reference only, not authoritative.
+> **Authority:** trading-docs/08-planning/MASTER_PLAN.md v3.2 is the single source of truth. MARKETMUSE_MASTER.md v4.0 is historical reference only.
 
 ## The Prime Directive
 
@@ -52,7 +52,7 @@ Nothing in the trading engine may fail silently. Every failure mode has a detect
 ## Authority Hierarchy
 
 1. trading-docs/08-planning/MASTER_PLAN.md v3.2 — single source of truth
-2. trading-docs/00-governance/constitution.md — this file (non-negotiable rules)
+2. trading-docs/00-governance/constitution.md — non-negotiable rules
 3. trading-docs/00-governance/system-state.md — current phase and gates
 4. trading-docs/08-planning/approved-decisions.md — binding decisions
 5. MARKETMUSE_MASTER.md v4.0 — historical reference only, not authoritative

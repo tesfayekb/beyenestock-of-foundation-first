@@ -37,9 +37,9 @@ For every task — no matter how small — read these in order:
 2. `trading-docs/00-governance/system-state.md` (current phase + gates)
 3. `trading-docs/08-planning/approved-decisions.md` (binding decisions)
 4. `trading-docs/08-planning/MASTER_PLAN.md` (plan sections with stable IDs)
-5. Relevant module docs from `docs/04-modules/` (for the module you're working on)
-6. `docs/01-architecture/dependency-map.md` (if shared logic is involved)
-7. Relevant reference indexes from `docs/07-reference/` (if shared components involved)
+5. Relevant module docs from `trading-docs/04-modules/` (for the module you're working on)
+6. `trading-docs/01-architecture/dependency-map.md` (if shared logic is involved)
+7. Relevant reference indexes from `trading-docs/07-reference/` (if shared components involved)
 
 ## CHANGE CONTROL (9-Step Workflow)
 
@@ -124,12 +124,12 @@ Do not invent new shared functions, permissions, routes, events, config keys, or
 
 When modifying code that affects shared components, you MUST update the relevant indexes:
 
-- `docs/07-reference/function-index.md` — shared/reusable functions
-- `docs/07-reference/permission-index.md` — RBAC permissions
-- `docs/07-reference/route-index.md` — API and UI routes
-- `docs/07-reference/event-index.md` — system events
-- `docs/07-reference/config-index.md` — configuration keys
-- `docs/07-reference/env-var-index.md` — environment variables
+- `trading-docs/07-reference/function-index.md` — shared/reusable functions
+- `trading-docs/07-reference/permission-index.md` — RBAC permissions
+- `trading-docs/07-reference/route-index.md` — API and UI routes
+- `trading-docs/07-reference/event-index.md` — system events
+- `trading-docs/07-reference/config-index.md` — configuration keys
+- `trading-docs/07-reference/env-var-index.md` — environment variables
 
 **Reconciliation rule:** When implementing code that corresponds to reference index entries, the actual implementation (names, paths, signatures) MUST match the index. If you use a different name/path than what the index specifies, you MUST update the index to match reality. Mismatches between indexes and code are INVALID.
 
@@ -234,8 +234,8 @@ After completing any implementation task:
 
 For any implementation task, you MUST also read:
 
-- `docs/05-quality/testing-strategy.md` — testing governance, coverage targets, test pyramid
-- `docs/05-quality/regression-strategy.md` — regression prevention, baselines, cross-module checks
+- `trading-docs/05-quality/testing-strategy.md` — testing governance, coverage targets, test pyramid
+- `trading-docs/05-quality/regression-strategy.md` — regression prevention, baselines, cross-module checks
 
 These are not optional. They define the testing contract for this project.
 
