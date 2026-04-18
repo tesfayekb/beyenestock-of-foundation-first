@@ -1,6 +1,16 @@
 """
 Risk engine — position sizing, capital preservation, circuit breakers.
-Implements D-005, D-014, D-019, D-020, D-021, D-022.
+Implements D-005, D-014, D-019, D-020, D-021, D-022, B4-Kelly.
+
+Position size reduction stacking order in compute_position_size():
+  1. D-021: regime disagreement → 50% reduction
+  2. D-022: consecutive losses  → 50% reduction
+  3. D-004: allocation tier     → tier multiplier
+  4. B4:    Kelly multiplier    → 0.5x to 2.0x
+
+Kelly runs last so it scales the already-conservatively-reduced risk_pct.
+A 2.0x Kelly boost after a 0.5x allocation_tier reduction nets 1.0x,
+which is the correct and transparent behavior.
 """
 from typing import Optional, Tuple
 
@@ -17,6 +27,11 @@ _RISK_PCT = {
     3: {"core": 0.010, "satellite": 0.005},
     4: {"core": 0.010, "satellite": 0.005},
 }
+
+# B4: Kelly normalization baseline
+# Calibrated for 65% WR with 0.5 win/loss ratio → quarter-Kelly ≈ 0.0375
+# Revisit if steady-state win rate drifts materially from 65%.
+BASE_KELLY = 0.0375
 
 # D-020: max trades per regime per session
 REGIME_MAX_TRADES = {
@@ -55,6 +70,11 @@ def compute_kelly_multiplier(
 
     Requires at least 20 closed trades to activate.
     Falls back to 1.0 when data is unavailable or insufficient.
+
+    CALLER CONTRACT: Caller must verify at least 20 closed trades exist
+    before passing win_rate data. Passing win_rate from fewer trades
+    produces statistically unreliable multipliers. strategy_selector.py
+    must enforce this minimum when wiring in the follow-up task.
     """
     try:
         # Require valid inputs
@@ -85,10 +105,8 @@ def compute_kelly_multiplier(
         # Quarter-Kelly for safety
         kelly_quarter = kelly_full * 0.25
 
-        # Normalize to a multiplier around 1.0
-        # Base case: 65% win rate, 0.5 win/loss ratio → kelly_quarter ≈ 0.0375
-        # We treat that as the "1.0 multiplier" baseline
-        BASE_KELLY = 0.0375
+        # Normalize to a multiplier around 1.0 using module-level BASE_KELLY
+        # (calibrated for 65% WR with 0.5 win/loss ratio)
         multiplier = kelly_quarter / BASE_KELLY
 
         # Clamp: never more than 2× or less than 0.5×
