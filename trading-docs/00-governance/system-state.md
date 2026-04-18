@@ -1,117 +1,44 @@
 ﻿# Trading System — System State
+Owner: tesfayekb | Last Updated: 2026-04-18 | Status: ACTIVE
 
-> **Owner:** tesfayekb | **Last Updated:** 2026-04-16 | **Status:** ACTIVE
-
-## Current State
-
-```yaml
-trading_phase: phase_1_complete
-trading_schema_migration: T-MIG-001_applied
+## Current Phase
+trading_phase: phase_1_stabilizing
 code_generation: allowed
-live_trading: blocked
-paper_trading: blocked
-data_feeds: not_connected
-tradier_connection: not_connected
-sentinel_deployed: true
-sentinel_gcp_url: https://marketmuse-sentinel-208163021541.us-east1.run.app
-```
+paper_trading: active
+live_trading: blocked_until_90day_AB_test_passes
+data_feeds: active
+tradier_connection: active_sandbox
+databento_opra: active
+kelly_sizing: active
+deployment: railway_diplomatic-mercy
 
----
+## What Is Deployed and Working
+- GEX/ZG regime classifier (rule-based, VVIX Z-score)
+- Iron condor execution via Tradier sandbox
+- Databento OPRA feed (fixed April 2026, real SPXW symbols)
+- Kelly position sizing (activates at 20 closed trades)
+- Dynamic spread width B1, asymmetric wings B2, exits B3
+- Session management, health monitoring
+- Supabase outcome tracking (Phase A1)
 
-## Trading Build Phases
+## What Is Next (Phase 2)
+- Phase 2A: Catalyst gate + Iron Butterfly + Long Straddle
+- Phase 2B: Bull/Bear debit spreads
+- Phase 2C: Multi-agent AI morning brief (backend_agents/)
 
-| Phase | Name | Status | Go/No-Go |
-|-------|------|--------|----------|
-| 1 | Data Infrastructure | `complete` | ✅ Passed |
-| 2 | Virtual Trade Engine | `complete` | ✅ Passed |
-| 3 | Admin Console | `complete` | ✅ Passed |
-| 4 | Paper Phase (45 days) | `in_progress` | ✅ Phase 4A started |
-| 5 | Live Execution | `blocked` | ❌ Depends on Phase 4 |
-| 6 | Learning Engine | `blocked` | ❌ Parallel with Phase 5 |
-| 7 | Phase 3 Sizing | `blocked` | ❌ Depends on 90+ live days |
+## Phase Gate for Real Capital Deployment
+- Paper trading A/B test: 90 days, Portfolio B must show ≥+8% annualized uplift
+- Minimum 100 closed paper trades for meta-label model
+- All 7 market conditions covered by strategy library
 
----
-
-## Phase 1 Go/No-Go Criteria
-
-- [ ] All data feeds verified live (Tradier WebSocket, Databento OPRA, CBOE DataShop)
-- [ ] GEX computing at 8:30 AM pre-market
-- [ ] Heartbeat triggering degraded mode on disconnect
-- [ ] Engine Health page shows all services healthy
-- [ ] All trading tables created in Supabase
-
-## Phase 2 Go/No-Go Criteria
-
-- [ ] ≥ 3 virtual signals generated per day
-- [ ] All signals, positions, predictions stored in Supabase
-- [ ] No unhandled exceptions over 5 consecutive days
-
-## Phase 3 Go/No-Go Criteria
-
-- [ ] War Room operational with live data
-- [ ] All 6 trading admin pages functional
-- [ ] Kill-switch renders and is hold-to-activate
-- [ ] WebSocket realtime subscriptions working
-
-## Phase 4 Go/No-Go Criteria (12 Go-Live Criteria)
-
-- [ ] 1. Aggregate prediction accuracy ≥ 58% over full 45 days
-- [ ] 2. Per-regime accuracy ≥ 55% for every day type with ≥ 8 observations
-- [ ] 3. Minimum 50 training examples per regime-strategy cell
-- [ ] 4. Under-sampled cells flagged — live trading at 25% sizing until 50 examples
-- [ ] 5. Paper Sharpe ≥ 1.5
-- [ ] 6. Zero unhandled exceptions in final 20 paper sessions
-- [ ] 7. All 6 circuit breaker scenarios tested in Tradier sandbox
-- [ ] 8. Kill-switch response confirmed < 5 seconds from mobile
-- [ ] 9. Independent Sentinel verified operational on GCP
-- [ ] 10. WebSocket heartbeat verified — disconnect triggers degraded mode within 3 seconds
-- [ ] 11. Predictive slippage model calibrated — minimum 200 fill observations
-- [ ] 12. GEX tracking error ≤ ±15% vs OCC actuals (CBOE DataShop validation)
-
----
-
-## Module Status Tracker
-
-| Module | Owner | Status | Platform |
-|--------|-------|--------|----------|
-| Trading Database Schema | Lovable | `implemented` | Supabase |
-| Data Ingestor | Cursor | `in_progress` | Python/Railway |
-| Prediction Engine | Cursor | `in_progress` | Python/Railway |
-| Strategy Selector | Cursor | `in_progress` | Python/Railway |
-| Risk Engine | Cursor | `in_progress` | Python/Railway |
-| Execution Engine | Cursor | `in_progress` | Python/Railway |
-| Learning Engine | Cursor | `not_started` | Python/Railway |
-| Sentinel | Cursor | `not_started` | Python/GCP |
-| War Room Page | Cursor | `implemented` | React/TypeScript |
-| Positions Page | Cursor | `implemented` | React/TypeScript |
-| Signals Page | Cursor | `implemented` | React/TypeScript |
-| Performance Page | Cursor | `implemented` | React/TypeScript |
-| Engine Health Page | Lovable | `implemented` | React/TypeScript |
-| Configuration Page | Cursor | `implemented` | React/TypeScript |
-| Trading Navigation | Cursor | `implemented` | React/TypeScript |
-| Trading Routes | Cursor | `implemented` | React/TypeScript |
-| Trading Permissions Seed | Lovable | `not_started` | Supabase |
-
----
+## Multi-User Policy
+- Phase 4: 1-3 invited users, read-only dashboard + optional paper mirror
+- No subscription billing until system proven
+- Real-broker mirroring requires governance/disclaimer review first
 
 ## Sizing Phase
-
-```yaml
-current_sizing_phase: 1  # Paper
-core_risk_pct: 0.005     # 0.5%
-satellite_risk_pct: 0.0025  # 0.25%
+current_sizing_phase: 1
+core_risk_pct: 0.005
+satellite_risk_pct: 0.0025
 margin_enabled: false
-```
-
----
-
-## Data Feed Status
-
-| Feed | Provider | Status | Monthly Cost |
-|------|----------|--------|-------------|
-| Streaming Quotes | Tradier | `not_connected` | Commission only |
-| OPRA Trade-by-Trade | Databento | `active` | ~$150/mo |
-| Option EOD Summary | CBOE DataShop | `pending_approval` | ~$40–60/mo |
-| VVIX / Breadth | Polygon.io | `active` | Already paid |
-| Options Flow | Unusual Whales | `active` | Already paid |
-| Macro Calendar | Finnhub | `active` | Already paid |
+daily_loss_limit: -3%_hardcoded_no_override

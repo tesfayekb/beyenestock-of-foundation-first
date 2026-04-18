@@ -17,8 +17,8 @@ The foundation at `beyenestock-of-foundation-first` is production-grade and must
 ### T-Rule 2: Table Prefix Isolation
 All new trading tables use the `trading_` prefix. Trading tables are completely isolated from foundation tables. `trading_system_health` is NOT `system_health_snapshots`. Never mix infrastructure health with trading engine health.
 
-### T-Rule 3: Single Operator — V1 Scope Lock
-V1 is a single-operator system. No multi-user mirroring, no enrollment, no subscriptions, no social features. Multi-user is explicitly V2.
+### T-Rule 3: Controlled Multi-User — Invitation Only
+The system supports 1-3 invited users maximum with read-only access and optional paper trade mirroring. No public enrollment, no subscription billing, no social features. Real-broker mirroring for non-admin users requires a governance/disclaimer review before implementation. Revenue model and public SaaS features are deferred to Year 2.
 
 ### T-Rule 4: Locked Decisions Are Final
 All 22 locked decisions (D-001 through D-022) in MARKETMUSE_MASTER.md Part 3 are binding. They cannot be modified, deferred, or reinterpreted without explicit owner approval and a new decision record.
@@ -33,7 +33,7 @@ Short-gamma exits at 2:30 PM EST and long-gamma exits at 3:45 PM EST are automat
 All trading pages inherit the foundation's security model: RLS on every table, permission gates on every page, MFA enforcement via AdminLayout, audit logging for every automated action. Trading does not define its own security model — it extends the existing one.
 
 ### T-Rule 8: Build Order Is Sequential
-Implementation follows the 7-phase build order in MARKETMUSE_MASTER.md Part 11. No phase may begin until the prior phase's Go/No-Go criteria are met. No shortcuts.
+Implementation follows the 5-phase build order in trading-docs/08-planning/MASTER_PLAN.md v3.2. New strategy modules require paper trading validation (20+ trades with feature flag enabled) before enabling in production. The 90-day A/B gate is mandatory before deploying real capital. No shortcuts on capital safety.
 
 ### T-Rule 9: Paper Phase Is Mandatory
 45 days of paper trading with all 12 go-live criteria (Part 10) must be satisfied before live trading is enabled. No early graduation. No partial passes.

@@ -7,10 +7,10 @@
 
 Before writing, modifying, or deleting ANY file (code or documentation), you MUST read these in order:
 
-1. `docs/00-governance/constitution.md` — the 11 non-negotiable rules
-2. `docs/00-governance/system-state.md` — current phase and what is allowed RIGHT NOW
-3. `docs/08-planning/approved-decisions.md` — binding decisions
-4. `docs/08-planning/master-plan.md` — the approved execution plan
+1. `trading-docs/00-governance/constitution.md` — trading system rules
+2. `trading-docs/00-governance/system-state.md` — current phase and gates
+3. `trading-docs/08-planning/approved-decisions.md` — binding decisions
+4. `trading-docs/08-planning/MASTER_PLAN.md` — the approved execution plan (v3.2)
 
 If ANY required document is missing or unclear → **STOP and ask for clarification.** Do not assume.
 
@@ -33,10 +33,10 @@ Check `system-state.md` YAML block. Obey these gates absolutely:
 
 For every task — no matter how small — read these in order:
 
-1. `docs/00-governance/constitution.md` (11 rules)
-2. `docs/00-governance/system-state.md` (current phase + gates)
-3. `docs/08-planning/approved-decisions.md` (binding decisions)
-4. `docs/08-planning/master-plan.md` (plan sections with stable IDs)
+1. `trading-docs/00-governance/constitution.md` (11 rules)
+2. `trading-docs/00-governance/system-state.md` (current phase + gates)
+3. `trading-docs/08-planning/approved-decisions.md` (binding decisions)
+4. `trading-docs/08-planning/MASTER_PLAN.md` (plan sections with stable IDs)
 5. Relevant module docs from `docs/04-modules/` (for the module you're working on)
 6. `docs/01-architecture/dependency-map.md` (if shared logic is involved)
 7. Relevant reference indexes from `docs/07-reference/` (if shared components involved)
