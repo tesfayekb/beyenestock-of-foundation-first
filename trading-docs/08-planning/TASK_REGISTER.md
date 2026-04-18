@@ -232,6 +232,8 @@ print('Thresholds: 5=butterfly, 20=kelly+straddle+flow+sentiment, 40=ai_hint, 10
 - [x] D-019: contracts variable stale after partial exit (commit: 18ef436)
 - [~] D-017: SPX /prev dedup — ACCEPTED for paper phase (rv>0 guard handles it)
 - [ ] D-020: IV/RV block rate monitoring (monitor after 10 paper sessions)
+- [x] DB constraint: long_straddle added to trading_positions (20260419 migration)
+- [x] DB column: far_expiry_date added for calendar_spread near/far legs
 
 ---
 
