@@ -317,6 +317,9 @@ def run_position_monitor() -> dict:
                             "contracts": remaining_contracts,
                             "partial_exit_done": True,
                         }).eq("id", pos["id"]).execute()
+                        # D-019 fix: update local contracts so subsequent exit checks
+                        # use the correct remaining count, not the original stale value
+                        contracts = remaining_contracts
                         # Write audit log for partial exit
                         write_audit_log(
                             action="trading.partial_exit_25pct",
@@ -340,6 +343,37 @@ def run_position_monitor() -> dict:
                             remaining=remaining_contracts,
                             partial_pnl=partial_pnl,
                         )
+                        # D-018 fix: book partial P&L into session so drawdown check
+                        # sees the gain immediately, not only at full close
+                        try:
+                            from session_manager import update_session
+                            if session_id := pos.get("session_id"):
+                                session = (
+                                    get_client()
+                                    .table("trading_sessions")
+                                    .select("virtual_pnl, virtual_trades_count")
+                                    .eq("id", session_id)
+                                    .maybe_single()
+                                    .execute()
+                                )
+                                if session.data:
+                                    current_pnl = session.data.get("virtual_pnl") or 0.0
+                                    update_session(
+                                        session_id,
+                                        virtual_pnl=round(current_pnl + partial_pnl, 2),
+                                    )
+                                    logger.info(
+                                        "partial_exit_session_pnl_updated",
+                                        session_id=session_id,
+                                        partial_pnl=partial_pnl,
+                                    )
+                        except Exception as pnl_err:
+                            logger.warning(
+                                "partial_exit_session_pnl_update_failed",
+                                error=str(pnl_err),
+                            )
+                        # Note: virtual_trades_count is NOT incremented here.
+                        # A partial exit is not a completed trade — only full close increments it.
                     except Exception as partial_err:
                         logger.error(
                             "partial_exit_failed",
