@@ -126,6 +126,21 @@ class StrategySelector:
             logger.error("stage0_time_gate_failed", error=str(e))
             return False, f"error:{e}"
 
+    def _check_feature_flag(self, flag_key: str) -> bool:
+        """Check a Redis feature flag. Returns False on any error.
+
+        Accepts both bytes 'true' (decode_responses=False) and string 'true'
+        (decode_responses=True) for forward-compatibility with both Redis
+        client configurations.
+        """
+        try:
+            if not self.redis_client:
+                return False
+            val = self.redis_client.get(flag_key)
+            return val in ("true", b"true")
+        except Exception:
+            return False
+
     def _get_spx_price(self) -> float:
         """Read current SPX price from Redis. Returns 5200.0 fallback."""
         try:
@@ -157,13 +172,7 @@ class StrategySelector:
         try:
             # Phase 2B: Gamma pin override (feature-flagged, default OFF)
             try:
-                pin_flag = (
-                    self.redis_client.get("strategy:iron_butterfly:enabled")
-                    if self.redis_client else None
-                )
-                pin_enabled = pin_flag in ("true", b"true")
-
-                if pin_enabled:
+                if self._check_feature_flag("strategy:iron_butterfly:enabled"):
                     nearest_wall_raw = (
                         self.redis_client.get("gex:nearest_wall")
                         if self.redis_client else None
@@ -291,13 +300,7 @@ class StrategySelector:
             # Falls back to regime-based on any error or low confidence.
             strategy_type = ordered[0]  # default: regime-based
             try:
-                hint_flag = (
-                    self.redis_client.get("strategy:ai_hint_override:enabled")
-                    if self.redis_client else None
-                )
-                ai_hint_enabled = hint_flag in ("true", b"true")
-
-                if ai_hint_enabled:
+                if self._check_feature_flag("strategy:ai_hint_override:enabled"):
                     strategy_hint = prediction.get("strategy_hint", "")
                     hint_confidence = float(prediction.get("confidence", 0.0))
                     valid_strategies = set(STATIC_SLIPPAGE_BY_STRATEGY.keys())
@@ -422,6 +425,21 @@ class StrategySelector:
                 regime=regime,
                 direction=direction,
                 contracts=sizing["contracts"],
+                confidence=prediction.get("confidence", 0.0),
+                source=(
+                    "ai_hint"
+                    if prediction.get("source") == "ai_synthesis"
+                    else "regime"
+                ),
+                ai_hint_flag=self._check_feature_flag(
+                    "strategy:ai_hint_override:enabled"
+                ),
+                butterfly_flag=self._check_feature_flag(
+                    "strategy:iron_butterfly:enabled"
+                ),
+                straddle_flag=self._check_feature_flag(
+                    "strategy:long_straddle:enabled"
+                ),
             )
             self.write_heartbeat()
             return signal

@@ -123,3 +123,61 @@ def test_straddle_debit_risk_pct():
     """Long straddle risk pct is 0.25% (our smallest allocation)."""
     from risk_engine import _DEBIT_RISK_PCT
     assert _DEBIT_RISK_PCT["long_straddle"] == 0.0025
+
+
+# --- Session 2 tests: feature flag helper -----------------------------------
+
+
+def test_check_feature_flag_false_when_redis_none():
+    """Feature flag returns False when Redis client is unavailable."""
+    from strategy_selector import StrategySelector
+    selector = StrategySelector.__new__(StrategySelector)
+    selector.redis_client = None
+    assert selector._check_feature_flag("any:flag") is False
+
+
+def test_check_feature_flag_false_when_key_missing():
+    """Feature flag returns False when key is absent from Redis."""
+    from strategy_selector import StrategySelector
+    selector = StrategySelector.__new__(StrategySelector)
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None
+    selector.redis_client = mock_redis
+    assert selector._check_feature_flag("missing:flag") is False
+
+
+def test_check_feature_flag_true_bytes():
+    """Feature flag returns True for bytes 'true' (decode_responses=False)."""
+    from strategy_selector import StrategySelector
+    selector = StrategySelector.__new__(StrategySelector)
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = b"true"
+    selector.redis_client = mock_redis
+    assert selector._check_feature_flag("some:flag") is True
+
+
+def test_check_feature_flag_true_string():
+    """Feature flag returns True for string 'true' (decode_responses=True)."""
+    from strategy_selector import StrategySelector
+    selector = StrategySelector.__new__(StrategySelector)
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = "true"
+    selector.redis_client = mock_redis
+    assert selector._check_feature_flag("some:flag") is True
+
+
+# --- Session 2 additional fix: straddle sizing with spread_width=0 ---------
+
+
+def test_straddle_sizing_returns_nonzero_contracts():
+    """Long straddle sizing works despite spread_width=0."""
+    from risk_engine import compute_position_size
+    result = compute_position_size(
+        account_value=100_000.0,
+        spread_width=0,
+        strategy_type="long_straddle",
+    )
+    assert result["contracts"] >= 1, (
+        "Straddle must produce at least 1 contract"
+    )
+    assert result["risk_pct"] == 0.0025

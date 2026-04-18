@@ -151,6 +151,23 @@ def compute_position_size(
     Never raises — returns {contracts: 0} on any error.
     """
     try:
+        # Phase 2B: Straddle sizing — cost-based, not spread-based.
+        # For long_straddle, spread_width=0 (no spread between legs), so the
+        # generic spread-based formula returns 0 contracts. Instead we size
+        # by premium cost: contracts = (account_value × risk_pct) / cost_per_contract.
+        # Must run BEFORE the spread_width <= 0 guard below.
+        if strategy_type == "long_straddle":
+            straddle_cost_per_contract = 400.0  # $4.00 × 100 = typical SPX 0DTE
+            straddle_risk_pct = _DEBIT_RISK_PCT.get("long_straddle", 0.0025)
+            max_risk_dollars = account_value * straddle_risk_pct
+            contracts = max(1, int(max_risk_dollars / straddle_cost_per_contract))
+            return {
+                "contracts": contracts,
+                "risk_pct": straddle_risk_pct,
+                "stressed_loss_per_contract": straddle_cost_per_contract,
+                "size_reduction_reason": None,
+            }
+
         if spread_width <= 0:
             return {
                 "contracts": 0,
