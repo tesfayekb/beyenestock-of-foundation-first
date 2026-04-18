@@ -229,6 +229,73 @@ def compute_directional_accuracy(days: int = 20) -> dict:
         }
 
 
+def get_kelly_multiplier_from_db(days: int = 20) -> float:
+    """
+    Compute Kelly position size multiplier from recent closed positions.
+
+    Queries last N days of closed virtual positions to get:
+    - win_rate: % of trades with net_pnl > 0
+    - avg_win: mean net_pnl of winning trades (dollars)
+    - avg_loss: mean abs(net_pnl) of losing trades (dollars)
+
+    Enforces minimum 20 closed trades (B4 caller contract).
+    Returns 1.0 (no adjustment) when insufficient data.
+    Never raises.
+    """
+    try:
+        from risk_engine import compute_kelly_multiplier
+
+        cutoff = (date.today() - timedelta(days=days)).isoformat()
+        result = (
+            get_client()
+            .table("trading_positions")
+            .select("net_pnl")
+            .gte("entry_at", cutoff)
+            .eq("status", "closed")
+            .eq("position_mode", "virtual")
+            .execute()
+        )
+        positions = result.data or []
+        n = len(positions)
+
+        # B4 caller contract: minimum 20 closed trades
+        if n < 20:
+            logger.info(
+                "kelly_multiplier_skipped_insufficient_trades",
+                trades=n,
+                required=20,
+            )
+            return 1.0
+
+        pnls = [float(p.get("net_pnl") or 0.0) for p in positions]
+        wins = [p for p in pnls if p > 0]
+        losses = [abs(p) for p in pnls if p <= 0]
+
+        win_rate = len(wins) / n
+        avg_win = sum(wins) / len(wins) if wins else 0.0
+        avg_loss = sum(losses) / len(losses) if losses else 0.0
+
+        multiplier = compute_kelly_multiplier(
+            recent_win_rate=win_rate,
+            avg_win_dollars=avg_win,
+            avg_loss_dollars=avg_loss,
+        )
+
+        logger.info(
+            "kelly_multiplier_computed",
+            trades=n,
+            win_rate=round(win_rate, 3),
+            avg_win=round(avg_win, 2),
+            avg_loss=round(avg_loss, 2),
+            multiplier=multiplier,
+        )
+        return multiplier
+
+    except Exception as e:
+        logger.error("kelly_multiplier_db_failed", error=str(e))
+        return 1.0
+
+
 def compute_per_regime_accuracy() -> dict:
     """
     Compute accuracy broken down by regime.

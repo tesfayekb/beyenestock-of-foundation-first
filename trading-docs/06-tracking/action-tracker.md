@@ -883,3 +883,29 @@ Single register of every trading change action. Every change to trading code, sc
   D-022 / allocation_tier reductions so it cannot undo safety-driven
   size cuts; daily -3% drawdown halt in check_daily_drawdown is
   unchanged and remains absolute)
+
+### T-ACT-034 — Phase B4 Wiring: Kelly Multiplier from Live Win Rate
+
+- **id:** T-ACT-034
+- **date:** 2026-04-17
+- **action:** Phase B4 wiring — connects compute_kelly_multiplier
+  (T-ACT-033) to the live execution path. model_retraining.py:
+  get_kelly_multiplier_from_db(days=20) queries trading_positions
+  (closed, virtual) to compute win_rate / avg_win / avg_loss and
+  returns the Kelly multiplier; enforces the 20-trade minimum
+  (returns 1.0 below that) and returns 1.0 on any DB error.
+  strategy_selector.py: select_strategy() now reads kelly:multiplier
+  from Redis (TTL 3600s), falls back to the DB helper on cache miss,
+  and passes the result to compute_position_size(kelly_multiplier=).
+  Exceptions in the fetch path default to 1.0 so sizing is never
+  blocked by Redis/DB issues.
+- **phase:** phase_b
+- **impact:** HIGH
+- **t_rules_checked:** T-Rule 1 ✅, T-Rule 5 ✅ (safe fallback to
+  1.0x on any failure; D-021 / D-022 / allocation_tier / event-day
+  reductions still apply; -3% daily drawdown halt unchanged)
+- **files_touched:** backend/model_retraining.py,
+  backend/strategy_selector.py, backend/tests/test_phase_b4_wiring.py
+- **tests:** tests/test_phase_b4_wiring.py — 5 tests
+  (insufficient-trades, high-WR multiplier, DB-error fallback, Redis
+  cache hit, DB fallback on cache miss); full suite 180 passed

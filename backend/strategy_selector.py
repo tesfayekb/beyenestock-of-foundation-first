@@ -9,6 +9,7 @@ from typing import Optional, Tuple, Union
 from db import write_health_status
 from logger import get_logger
 from risk_engine import compute_position_size, check_trade_frequency
+from model_retraining import get_kelly_multiplier_from_db
 from strike_selector import get_strikes
 
 logger = get_logger("strategy_selector")
@@ -234,6 +235,27 @@ class StrategySelector:
             # day_type="event" is set by pre_market_scan from VVIX Z-score ≥2.5
             event_size_mult = 0.40 if session.get("day_type") == "event" else 1.0
 
+            # B4: Kelly multiplier — cached in Redis, refreshed hourly
+            # Falls back to 1.0 if insufficient trade history (<20 trades)
+            kelly_mult = 1.0
+            try:
+                if self.redis_client:
+                    cached = self.redis_client.get("kelly:multiplier")
+                    if cached:
+                        kelly_mult = float(cached)
+                    else:
+                        kelly_mult = get_kelly_multiplier_from_db()
+                        self.redis_client.setex(
+                            "kelly:multiplier",
+                            3600,  # refresh every hour
+                            str(kelly_mult),
+                        )
+            except Exception as kelly_err:
+                logger.warning(
+                    "kelly_multiplier_fetch_failed", error=str(kelly_err)
+                )
+                kelly_mult = 1.0
+
             # Risk sizing
             sizing = compute_position_size(
                 account_value=account_value,
@@ -243,6 +265,7 @@ class StrategySelector:
                 consecutive_losses_today=consecutive_losses,
                 position_type=position_type,
                 allocation_tier=prediction.get("allocation_tier", "full"),
+                kelly_multiplier=kelly_mult,
             )
 
             # Apply event-day multiplier after sizing
