@@ -228,10 +228,10 @@ print('Thresholds: 5=butterfly, 20=kelly+straddle+flow+sentiment, 40=ai_hint, 10
 ### Known False Positives
 
 - [ ] Review known-false-positives.md — address any D- items that remain open
-- [ ] D-017: SPX /prev dedup
-- [ ] D-018: Partial exit doesn't increment session virtual_pnl
-- [ ] D-019: contracts local variable stale after partial exit
-- [ ] D-020: IV/RV filter has no monitoring for block rate
+- [x] D-018: Partial exit session P&L update (commit: 18ef436)
+- [x] D-019: contracts variable stale after partial exit (commit: 18ef436)
+- [~] D-017: SPX /prev dedup — ACCEPTED for paper phase (rv>0 guard handles it)
+- [ ] D-020: IV/RV block rate monitoring (monitor after 10 paper sessions)
 
 ---
 
