@@ -26,6 +26,11 @@ deployment: railway_diplomatic-mercy
 - Phase 2B: Bull/Bear debit spreads
 - Phase 2C: Multi-agent AI morning brief (backend_agents/)
 
+## Task Register
+All pending tasks, Monday checklist, feature flag activation sequence,
+and future roadmap items: trading-docs/08-planning/TASK_REGISTER.md
+Cursor must update checkboxes after completing any item.
+
 ## Phase Gate for Real Capital Deployment
 - Paper trading A/B test: 90 days, Portfolio B must show ≥+8% annualized uplift
 - Minimum 100 closed paper trades for meta-label model
