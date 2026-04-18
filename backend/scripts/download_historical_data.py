@@ -38,6 +38,7 @@ END_DATE       = date.today().isoformat()
 CBOE_VIX_URL   = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
 CBOE_VVIX_URL  = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VVIX_History.csv"
 CBOE_VIX9D_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX9D_History.csv"
+CBOE_SPX_URL   = "https://cdn.cboe.com/api/global/us_indices/daily_prices/SPX_History.csv"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -216,6 +217,18 @@ def download_cboe_csv(url: str, name: str, out_file: str) -> pd.DataFrame:
     return df
 
 
+# ── Downloader: SPX daily from CBOE (free, no API key) ───────────────────────
+
+def download_spx_daily_cboe() -> pd.DataFrame:
+    """
+    Download SPX daily OHLC from CBOE's free public CSV.
+    No API key required. Covers 1990-present and complements Polygon
+    (whose I:SPX daily coverage depends on plan tier).
+    Saves to backend/data/historical/spx_daily_cboe.parquet.
+    """
+    return download_cboe_csv(CBOE_SPX_URL, "SPX", "spx_daily_cboe.parquet")
+
+
 # ── Validation ────────────────────────────────────────────────────────────────
 
 def validate_downloads(dfs: dict) -> None:
@@ -326,6 +339,12 @@ def main() -> None:
     except Exception as e:
         print(f"  ERROR: SPX daily download failed: {e}")
         errors.append(("spx_daily", str(e)))
+
+    # 2b. SPX daily (CBOE free CSV — covers 2022+ regardless of Polygon plan)
+    try:
+        dfs["spx_daily_cboe"] = download_spx_daily_cboe()
+    except Exception as e:
+        print(f"  WARNING: SPX daily CBOE download failed (optional): {e}")
 
     # 3. VIX daily (CBOE)
     try:
