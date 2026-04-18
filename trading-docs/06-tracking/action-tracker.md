@@ -909,3 +909,53 @@ Single register of every trading change action. Every change to trading code, sc
 - **tests:** tests/test_phase_b4_wiring.py — 5 tests
   (insufficient-trades, high-WR multiplier, DB-error fallback, Redis
   cache hit, DB fallback on cache miss); full suite 180 passed
+
+### T-ACT-035 — Fix Databento Parser: Zero-Record Flooding + False-Positive Health
+
+- **id:** T-ACT-035
+- **date:** 2026-04-17
+- **action:** Rewrite backend/databento_feed.py. Production diagnostic
+  revealed databento:opra:trades contained 473,035 zero-filled records
+  per 5-minute window (all with symbol="", price=0.0, strike=0.0) while
+  databento_feed reported "healthy" every 10s. Root cause: old code used
+  getattr(record, "symbol", "") but databento.TradeMsg (v0.35.0) has no
+  .symbol attribute — the default "" was returned for every record and
+  the OCC regex never matched. No record-type filter meant SystemMsg /
+  ErrorMsg / SymbolMappingMsg were all processed as trades with default
+  zero fields. Subscribe also defaulted to symbols=ALL_SYMBOLS (full
+  OPRA firehose) instead of SPX/SPXW only. Heartbeat updated
+  last_data_at on every rpush, so 473k garbage writes kept the health
+  probe green. Rewrite: (1) databento.InstrumentMap with
+  insert_symbol_mapping_msg() + resolve(instrument_id, event_date) for
+  symbol resolution; (2) isinstance dispatch splits SymbolMappingMsg,
+  TradeMsg, and everything-else paths; (3) subscribe narrowed to
+  symbols=["SPX.OPT","SPXW.OPT"], stype_in=SType.PARENT; (4)
+  record.pretty_price replaces manual /1e9; (5) rename last_data_at ->
+  last_valid_trade_at, updated only on fully-resolved non-zero trades;
+  heartbeat now reports "degraded" when no valid trade within 30s;
+  (6) imap.clear() called in outer retry loop on reconnect. __init__
+  also deletes databento:opra:trades on startup to flush stale
+  placeholders from previous runs. process_trade() kept as back-compat
+  wrapper around _push_trade for test_fix_group7a compatibility.
+- **phase:** phase_b
+- **impact:** CRITICAL
+- **t_rules_checked:** T-Rule 1 ✅, T-Rule 5 ✅ (fix is strictly more
+  conservative than before — drops records instead of writing zero
+  placeholders; D-021 / D-022 / drawdown halts unchanged; outside
+  market hours status now correctly reports "degraded" reflecting no
+  flow, replacing the old false-positive "healthy")
+- **files_touched:** backend/databento_feed.py,
+  backend/tests/test_databento_feed.py
+- **tests:** tests/test_databento_feed.py — 5 tests (SymbolMappingMsg
+  feeds InstrumentMap, known-id TradeMsg writes full trade,
+  unknown-id TradeMsg skipped with no placeholder, SystemMsg+ErrorMsg
+  ignored, unparseable OCC symbol dropped without raising). Tests use
+  pytest.importorskip("databento") so they skip cleanly locally and
+  run on Railway/CI. Local full suite: 180 passed, 1 skipped (new
+  test, databento not installed locally).
+- **post_deploy_validation:** After deploy, verify via `railway ssh`:
+  (a) `tests/test_databento_feed.py` reports 5 passed, (b)
+  `LRANGE databento:opra:trades 0 5` shows real symbols/prices (not
+  zeros), (c) `trading_system_health` shows databento_feed=degraded
+  outside market hours, healthy during RTH once trades flow.
+
