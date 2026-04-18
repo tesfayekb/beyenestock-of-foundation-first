@@ -39,6 +39,7 @@ CBOE_VIX_URL   = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_Hi
 CBOE_VVIX_URL  = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VVIX_History.csv"
 CBOE_VIX9D_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX9D_History.csv"
 CBOE_SPX_URL   = "https://cdn.cboe.com/api/global/us_indices/daily_prices/SPX_History.csv"
+STOOQ_SPX_URL  = "https://stooq.com/q/d/l/?s=%5espx&i=d"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -229,6 +230,31 @@ def download_spx_daily_cboe() -> pd.DataFrame:
     return download_cboe_csv(CBOE_SPX_URL, "SPX", "spx_daily_cboe.parquet")
 
 
+def download_spx_daily_stooq() -> pd.DataFrame:
+    """
+    Download SPX daily OHLC from Stooq (free, back to 1928, no auth).
+    Returns open/high/low/close/volume columns with date index.
+    """
+    print(f"\nDownloading SPX OHLC from Stooq...")
+    with httpx.Client(timeout=30.0) as client:
+        resp = client.get(STOOQ_SPX_URL)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Stooq SPX download failed: HTTP {resp.status_code}")
+
+    from io import StringIO
+    df = pd.read_csv(StringIO(resp.text))
+    df.columns = [c.lower() for c in df.columns]
+    df["date"] = pd.to_datetime(df["date"]).dt.date
+    df = df.sort_values("date")
+    df = df[df["date"] >= pd.Timestamp(DAILY_START).date()]
+    df = df.dropna(subset=["open", "close"])
+
+    out = DATA_DIR / "spx_daily_stooq.parquet"
+    df.to_parquet(out, index=False)
+    print(f"  [OK] Saved {len(df):,} rows -> {out}")
+    return df
+
+
 # ── Validation ────────────────────────────────────────────────────────────────
 
 def validate_downloads(dfs: dict) -> None:
@@ -339,6 +365,12 @@ def main() -> None:
     except Exception as e:
         print(f"  ERROR: SPX daily download failed: {e}")
         errors.append(("spx_daily", str(e)))
+
+    # 2a. SPX daily OHLC from Stooq (free, back to 1928, has open/close)
+    try:
+        dfs["spx_daily_stooq"] = download_spx_daily_stooq()
+    except Exception as e:
+        print(f"  WARNING: Stooq SPX download failed (optional): {e}")
 
     # 2b. SPX daily (CBOE free CSV — covers 2022+ regardless of Polygon plan)
     try:

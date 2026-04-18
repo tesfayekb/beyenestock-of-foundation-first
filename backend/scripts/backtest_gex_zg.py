@@ -249,33 +249,23 @@ def main() -> None:
     print(f"\nOptions features: {len(features)} days, "
           f"{features['date'].min()} -> {features['date'].max()}")
 
-    # Load SPX daily prices — prefer CBOE (full history back to 2010)
-    # over Polygon (only ~2 years due to plan limitation)
-    spx_cboe_path = DATA_DIR / "spx_daily_cboe.parquet"
-    spx_poly_path = DATA_DIR / "spx_daily.parquet"
+    # Load SPX daily OHLC — priority: Stooq (full history) > Polygon (plan-limited)
+    spx_stooq_path = DATA_DIR / "spx_daily_stooq.parquet"
+    spx_poly_path  = DATA_DIR / "spx_daily.parquet"
 
-    if spx_cboe_path.exists():
-        spx = pd.read_parquet(spx_cboe_path)
-        print(f"SPX daily (CBOE): {len(spx)} rows")
+    if spx_stooq_path.exists():
+        spx = pd.read_parquet(spx_stooq_path)
+        print(f"SPX daily (Stooq): {len(spx)} rows")
     elif spx_poly_path.exists():
         spx = pd.read_parquet(spx_poly_path)
         print(f"SPX daily (Polygon): {len(spx)} rows")
     else:
         raise RuntimeError(
-            "No SPX daily data found. Run: python -m scripts.download_historical_data"
+            "No SPX daily OHLC found. Run: python -m scripts.download_historical_data"
         )
-
-    # Normalize date column
-    if "date" in spx.columns:
-        spx["date"] = pd.to_datetime(spx["date"]).dt.date
-    else:
-        spx["date"] = pd.to_datetime(
-            spx["timestamp_ms"], unit="ms", utc=True
-        ).dt.tz_convert("America/New_York").dt.date
-    spx = spx.sort_values("date")
-    # Normalize column names — CBOE uses uppercase (OPEN/HIGH/LOW/CLOSE)
-    # Polygon uses lowercase (open/close). Standardize to lowercase.
     spx.columns = [c.lower() for c in spx.columns]
+    spx["date"] = pd.to_datetime(spx["date"]).dt.date
+    spx = spx.sort_values("date")
     print(f"SPX date range: {spx['date'].min()} -> {spx['date'].max()}")
 
     # Compute VVIX Z-score (20-day rolling) from options features
