@@ -23,6 +23,7 @@ STATIC_SLIPPAGE_BY_STRATEGY = {
     "debit_call_spread": 0.12,
     "long_put": 0.05,
     "long_call": 0.05,
+    "long_straddle": 0.15,
 }
 
 # Placeholder credits by strategy — Phase 2 proxy until real option pricer in Phase 4
@@ -36,6 +37,7 @@ PLACEHOLDER_CREDIT_BY_STRATEGY = {
     "debit_call_spread": -1.80,
     "long_put":          -3.00,
     "long_call":         -3.00,
+    "long_straddle":     -4.00,  # debit — buy both ATM call and put
 }
 
 REGIME_STRATEGY_MAP = {
@@ -46,7 +48,9 @@ REGIME_STRATEGY_MAP = {
     "pin_range": ["iron_condor", "iron_butterfly", "put_credit_spread"],
     "range": ["iron_condor", "put_credit_spread", "call_credit_spread"],
     "crisis": ["put_credit_spread"],
-    "event": ["iron_condor"],
+    # Phase 2B: catalyst days favour long_straddle (capture IV expansion,
+    # exit pre-announcement). iron_condor stays as fallback.
+    "event": ["long_straddle", "iron_condor"],
     "panic": [],
     "trend": ["debit_call_spread", "debit_put_spread", "long_call", "long_put"],
     "unknown": ["put_credit_spread"],
@@ -68,7 +72,7 @@ LONG_GAMMA_STRATEGIES = {
 
 _BULL_PREFERRED = {"call_credit_spread", "debit_call_spread", "long_call"}
 _BEAR_PREFERRED = {"put_credit_spread", "debit_put_spread", "long_put"}
-_NEUTRAL_PREFERRED = {"iron_condor", "iron_butterfly"}
+_NEUTRAL_PREFERRED = {"iron_condor", "iron_butterfly", "long_straddle"}
 
 
 class StrategySelector:
@@ -122,6 +126,36 @@ class StrategySelector:
             logger.error("stage0_time_gate_failed", error=str(e))
             return False, f"error:{e}"
 
+    def _check_feature_flag(self, flag_key: str) -> bool:
+        """Check a Redis feature flag. Returns False on any error.
+
+        Accepts both bytes 'true' (decode_responses=False) and string 'true'
+        (decode_responses=True) for forward-compatibility with both Redis
+        client configurations.
+        """
+        try:
+            if not self.redis_client:
+                return False
+            val = self.redis_client.get(flag_key)
+            return val in ("true", b"true")
+        except Exception:
+            return False
+
+    def _get_spx_price(self) -> float:
+        """Read current SPX price from Redis. Returns 5200.0 fallback."""
+        try:
+            raw = (
+                self.redis_client.get("tradier:quotes:SPX")
+                if self.redis_client else None
+            )
+            if raw:
+                import json
+                data = json.loads(raw)
+                return float(data.get("last") or data.get("ask") or 5200.0)
+        except Exception:
+            pass
+        return 5200.0
+
     def _stage1_regime_gate(
         self,
         regime: str,
@@ -130,8 +164,49 @@ class StrategySelector:
         """
         Stage 1: get regime-appropriate strategy candidates.
         Filters to LONG_GAMMA_STRATEGIES only when time gate is restricted.
+
+        Phase 2B: When strategy:iron_butterfly:enabled=true and SPX is
+        within 0.3% of the GEX wall (pin day), short-circuit to
+        iron_butterfly — pin-day market making produces highest EV here.
         """
         try:
+            # Phase 2B: Gamma pin override (feature-flagged, default OFF)
+            try:
+                if self._check_feature_flag("strategy:iron_butterfly:enabled"):
+                    nearest_wall_raw = (
+                        self.redis_client.get("gex:nearest_wall")
+                        if self.redis_client else None
+                    )
+                    gex_conf_raw = (
+                        self.redis_client.get("gex:confidence")
+                        if self.redis_client else None
+                    )
+
+                    if nearest_wall_raw and gex_conf_raw:
+                        nearest_wall = float(nearest_wall_raw)
+                        gex_conf = float(gex_conf_raw)
+                        spx_price = self._get_spx_price()
+
+                        if (
+                            nearest_wall > 0
+                            and spx_price > 0
+                            and gex_conf >= 0.4
+                        ):
+                            dist_to_wall = (
+                                abs(spx_price - nearest_wall) / spx_price
+                            )
+                            if dist_to_wall < 0.003:  # within 0.3%
+                                logger.info(
+                                    "gamma_pin_detected",
+                                    nearest_wall=nearest_wall,
+                                    spx_price=spx_price,
+                                    dist_pct=round(dist_to_wall * 100, 3),
+                                )
+                                return ["iron_butterfly"]
+            except Exception:
+                pass  # Fall through to normal regime map on any pin error
+
+            # Normal regime-based selection
             candidates = list(REGIME_STRATEGY_MAP.get(regime, ["put_credit_spread"]))
             if time_gate_result == "long_gamma_only":
                 candidates = [s for s in candidates if s in LONG_GAMMA_STRATEGIES]
@@ -213,12 +288,41 @@ class StrategySelector:
                 logger.info("strategy_blocked_no_candidates", regime=regime)
                 return None
 
-            # Stage 2: direction filter
+            # Stage 2: direction filter (regime-based)
             ordered = self._stage2_direction_filter(
                 candidates, direction, p_bull, p_bear
             )
 
-            strategy_type = ordered[0]
+            # Phase 2B: AI strategy hint override (feature-flagged, default OFF)
+            # When the AI synthesis agent emits a high-confidence strategy
+            # recommendation AND strategy:ai_hint_override:enabled=true,
+            # use the AI hint instead of the regime-based top pick.
+            # Falls back to regime-based on any error or low confidence.
+            strategy_type = ordered[0]  # default: regime-based
+            try:
+                if self._check_feature_flag("strategy:ai_hint_override:enabled"):
+                    strategy_hint = prediction.get("strategy_hint", "")
+                    hint_confidence = float(prediction.get("confidence", 0.0))
+                    valid_strategies = set(STATIC_SLIPPAGE_BY_STRATEGY.keys())
+
+                    if (
+                        strategy_hint
+                        and hint_confidence >= 0.65
+                        and strategy_hint in valid_strategies
+                    ):
+                        strategy_type = strategy_hint
+                        logger.info(
+                            "strategy_from_ai_hint",
+                            hint=strategy_hint,
+                            confidence=hint_confidence,
+                            regime_top=ordered[0],
+                        )
+            except Exception as hint_err:
+                logger.warning(
+                    "ai_hint_override_failed", error=str(hint_err)
+                )
+                # strategy_type already set to regime-based above — safe
+
             predicted_slippage = STATIC_SLIPPAGE_BY_STRATEGY.get(
                 strategy_type, 0.15
             )
@@ -266,6 +370,7 @@ class StrategySelector:
                 position_type=position_type,
                 allocation_tier=prediction.get("allocation_tier", "full"),
                 kelly_multiplier=kelly_mult,
+                strategy_type=strategy_type,  # Phase 2B — debit/straddle sizing
             )
 
             # Apply event-day multiplier after sizing
@@ -320,6 +425,21 @@ class StrategySelector:
                 regime=regime,
                 direction=direction,
                 contracts=sizing["contracts"],
+                confidence=prediction.get("confidence", 0.0),
+                source=(
+                    "ai_hint"
+                    if prediction.get("source") == "ai_synthesis"
+                    else "regime"
+                ),
+                ai_hint_flag=self._check_feature_flag(
+                    "strategy:ai_hint_override:enabled"
+                ),
+                butterfly_flag=self._check_feature_flag(
+                    "strategy:iron_butterfly:enabled"
+                ),
+                straddle_flag=self._check_feature_flag(
+                    "strategy:long_straddle:enabled"
+                ),
             )
             self.write_heartbeat()
             return signal

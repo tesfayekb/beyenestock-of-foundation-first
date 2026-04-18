@@ -36,8 +36,8 @@ until explicitly instructed in a Phase 3A task.
 | Strategy | In Codebase | Feature Flag | Paper Tested | Production Ready |
 |---|---|---|---|---|
 | Iron Condor | ✅ | N/A (default) | Backtest only | ✅ with monitoring |
-| Iron Butterfly | Partial | OFF | No | Phase 2A |
-| Long Straddle | No | OFF | No | Phase 2A |
-| Bull Call Spread | Slippage table only | OFF | No | Phase 2B |
-| Bear Put Spread | Slippage table only | OFF | No | Phase 2B |
+| Iron Butterfly | ✅ wired (Phase 2B) | `strategy:iron_butterfly:enabled` (default OFF) | No | Phase 2B activation |
+| Long Straddle | ✅ wired (Phase 2B) | `strategy:long_straddle:enabled` (default OFF) | No | Phase 2B activation |
+| Bull Call Spread | ✅ wired via AI hint (Phase 2B) | `strategy:ai_hint_override:enabled` (default OFF) | No | Phase 2B activation |
+| Bear Put Spread | ✅ wired via AI hint (Phase 2B) | `strategy:ai_hint_override:enabled` (default OFF) | No | Phase 2B activation |
 | Calendar Spread | No | OFF | No | Phase 3C |

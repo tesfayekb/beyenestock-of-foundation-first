@@ -20,6 +20,7 @@ SHORT_GAMMA_STRATEGIES = {
 }
 
 _execution_engine: Optional[ExecutionEngine] = None
+_redis_client = None
 
 
 def _get_engine() -> ExecutionEngine:
@@ -27,6 +28,24 @@ def _get_engine() -> ExecutionEngine:
     if _execution_engine is None:
         _execution_engine = ExecutionEngine()
     return _execution_engine
+
+
+def _get_redis():
+    """Lazy Redis client for Phase 2B pre-event straddle exits.
+    Returns None on any failure — never raises."""
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+    try:
+        import redis as redis_lib
+        from config import REDIS_URL
+        _redis_client = redis_lib.Redis.from_url(
+            REDIS_URL, decode_responses=True
+        )
+        return _redis_client
+    except Exception as e:
+        logger.warning("position_monitor_redis_init_failed", error=str(e))
+        return None
 
 
 def get_open_positions() -> list:
@@ -159,6 +178,67 @@ def run_position_monitor() -> dict:
         for pos in positions:
             entry_credit = pos.get("entry_credit") or 0.0
             strategy_type = pos.get("strategy_type", "unknown")
+
+            # Phase 2B: Pre-event straddle exit
+            # Close long_straddle 30 minutes before a major catalyst (Fed/CPI/NFP).
+            # Captures IV expansion without taking announcement-direction risk.
+            straddle_closed = False
+            try:
+                if strategy_type == "long_straddle":
+                    redis_client = _get_redis()
+                    cal_raw = (
+                        redis_client.get("calendar:today:intel")
+                        if redis_client else None
+                    )
+                    if cal_raw:
+                        import json as _json
+                        intel = _json.loads(cal_raw)
+                        for event in intel.get("events", []):
+                            event_time_str = event.get("time", "")
+                            if not (event_time_str and event.get("is_major")):
+                                continue
+                            try:
+                                import zoneinfo
+                                now_et = datetime.now(
+                                    zoneinfo.ZoneInfo("America/New_York")
+                                )
+                                # Event time format: "HH:MM:SS"
+                                parts = event_time_str.split(":")
+                                h = int(parts[0])
+                                m = int(parts[1]) if len(parts) > 1 else 0
+                                event_dt = now_et.replace(
+                                    hour=h, minute=m, second=0, microsecond=0
+                                )
+                                mins_to_event = (
+                                    event_dt - now_et
+                                ).total_seconds() / 60
+                                if 0 < mins_to_event <= 30:
+                                    ok = engine.close_virtual_position(
+                                        position_id=pos["id"],
+                                        exit_reason="straddle_pre_event_exit",
+                                    )
+                                    if ok:
+                                        closed += 1
+                                        straddle_closed = True
+                                        logger.info(
+                                            "straddle_closed_pre_event",
+                                            mins_to_event=round(mins_to_event, 1),
+                                            event=event.get("event"),
+                                        )
+                                    break
+                            except Exception:
+                                continue
+            except Exception as straddle_err:
+                logger.warning(
+                    "straddle_pre_event_check_failed",
+                    pos_id=pos.get("id"),
+                    error=str(straddle_err),
+                )
+
+            # If the straddle was closed by pre-event exit, skip P&L checks.
+            # Otherwise fall through to normal debit-strategy P&L exits.
+            if straddle_closed:
+                continue
 
             # Determine if this is a debit or credit strategy
             # Debit strategies have negative entry_credit (cost paid)
