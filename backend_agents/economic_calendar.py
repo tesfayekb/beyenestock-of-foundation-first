@@ -6,7 +6,7 @@ Three data sources, in priority order:
 2. FRED release dates (free fallback) — dates only, no consensus
 3. Hardcoded known dates (last resort)
 
-Output: Redis key calendar:today:events (TTL 24hr)
+Output: Redis key calendar:today:intel (TTL 24hr)
 Format: JSON list of event dicts
 
 Every function has try/except. Never blocks trading.
