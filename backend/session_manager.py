@@ -52,13 +52,10 @@ def get_or_create_session(session_date: Optional[date] = None) -> Optional[dict]
             metadata={"session_date": date_str},
         )
         logger.info("session_created", session_date=date_str)
-        if created is None:
-            logger.error(
-                "session_create_failed_null_response",
-                session_date=date_str,
-            )
+        if not created or not created.data:
+            logger.error("session_upsert_empty_response", session_date=date_str)
             return None
-        return created.data[0] if created.data else None
+        return created.data[0]
 
     except Exception as e:
         logger.error("session_create_failed", error=str(e))
