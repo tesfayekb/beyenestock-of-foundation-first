@@ -43,7 +43,7 @@ For every task — no matter how small — read these in order:
 
 ## CHANGE CONTROL (9-Step Workflow)
 
-Follow the exact 9-step workflow in `docs/00-governance/change-control-policy.md` without reinterpretation or reordering. Do not restate or paraphrase it here — the canonical source is the policy document.
+Follow the exact 9-step workflow in `trading-docs/00-governance/change-control-policy.md` without reinterpretation or reordering. Do not restate or paraphrase it here — the canonical source is the policy document.
 
 HIGH-impact changes require pre/post state tracking, blast radius assessment, and rollback plan.
 
@@ -73,7 +73,7 @@ After completing any task that modifies files, produce this output. Optional for
 [Any outstanding risks or required follow-up]
 ```
 
-## PLAN REVISION FORMAT (When Modifying master-plan.md)
+## PLAN REVISION FORMAT (When Modifying MASTER_PLAN.md)
 
 This format supplements but does not replace Constitution Rules 8/9/10, Approved Decisions, and Plan Merge/Preservation rules. Stable IDs must be preserved. Approved sections may only be superseded per Constitution Rule 8.
 
@@ -102,7 +102,7 @@ This format supplements but does not replace Constitution Rules 8/9/10, Approved
 
 ## CONSTITUTIONAL COMPLIANCE
 
-Obey all 11 constitutional rules exactly as written in `docs/00-governance/constitution.md`. This file does not redefine them.
+Obey all 11 constitutional rules exactly as written in `trading-docs/00-governance/constitution.md`. This file does not redefine them.
 
 Key reminders (non-authoritative — the Constitution is the source of truth):
 
@@ -135,9 +135,9 @@ When modifying code that affects shared components, you MUST update the relevant
 
 ## PHASE GATE VERIFICATION PROTOCOL (MANDATORY)
 
-After completing ANY implementation task that falls within a phase (as defined in `master-plan.md` Development Phases):
+After completing ANY implementation task that falls within a phase (as defined in `MASTER_PLAN.md` Development Phases):
 
-1. **Open the phase gate checklist** in `master-plan.md` for the current phase
+1. **Open the phase gate checklist** in `MASTER_PLAN.md` for the current phase
 2. **Check each gate item** — does this task satisfy or partially satisfy any gate condition?
 3. **Update the checkbox** from `[ ]` to `[x]` with an evidence reference (ACT-NNN + brief description)
 4. **If partially satisfied**, leave as `[ ]` but add an italicized note showing partial progress
@@ -147,9 +147,9 @@ This is not optional. Failure to update phase gates after phase-relevant work is
 
 ## DEPENDENCY ORDER (Implementation Sequence)
 
-Implementation must follow the dependency order defined in `docs/08-planning/master-plan.md`. Do NOT implement a module before its dependencies are complete.
+Implementation must follow the dependency order defined in `trading-docs/08-planning/MASTER_PLAN.md`. Do NOT implement a module before its dependencies are complete.
 
-Current sequence (non-authoritative convenience summary — master-plan.md is canonical):
+Current sequence (non-authoritative convenience summary — MASTER_PLAN.md is canonical):
 
 1. ~~PLAN-GOV-001~~ (implemented)
 2. PLAN-AUTH-001 (Authentication)
@@ -198,13 +198,13 @@ Do NOT install packages, tools, or dependencies that may not be supported by oth
 
 ## FEATURE PROPOSAL PROTOCOL (MANDATORY)
 
-If you identify a feature, enhancement, or capability that is NOT in the approved `master-plan.md`:
+If you identify a feature, enhancement, or capability that is NOT in the approved `MASTER_PLAN.md`:
 
 1. **STOP** — do NOT implement it, do NOT modify the master plan, do NOT create code or schema
-2. **Log a proposal** in `docs/08-planning/feature-proposals.md` using the mandatory schema
+2. **Log a proposal** in `trading-docs/08-planning/feature-proposals.md` using the mandatory schema
 3. **Notify** the user that a feature proposal has been logged and requires review
 4. **Wait** for explicit approval from the project lead
-5. **Only after approval**: integrate into master-plan.md (with stable ID, DEC entry, changelog entry) and THEN implement via normal 9-step workflow
+5. **Only after approval**: integrate into MASTER_PLAN.md (with stable ID, DEC entry, changelog entry) and THEN implement via normal 9-step workflow
 
 This applies to ALL unplanned features — no matter how small, useful, or obvious they seem. Scope is locked. No exceptions.
 
