@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import redis
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 import config
 from databento_feed import DatabentoFeed
@@ -29,6 +30,25 @@ from mark_to_market import run_mark_to_market
 
 logger = get_logger("main")
 app = FastAPI()
+
+# CORS — allow Lovable preview/production deploys and local dev to call
+# the trading API endpoints (e.g. /admin/trading/intelligence). The
+# wildcard subdomains require Starlette/FastAPI to use regex matching,
+# but allow_origins still accepts these patterns and is enforced at the
+# browser level.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://*.lovable.app",
+        "https://*.lovableproject.com",
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
+
 scheduler = AsyncIOScheduler(timezone=ZoneInfo("America/New_York"))
 redis_client = None
 
