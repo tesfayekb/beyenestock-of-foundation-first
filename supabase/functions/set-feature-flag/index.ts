@@ -27,6 +27,14 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
 // rotate this constant and redeploy the function.
 const RAILWAY_URL = 'https://diplomatic-mercy-production-7e61.up.railway.app'
 
+// S4 / C-β: shared secret protecting the Railway flag endpoint.
+// Must match the RAILWAY_ADMIN_KEY env var on the Railway service.
+// Forwarded as X-Api-Key on every Railway request. When unset, the
+// Railway endpoint logs an open-mode warning but still accepts the
+// call so existing deploys keep working — operators MUST set both
+// secrets before enabling real capital.
+const RAILWAY_ADMIN_KEY = Deno.env.get('RAILWAY_ADMIN_KEY') ?? ''
+
 const corsHeaders: Record<string, string> = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers':
@@ -158,11 +166,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     let railwayResponse: Response
     try {
+        const railwayHeaders: Record<string, string> = {
+            'Content-Type': 'application/json',
+        }
+        // S4 / C-β: forward shared admin secret when configured. When
+        // RAILWAY_ADMIN_KEY is empty the header is omitted and Railway
+        // falls back to its open-mode warning path — same end-to-end
+        // behaviour as before this fix.
+        if (RAILWAY_ADMIN_KEY) {
+            railwayHeaders['X-Api-Key'] = RAILWAY_ADMIN_KEY
+        }
         railwayResponse = await fetch(
             `${RAILWAY_URL}/admin/trading/feature-flags`,
             {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: railwayHeaders,
                 body: JSON.stringify({
                     flag_key: body.flag_key,
                     enabled: body.enabled,

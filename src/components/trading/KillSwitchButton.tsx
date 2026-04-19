@@ -81,7 +81,7 @@ export function KillSwitchButton({ sessionId, sessionStatus }: KillSwitchButtonP
           </AlertTitle>
           <AlertDescription className="text-xs">
             This will immediately halt all trading for today&apos;s session.
-            This cannot be undone.
+            The session will be halted. You can resume trading from this page.
           </AlertDescription>
         </Alert>
         <div className="flex gap-2">

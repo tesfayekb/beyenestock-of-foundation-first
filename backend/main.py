@@ -890,6 +890,23 @@ async def on_startup() -> None:
             id="trading_weekly_model_performance",
             replace_existing=True,
         )
+        # S4 / P1-1: register mark_to_market BEFORE position_monitor.
+        # Both jobs fire on the same minute="*/1" cron and APScheduler
+        # dispatches them in registration order. Previously the monitor
+        # ran first and evaluated stops/profit-targets against the
+        # PRIOR minute's MTM — a one-cycle (≥60s) delay on every exit
+        # decision. Reversing the order means each minute's monitor
+        # pass sees the freshly-priced current_pnl from the MTM job
+        # that just ran.
+        scheduler.add_job(
+            run_mark_to_market_job,
+            trigger="cron",
+            day_of_week="mon-fri",
+            hour="9-15",
+            minute="*/1",
+            id="trading_mark_to_market",
+            replace_existing=True,
+        )
         # Position monitor — every minute, market hours only (9:30 AM - 3:45 PM ET)
         scheduler.add_job(
             run_position_monitor_job,
@@ -898,16 +915,6 @@ async def on_startup() -> None:
             hour="9-15",
             minute="*/1",
             id="trading_position_monitor",
-            replace_existing=True,
-        )
-        # Mark-to-market — every minute, market hours (prices open positions)
-        scheduler.add_job(
-            run_mark_to_market_job,
-            trigger="cron",
-            day_of_week="mon-fri",
-            hour="9-15",
-            minute="*/1",
-            id="trading_mark_to_market",
             replace_existing=True,
         )
         # D-010: close short-gamma at 2:30 PM ET (scheduler TZ is America/New_York)
@@ -1167,7 +1174,7 @@ async def get_health() -> Dict[str, list]:
 # All handlers fail soft: never raise, always return a JSON-serializable dict.
 # ---------------------------------------------------------------------------
 
-from fastapi import Body as FBody
+from fastapi import Body as FBody, Header, HTTPException
 
 # Whitelist of feature flags exposed to the trading console UI.
 # Adding a key here makes it readable AND writable from the frontend —
@@ -1592,7 +1599,10 @@ async def get_earnings_status():
 
 
 @app.post("/admin/trading/feature-flags")
-async def set_feature_flag(payload: dict = FBody(...)):
+async def set_feature_flag(
+    payload: dict = FBody(...),
+    x_api_key: str = Header(default="", alias="X-Api-Key"),
+):
     """Enable or disable a single feature flag.
 
     Body: ``{"flag_key": "strategy:iron_butterfly:enabled", "enabled": true}``
@@ -1604,7 +1614,25 @@ async def set_feature_flag(payload: dict = FBody(...)):
       - Signal flags (default ON): enabled=true deletes the key
         (restores default ON), enabled=false sets "false" (explicit
         disable). See _SIGNAL_FLAGS.
+
+    S4 / C-β: when ``RAILWAY_ADMIN_KEY`` is set in the Railway env, the
+    caller must present it as ``X-Api-Key``. The set-feature-flag
+    Supabase Edge Function reads the same secret from its own env and
+    forwards it transparently. When unset (legacy / dev), a warning is
+    logged and the endpoint stays open so existing deploys are not
+    broken — operators MUST set this before enabling real capital.
     """
+    admin_key = getattr(config, "RAILWAY_ADMIN_KEY", "")
+    if admin_key:
+        if x_api_key != admin_key:
+            logger.warning(
+                "feature_flag_endpoint_unauthorized",
+                provided_header_present=bool(x_api_key),
+            )
+            raise HTTPException(status_code=401, detail="Unauthorized")
+    else:
+        logger.warning("feature_flag_endpoint_open_no_admin_key_set")
+
     allowed = set(_TRADING_FLAG_KEYS)
 
     try:

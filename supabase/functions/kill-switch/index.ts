@@ -161,10 +161,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
               }
             : { session_status: 'active', halt_reason: null }
 
-    const { error: updateError } = await ctx.serviceClient
+    // S4 / P1-11: chain .select() so the response includes the updated
+    // rows. Without it, supabase-js returns no payload and we cannot
+    // tell whether a session_id mismatch silently matched zero rows
+    // (the prior bug — the toast said "halted" while the row was
+    // unchanged). Using data?.length === 0 — a Supabase update without
+    // .select() does not return a count, only a row array.
+    const { data: updatedRows, error: updateError } = await ctx.serviceClient
         .from('trading_sessions')
         .update(updatePayload)
         .eq('id', body.session_id)
+        .select('id')
 
     if (updateError) {
         console.error('[KILL-SWITCH] update failed', {
@@ -175,6 +182,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return jsonResponse(
             { error: 'Failed to update session' },
             500,
+        )
+    }
+
+    if (!updatedRows || updatedRows.length === 0) {
+        console.error('[KILL-SWITCH] no rows updated', {
+            session_id: body.session_id,
+            action: body.action,
+        })
+        return jsonResponse(
+            { error: 'Session not found or already in target state' },
+            404,
         )
     }
 

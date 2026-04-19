@@ -52,6 +52,14 @@ UNUSUAL_WHALES_API_KEY = os.getenv("UNUSUAL_WHALES_API_KEY", "")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
+# S4 / C-β: shared secret protecting POST /admin/trading/feature-flags.
+# Must be set in BOTH Railway env vars AND the Supabase Edge Function
+# secrets (set-feature-flag forwards it as X-Api-Key). When unset, the
+# endpoint logs a warning and remains open — operators must set this
+# before enabling real capital. Generate via:
+#   python -c "import secrets; print(secrets.token_urlsafe(32))"
+RAILWAY_ADMIN_KEY = os.getenv("RAILWAY_ADMIN_KEY", "")
+
 # HARD-B: External alerting via Gmail
 # Set ALERT_EMAIL to receive critical trading event notifications.
 # Set ALERT_GMAIL_APP_PASSWORD to a Gmail App Password (not your account password).

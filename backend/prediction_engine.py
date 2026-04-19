@@ -19,6 +19,22 @@ from session_manager import get_today_session
 logger = get_logger("prediction_engine")
 
 
+def _safe_float(value, default: float) -> float:
+    """S4 / E-5: parse a Redis string/bytes value to float, fall back
+    to the provided default on any conversion error or empty value."""
+    if value is None:
+        return default
+    try:
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", errors="ignore")
+        s = str(value).strip()
+        if not s:
+            return default
+        return float(s)
+    except (ValueError, TypeError):
+        return default
+
+
 def _is_market_hours() -> bool:
     try:
         import zoneinfo
@@ -701,7 +717,15 @@ class PredictionEngine:
                 **regime_data,
                 # placeholders until real price feed in Phase 2B
                 "spx_price": self._get_spx_price(),
-                "vix": 18.0,
+                # S4 / E-5: prefer the live VIX from polygon_feed
+                # (polygon:vix:current). Falls back to 18.0 only when
+                # Redis is empty or the value is malformed — the prior
+                # hardcode meant every persisted prediction row
+                # reported a constant VIX regardless of actual market
+                # state, breaking downstream backtests and analytics.
+                "vix": _safe_float(
+                    self._read_redis("polygon:vix:current", None), 18.0
+                ),
                 "vvix": vvix,
                 "vvix_z_score": round(vvix_z, 3),
                 "no_trade_signal": no_trade,
