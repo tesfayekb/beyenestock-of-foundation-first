@@ -752,25 +752,50 @@ def pre_market_scan() -> None:
 
 
 async def heartbeat_check() -> None:
+    """
+    S7-3: scan trading_system_health for stale services and mark them
+    degraded. Was an `async def` whose body was synchronous Supabase
+    I/O — every 60s it blocked the event loop for the duration of the
+    select round-trip (~50-200ms typical, longer on Cloudflare
+    cold-paths). That latency starved the prediction-cycle coroutine
+    of scheduling slots.
+
+    Fix: do the read in a worker thread via `asyncio.to_thread`. The
+    sync supabase client is thread-safe in our setup because every
+    call site serialises through `_client_lock` in db.py (see the
+    get_client() docstring for the full HTTP/2 race rationale).
+
+    The `write_health_status` calls for stale services stay outside
+    the thread — they're already lock-serialised internally and the
+    list of stales is typically empty / very small.
+    """
     try:
-        rows = (
-            get_client()
-            .table("trading_system_health")
-            .select("service_name,last_heartbeat_at")
-            .execute()
-            .data
-        )
-        now = datetime.now(timezone.utc)
-        for row in rows:
-            heartbeat = datetime.fromisoformat(
-                row["last_heartbeat_at"].replace("Z", "+00:00")
+        def _check_sync():
+            rows = (
+                get_client()
+                .table("trading_system_health")
+                .select("service_name,last_heartbeat_at")
+                .execute()
+                .data
             )
-            if (now - heartbeat).total_seconds() > 90:
-                write_health_status(
-                    row["service_name"],
-                    "degraded",
-                    last_error_message=None,
+            now = datetime.now(timezone.utc)
+            stale = []
+            for row in rows:
+                heartbeat = datetime.fromisoformat(
+                    row["last_heartbeat_at"].replace("Z", "+00:00")
                 )
+                if (now - heartbeat).total_seconds() > 90:
+                    stale.append(row["service_name"])
+            return stale
+
+        stale_services = await asyncio.to_thread(_check_sync)
+
+        for service_name in stale_services:
+            write_health_status(
+                service_name,
+                "degraded",
+                last_error_message=None,
+            )
     except Exception as exc:
         logger.critical("heartbeat_check_failed", error=str(exc))
 
@@ -1068,6 +1093,16 @@ async def on_startup() -> None:
             id="trading_flow_refresh",
             timezone="America/New_York",
             replace_existing=True,
+            # S7-2: prevent concurrent flow_agent runs. The agent does
+            # external HTTP fetches (Polygon options snapshot, Unusual
+            # Whales) that can occasionally exceed the 30-min interval.
+            # Without max_instances the next fire would queue on top
+            # of the still-running one, multiplying API spend and
+            # producing interleaved Redis writes.
+            max_instances=1,
+            # If a fire is missed because the previous run is still
+            # going, just skip it instead of running back-to-back.
+            coalesce=True,
         )
         # Phase 2C: sentiment agent — 8:30 AM ET (same time as macro)
         scheduler.add_job(
@@ -1139,9 +1174,18 @@ async def on_startup() -> None:
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
-    await tradier_feed.stop()
-    await polygon_feed.stop()
-    await databento_feed.stop()
+    # S7-1: guard against partial startup. If on_startup raised before
+    # a feed was assigned (e.g., Redis ping failed) the corresponding
+    # module global is still None, and `await None.stop()` raises an
+    # AttributeError that masks the real startup error in the Railway
+    # crash log. Per-feed None checks let shutdown clean up whatever
+    # actually came up.
+    if tradier_feed is not None:
+        await tradier_feed.stop()
+    if polygon_feed is not None:
+        await polygon_feed.stop()
+    if databento_feed is not None:
+        await databento_feed.stop()
 
     for task in background_tasks:
         task.cancel()

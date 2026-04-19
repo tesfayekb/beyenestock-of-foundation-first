@@ -149,13 +149,17 @@ def _fetch_finnhub_calendar(target: date) -> list[dict]:
         if not config.FINNHUB_API_KEY:
             return _fetch_fred_fallback(target)
 
+        # S7-6: token moved out of the URL into the X-Finnhub-Token
+        # header (Finnhub's documented auth header). Keys in URLs leak
+        # into Railway log streams, httpx exception messages, and any
+        # upstream proxy access logs.
         url = (
             f"https://finnhub.io/api/v1/calendar/economic"
             f"?from={target.isoformat()}&to={target.isoformat()}"
-            f"&token={config.FINNHUB_API_KEY}"
         )
+        headers = {"X-Finnhub-Token": config.FINNHUB_API_KEY}
         with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
-            resp = client.get(url)
+            resp = client.get(url, headers=headers)
 
         if resp.status_code != 200:
             return _fetch_fred_fallback(target)
@@ -255,13 +259,15 @@ def _fetch_major_earnings(target: date) -> list[dict]:
         if not config.FINNHUB_API_KEY:
             return []
 
+        # S7-6: token in X-Finnhub-Token header (same fix as the
+        # economic calendar above — keeps the key out of every log path).
         url = (
             f"https://finnhub.io/api/v1/calendar/earnings"
             f"?from={target.isoformat()}&to={target.isoformat()}"
-            f"&token={config.FINNHUB_API_KEY}"
         )
+        headers = {"X-Finnhub-Token": config.FINNHUB_API_KEY}
         with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
-            resp = client.get(url)
+            resp = client.get(url, headers=headers)
 
         if resp.status_code != 200:
             return []

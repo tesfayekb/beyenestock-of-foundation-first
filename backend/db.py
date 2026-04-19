@@ -10,6 +10,17 @@ logger = get_logger("db")
 _client = None
 _client_lock = threading.Lock()
 
+# S7-5: in-process cache of the last status written per service.
+# Keyed on service_name; value is the last status string we upserted.
+# The five *_keepalive jobs in main.py each fire every 30s — that's
+# ~14,400 health upserts per service per day, virtually all of them
+# duplicate "healthy" rows that only refresh last_heartbeat_at.
+# Comparing status (alone, not the timestamp) lets us short-circuit
+# those identical writes. Cleared on process restart, which is
+# intentional — the first write after a restart always goes through
+# so monitoring can confirm the new process is alive.
+_health_status_cache: dict = {}
+
 # Belt-and-suspenders: optionally set HTTPX_NO_H2=1 in Railway environment
 # variables. Currently a no-op for httpx 0.28 (it does not honour that
 # variable), but it costs nothing and protects against a future supabase-py
@@ -164,6 +175,28 @@ def write_health_status(service_name: str, status: str, **kwargs) -> bool:
         # Always clear last_error_message when status is healthy — do not persist stale errors
         if status == "healthy" and "last_error_message" not in kwargs:
             payload["last_error_message"] = None
+
+        # S7-5: skip the upsert when the cached status matches the new
+        # status AND the call carries no extra data. This eliminates
+        # ~95% of the keepalive write volume (steady-state "healthy"
+        # heartbeats). Always write through when:
+        #   * status changed (the cache miss path),
+        #   * status is "error" or "degraded" (operational signal that
+        #     must reach the dashboard immediately, even if we already
+        #     wrote an error a moment ago — last_heartbeat_at refresh
+        #     proves the writer itself is still alive),
+        #   * any kwargs are present (latency_ms, last_error_message,
+        #     databento_connected, etc. — those carry diagnostic data
+        #     that downstream consumers depend on).
+        cached_status = _health_status_cache.get(service_name)
+        if (
+            cached_status == status
+            and status not in ("error", "degraded")
+            and not kwargs
+        ):
+            return True
+        _health_status_cache[service_name] = status
+
         # Increment error_count_1h when writing an error status (GLC-006)
         if status == "error":
             try:

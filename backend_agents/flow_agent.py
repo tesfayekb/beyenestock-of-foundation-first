@@ -187,14 +187,17 @@ def _fetch_polygon_put_call(cfg) -> dict:
         from datetime import date
         today = date.today().isoformat()
 
+        # S7-6: apiKey moved to the Authorization header — same pattern
+        # as polygon_feed.py uses. Keeps the key out of Railway log
+        # streams and any proxy access logs.
         url = (
             f"https://api.polygon.io/v3/snapshot/options/I:SPX"
             f"?expiration_date={today}"
             f"&limit=250"
-            f"&apiKey={cfg.POLYGON_API_KEY}"
         )
+        headers = {"Authorization": f"Bearer {cfg.POLYGON_API_KEY}"}
         with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
-            resp = client.get(url)
+            resp = client.get(url, headers=headers)
 
         if resp.status_code != 200:
             return {}
