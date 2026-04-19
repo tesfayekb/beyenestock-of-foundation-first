@@ -109,7 +109,12 @@ export function useAbComparison() {
             const bLead = bAnn - aAnn;
 
             const gate: AbGateStatus = {
-                built: true,
+                // C-7: align with shadow_engine.get_ab_gate_status() —
+                // "built" means at least one shadow row exists. The
+                // Activation Dashboard reads this and previously
+                // disagreed with the A/B page (which always claimed
+                // built=true even before the first row landed).
+                built: rows.length > 0,
                 days_elapsed: daysElapsed,
                 days_required: 90,
                 trades_count: closedCount,

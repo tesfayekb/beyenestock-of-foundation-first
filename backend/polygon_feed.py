@@ -133,8 +133,12 @@ class PolygonFeed:
 
     async def _heartbeat_loop(self) -> None:
         while not self._stop_event.is_set():
+            # C-3: emit health under this feed's own service name. The
+            # generic ingestor name is reserved for the orchestrator
+            # startup write in main.py.on_startup; emitting it from
+            # here masked polygon_feed's true health on the dashboard.
             write_health_status(
-                "data_ingestor",
+                "polygon_feed",
                 "healthy",
                 latency_ms=0,
                 data_lag_seconds=0,

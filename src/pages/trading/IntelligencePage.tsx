@@ -86,7 +86,7 @@ function DirectionBadge({ direction }: { direction?: string }) {
 }
 
 export default function IntelligencePage() {
-    const { data: intel, isLoading } = useTradeIntelligence();
+    const { data: intel, isLoading, isError } = useTradeIntelligence();
 
     if (isLoading) {
         return (
@@ -96,6 +96,35 @@ export default function IntelligencePage() {
                     subtitle="Agent outputs and market signals"
                 />
                 <LoadingSkeleton variant="card" rows={4} />
+            </div>
+        );
+    }
+
+    // C-6: surface fetch errors instead of falling through to the
+    // happy path with empty intel (which previously rendered as
+    // "no agents ran today" — indistinguishable from a real outage).
+    if (isError) {
+        return (
+            <div className="space-y-6">
+                <PageHeader
+                    title="AI Intelligence"
+                    subtitle="Live agent analysis and trade context"
+                />
+                <Card>
+                    <CardContent className="pt-6">
+                        <p className="text-sm text-destructive">
+                            Failed to load intelligence data. Check agent
+                            health on the{' '}
+                            <a
+                                href="/trading/health"
+                                className="underline"
+                            >
+                                Health page
+                            </a>
+                            .
+                        </p>
+                    </CardContent>
+                </Card>
             </div>
         );
     }

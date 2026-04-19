@@ -100,6 +100,13 @@ async function fetchIntelligence(): Promise<TradingIntelligence> {
             .select('flag_key, enabled'),
     ]);
 
+    // C-6: throw on query errors so React Query exposes isError.
+    // Previously these were silently coerced to empty arrays — the
+    // page rendered as "no agents ran today" instead of showing an
+    // error state when RLS / Supabase actually failed.
+    if (briefsResult.error) throw briefsResult.error;
+    if (flagsResult.error) throw flagsResult.error;
+
     const briefs = (briefsResult.data ?? []) as BriefRow[];
     const flagRows = (flagsResult.data ?? []) as FlagRow[];
 

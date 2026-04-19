@@ -796,8 +796,10 @@ async def on_startup() -> None:
             scheduler.add_job(
                 gex_engine.compute_gex,
                 trigger="cron",
+                day_of_week="mon-fri",
                 id="trading_gex_computation",
                 minute="*/5",
+                replace_existing=True,
             )
         if "trading_heartbeat_check" in jobs:
             scheduler.add_job(
@@ -805,6 +807,7 @@ async def on_startup() -> None:
                 trigger="interval",
                 id="trading_heartbeat_check",
                 seconds=60,
+                replace_existing=True,
             )
         if "trading_pre_market_scan" in jobs:
             scheduler.add_job(
@@ -821,30 +824,35 @@ async def on_startup() -> None:
             trigger="interval",
             id="gex_heartbeat_keepalive",
             seconds=30,
+            replace_existing=True,
         )
         scheduler.add_job(
             prediction_engine_keepalive,
             trigger="interval",
             seconds=30,
             id="prediction_engine_keepalive",
+            replace_existing=True,
         )
         scheduler.add_job(
             strategy_selector_keepalive,
             trigger="interval",
             seconds=30,
             id="strategy_selector_keepalive",
+            replace_existing=True,
         )
         scheduler.add_job(
             risk_engine_keepalive,
             trigger="interval",
             seconds=30,
             id="risk_engine_keepalive",
+            replace_existing=True,
         )
         scheduler.add_job(
             execution_engine_keepalive,
             trigger="interval",
             seconds=30,
             id="execution_engine_keepalive",
+            replace_existing=True,
         )
         scheduler.add_job(
             run_prediction_cycle,
@@ -858,6 +866,7 @@ async def on_startup() -> None:
         scheduler.add_job(
             run_eod_criteria_evaluation,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=17,
             minute=0,
             id="trading_eod_criteria_evaluation",
@@ -925,6 +934,7 @@ async def on_startup() -> None:
         scheduler.add_job(
             run_emergency_backstop_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=15, minute=55,
             id="trading_emergency_backstop",
             timezone="America/New_York",
@@ -934,6 +944,7 @@ async def on_startup() -> None:
         scheduler.add_job(
             run_prediction_watchdog_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour="9-15", minute="*/5",
             id="trading_prediction_watchdog",
             timezone="America/New_York",
@@ -943,6 +954,7 @@ async def on_startup() -> None:
         scheduler.add_job(
             run_eod_reconciliation_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=16, minute=15,
             id="trading_eod_reconciliation",
             timezone="America/New_York",
@@ -952,6 +964,7 @@ async def on_startup() -> None:
         scheduler.add_job(
             run_ab_eod_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=16, minute=30,
             id="trading_ab_eod",
             timezone="America/New_York",
@@ -983,39 +996,49 @@ async def on_startup() -> None:
         scheduler.add_job(
             _run_economic_calendar_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=8, minute=25,
             id="trading_economic_calendar",
             timezone="America/New_York",
+            replace_existing=True,
         )
         scheduler.add_job(
             _run_macro_agent_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=8, minute=30,
             id="trading_macro_agent",
             timezone="America/New_York",
+            replace_existing=True,
         )
         # Phase A (Loop 1): feedback brief — must run BEFORE synthesis (9:15)
         # so Claude's prompt can include the latest performance feedback.
         scheduler.add_job(
             _run_feedback_agent_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=9, minute=10,
             id="trading_feedback_agent",
             timezone="America/New_York",
+            replace_existing=True,
         )
         scheduler.add_job(
             _run_synthesis_agent_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=9, minute=15,
             id="trading_synthesis_agent",
             timezone="America/New_York",
+            replace_existing=True,
         )
         scheduler.add_job(
             _run_surprise_detector_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=8, minute=45,
             id="trading_surprise_detector",
             timezone="America/New_York",
+            replace_existing=True,
         )
 
         # Phase 2C: flow agent — 8:45 AM ET pre-market load,
@@ -1023,30 +1046,38 @@ async def on_startup() -> None:
         scheduler.add_job(
             _run_flow_agent_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=8, minute=45,
             id="trading_flow_agent",
             timezone="America/New_York",
+            replace_existing=True,
         )
+        # NOTE: interval triggers do not accept day_of_week — the agent
+        # gates internally via is_market_hours / its feature flag.
         scheduler.add_job(
             _run_flow_agent_job,
             trigger="interval",
             minutes=30,
             id="trading_flow_refresh",
             timezone="America/New_York",
+            replace_existing=True,
         )
         # Phase 2C: sentiment agent — 8:30 AM ET (same time as macro)
         scheduler.add_job(
             _run_sentiment_agent_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=8, minute=30,
             id="trading_sentiment_agent",
             timezone="America/New_York",
+            replace_existing=True,
         )
 
         # Phase 5A: Earnings Volatility System
         scheduler.add_job(
             _run_earnings_scan_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=8, minute=45,
             id="trading_earnings_scan",
             timezone="America/New_York",
@@ -1055,6 +1086,7 @@ async def on_startup() -> None:
         scheduler.add_job(
             _run_earnings_entry_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour=9, minute=50,
             id="trading_earnings_entry",
             timezone="America/New_York",
@@ -1063,6 +1095,7 @@ async def on_startup() -> None:
         scheduler.add_job(
             _run_earnings_monitor_job,
             trigger="cron",
+            day_of_week="mon-fri",
             hour="9-15", minute="*/15",
             id="trading_earnings_monitor",
             timezone="America/New_York",

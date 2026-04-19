@@ -756,13 +756,29 @@ class StrategySelector:
                                     except Exception:
                                         pass
                             if not event_passed:
+                                # C-4: enforce strategy:long_straddle:enabled.
+                                # Mirrors the iron_butterfly flag check pattern
+                                # at line ~555: signal: prefix flags default
+                                # ON, strategy:/agent: prefix default OFF.
+                                # Falls back to iron_condor when the flag is
+                                # OFF so the calendar-too-early branch still
+                                # produces a tradeable strategy.
+                                _straddle_allowed = self._check_feature_flag(
+                                    "strategy:long_straddle:enabled",
+                                    default=False,
+                                )
                                 strategy_type = (
                                     "long_straddle"
-                                    if "long_straddle" in ordered
+                                    if (
+                                        "long_straddle" in ordered
+                                        and _straddle_allowed
+                                    )
                                     else "iron_condor"
                                 )
                                 logger.info(
-                                    "calendar_spread_too_early_using_straddle"
+                                    "calendar_spread_too_early_using_straddle",
+                                    selected=strategy_type,
+                                    straddle_flag=_straddle_allowed,
                                 )
                 except Exception:
                     strategy_type = "iron_condor"

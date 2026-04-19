@@ -80,7 +80,7 @@ def run_macro_agent(redis_client) -> dict:
             expected_move=brief["expected_move_pct"],
         )
 
-        # Write to Redis
+        # Write to Redis (silent: intentional fail-closed path)
         if redis_client:
             try:
                 redis_client.setex(
@@ -88,7 +88,14 @@ def run_macro_agent(redis_client) -> dict:
                     28800,  # 8 hours
                     json.dumps(brief),
                 )
-                # CSP-fix mirror: dashboard reads via direct supabase-js.
+            except Exception:
+                pass  # Redis write failure must never block return
+
+            # CSP-fix mirror: dashboard reads via direct supabase-js.
+            # C-5: log mirror failures so silent RLS / schema breakage
+            # is visible in Railway. Bare except: pass previously
+            # masked these from operators.
+            try:
                 get_client().table("trading_ai_briefs").upsert(
                     {
                         "brief_kind": "macro",
@@ -97,8 +104,11 @@ def run_macro_agent(redis_client) -> dict:
                     },
                     on_conflict="brief_kind",
                 ).execute()
-            except Exception:
-                pass
+            except Exception as _mirror_exc:
+                logger.warning(
+                    "macro_agent_supabase_mirror_failed",
+                    error=str(_mirror_exc),
+                )
 
         return brief
 
