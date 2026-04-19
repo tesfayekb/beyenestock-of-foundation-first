@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      ab_session_comparison: {
+        Row: {
+          a_confidence: number | null
+          a_direction: string | null
+          a_no_trade: boolean | null
+          a_regime: string | null
+          a_synthetic_pnl: number | null
+          a_would_have_traded: boolean | null
+          b_no_trade: boolean | null
+          b_session_pnl: number | null
+          b_trades_count: number | null
+          computed_at: string | null
+          id: string
+          move_pct: number | null
+          session_date: string
+          spx_close: number | null
+          spx_open: number | null
+        }
+        Insert: {
+          a_confidence?: number | null
+          a_direction?: string | null
+          a_no_trade?: boolean | null
+          a_regime?: string | null
+          a_synthetic_pnl?: number | null
+          a_would_have_traded?: boolean | null
+          b_no_trade?: boolean | null
+          b_session_pnl?: number | null
+          b_trades_count?: number | null
+          computed_at?: string | null
+          id?: string
+          move_pct?: number | null
+          session_date: string
+          spx_close?: number | null
+          spx_open?: number | null
+        }
+        Update: {
+          a_confidence?: number | null
+          a_direction?: string | null
+          a_no_trade?: boolean | null
+          a_regime?: string | null
+          a_synthetic_pnl?: number | null
+          a_would_have_traded?: boolean | null
+          b_no_trade?: boolean | null
+          b_session_pnl?: number | null
+          b_trades_count?: number | null
+          computed_at?: string | null
+          id?: string
+          move_pct?: number | null
+          session_date?: string
+          spx_close?: number | null
+          spx_open?: number | null
+        }
+        Relationships: []
+      }
       alert_configs: {
         Row: {
           comparison: string
@@ -130,6 +184,162 @@ export type Database = {
           target_id?: string | null
           target_type?: string | null
           user_agent?: string | null
+        }
+        Relationships: []
+      }
+      earnings_calendar: {
+        Row: {
+          actual_eps: number | null
+          actual_move_pct: number | null
+          announce_time: string | null
+          created_at: string
+          earnings_date: string
+          estimated_eps: number | null
+          fiscal_quarter: string | null
+          id: string
+          implied_move_pct: number | null
+          straddle_opened: boolean | null
+          straddle_pnl: number | null
+          ticker: string
+        }
+        Insert: {
+          actual_eps?: number | null
+          actual_move_pct?: number | null
+          announce_time?: string | null
+          created_at?: string
+          earnings_date: string
+          estimated_eps?: number | null
+          fiscal_quarter?: string | null
+          id?: string
+          implied_move_pct?: number | null
+          straddle_opened?: boolean | null
+          straddle_pnl?: number | null
+          ticker: string
+        }
+        Update: {
+          actual_eps?: number | null
+          actual_move_pct?: number | null
+          announce_time?: string | null
+          created_at?: string
+          earnings_date?: string
+          estimated_eps?: number | null
+          fiscal_quarter?: string | null
+          id?: string
+          implied_move_pct?: number | null
+          straddle_opened?: boolean | null
+          straddle_pnl?: number | null
+          ticker?: string
+        }
+        Relationships: []
+      }
+      earnings_positions: {
+        Row: {
+          account_allocation_pct: number | null
+          actual_move_pct: number | null
+          announce_time: string | null
+          call_premium: number | null
+          call_strike: number | null
+          contracts: number | null
+          created_at: string
+          earnings_date: string
+          entry_date: string
+          exit_date: string | null
+          exit_reason: string | null
+          exit_value: number | null
+          expiry_date: string
+          historical_edge_score: number | null
+          id: string
+          implied_move_pct: number | null
+          net_pnl: number | null
+          net_pnl_pct: number | null
+          notes: string | null
+          position_mode: string
+          put_premium: number | null
+          put_strike: number | null
+          status: string
+          stock_price_at_entry: number | null
+          strategy_type: string
+          ticker: string
+          total_debit: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          account_allocation_pct?: number | null
+          actual_move_pct?: number | null
+          announce_time?: string | null
+          call_premium?: number | null
+          call_strike?: number | null
+          contracts?: number | null
+          created_at?: string
+          earnings_date: string
+          entry_date: string
+          exit_date?: string | null
+          exit_reason?: string | null
+          exit_value?: number | null
+          expiry_date: string
+          historical_edge_score?: number | null
+          id?: string
+          implied_move_pct?: number | null
+          net_pnl?: number | null
+          net_pnl_pct?: number | null
+          notes?: string | null
+          position_mode?: string
+          put_premium?: number | null
+          put_strike?: number | null
+          status?: string
+          stock_price_at_entry?: number | null
+          strategy_type?: string
+          ticker: string
+          total_debit?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          account_allocation_pct?: number | null
+          actual_move_pct?: number | null
+          announce_time?: string | null
+          call_premium?: number | null
+          call_strike?: number | null
+          contracts?: number | null
+          created_at?: string
+          earnings_date?: string
+          entry_date?: string
+          exit_date?: string | null
+          exit_reason?: string | null
+          exit_value?: number | null
+          expiry_date?: string
+          historical_edge_score?: number | null
+          id?: string
+          implied_move_pct?: number | null
+          net_pnl?: number | null
+          net_pnl_pct?: number | null
+          notes?: string | null
+          position_mode?: string
+          put_premium?: number | null
+          put_strike?: number | null
+          status?: string
+          stock_price_at_entry?: number | null
+          strategy_type?: string
+          ticker?: string
+          total_debit?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      earnings_upcoming_scan: {
+        Row: {
+          payload: Json
+          scan_id: number
+          scanned_at: string
+        }
+        Insert: {
+          payload: Json
+          scan_id?: number
+          scanned_at?: string
+        }
+        Update: {
+          payload?: Json
+          scan_id?: number
+          scanned_at?: string
         }
         Relationships: []
       }
@@ -602,6 +812,92 @@ export type Database = {
         }
         Relationships: []
       }
+      shadow_predictions: {
+        Row: {
+          confidence: number | null
+          direction: string | null
+          gex_net: number | null
+          id: string
+          no_trade_reason: string | null
+          no_trade_signal: boolean | null
+          predicted_at: string
+          rcs: number | null
+          regime: string | null
+          session_id: string | null
+          spx_price: number | null
+          vix: number | null
+          vvix_z_score: number | null
+        }
+        Insert: {
+          confidence?: number | null
+          direction?: string | null
+          gex_net?: number | null
+          id?: string
+          no_trade_reason?: string | null
+          no_trade_signal?: boolean | null
+          predicted_at?: string
+          rcs?: number | null
+          regime?: string | null
+          session_id?: string | null
+          spx_price?: number | null
+          vix?: number | null
+          vvix_z_score?: number | null
+        }
+        Update: {
+          confidence?: number | null
+          direction?: string | null
+          gex_net?: number | null
+          id?: string
+          no_trade_reason?: string | null
+          no_trade_signal?: boolean | null
+          predicted_at?: string
+          rcs?: number | null
+          regime?: string | null
+          session_id?: string | null
+          spx_price?: number | null
+          vix?: number | null
+          vvix_z_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shadow_predictions_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "trading_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_alerts: {
+        Row: {
+          ack_at: string | null
+          acknowledged: boolean | null
+          detail: string | null
+          event: string
+          fired_at: string
+          id: string
+          level: string
+        }
+        Insert: {
+          ack_at?: string | null
+          acknowledged?: boolean | null
+          detail?: string | null
+          event: string
+          fired_at?: string
+          id?: string
+          level: string
+        }
+        Update: {
+          ack_at?: string | null
+          acknowledged?: boolean | null
+          detail?: string | null
+          event?: string
+          fired_at?: string
+          id?: string
+          level?: string
+        }
+        Relationships: []
+      }
       system_config: {
         Row: {
           description: string | null
@@ -668,6 +964,24 @@ export type Database = {
           metric_key?: string
           recorded_at?: string
           value?: number
+        }
+        Relationships: []
+      }
+      trading_ai_briefs: {
+        Row: {
+          brief_kind: string
+          generated_at: string
+          payload: Json
+        }
+        Insert: {
+          brief_kind: string
+          generated_at?: string
+          payload: Json
+        }
+        Update: {
+          brief_kind?: string
+          generated_at?: string
+          payload?: Json
         }
         Relationships: []
       }
@@ -795,6 +1109,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      trading_feature_flags: {
+        Row: {
+          enabled: boolean
+          flag_key: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          enabled?: boolean
+          flag_key: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          enabled?: boolean
+          flag_key?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
       }
       trading_model_performance: {
         Row: {
@@ -966,6 +1301,7 @@ export type Database = {
           current_pnl: number | null
           current_state: number | null
           current_touch_prob: number | null
+          decision_context: Json | null
           entry_at: string
           entry_credit: number | null
           entry_cv_stress: number | null
@@ -992,6 +1328,7 @@ export type Database = {
           peak_pnl: number | null
           position_mode: string
           position_type: string | null
+          prediction_id: string | null
           session_id: string | null
           short_strike: number | null
           short_strike_2: number | null
@@ -1014,6 +1351,7 @@ export type Database = {
           current_pnl?: number | null
           current_state?: number | null
           current_touch_prob?: number | null
+          decision_context?: Json | null
           entry_at: string
           entry_credit?: number | null
           entry_cv_stress?: number | null
@@ -1040,6 +1378,7 @@ export type Database = {
           peak_pnl?: number | null
           position_mode: string
           position_type?: string | null
+          prediction_id?: string | null
           session_id?: string | null
           short_strike?: number | null
           short_strike_2?: number | null
@@ -1062,6 +1401,7 @@ export type Database = {
           current_pnl?: number | null
           current_state?: number | null
           current_touch_prob?: number | null
+          decision_context?: Json | null
           entry_at?: string
           entry_credit?: number | null
           entry_cv_stress?: number | null
@@ -1088,6 +1428,7 @@ export type Database = {
           peak_pnl?: number | null
           position_mode?: string
           position_type?: string | null
+          prediction_id?: string | null
           session_id?: string | null
           short_strike?: number | null
           short_strike_2?: number | null
@@ -1099,6 +1440,13 @@ export type Database = {
           tradier_order_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "trading_positions_prediction_id_fkey"
+            columns: ["prediction_id"]
+            isOneToOne: false
+            referencedRelation: "trading_prediction_outputs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "trading_positions_session_id_fkey"
             columns: ["session_id"]
@@ -1570,6 +1918,23 @@ export type Database = {
     }
     Functions: {
       cleanup_mfa_recovery_codes: { Args: never; Returns: undefined }
+      get_feedback_trades: {
+        Args: never
+        Returns: {
+          contracts: number
+          entry_at: string
+          entry_credit: number
+          entry_regime: string
+          exit_at: string
+          id: string
+          net_pnl: number
+          prediction_confidence: number
+          prediction_direction: string
+          prediction_regime: string
+          session_id: string
+          strategy_type: string
+        }[]
+      }
       get_my_authorization_context: { Args: never; Returns: Json }
       has_permission: {
         Args: { _permission_key: string; _user_id: string }
