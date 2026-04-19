@@ -683,3 +683,127 @@ async def get_health() -> Dict[str, list]:
             last_error_message=f"health_endpoint_failed: {exc}",
         )
         return {"services": []}
+
+
+# ---------------------------------------------------------------------------
+# Phase 4C — Trading Console intelligence + feature flag endpoints.
+# Read AI agent briefs and toggle Redis feature flags from the frontend.
+# All handlers fail soft: never raise, always return a JSON-serializable dict.
+# ---------------------------------------------------------------------------
+
+from fastapi import Body as FBody
+
+# Whitelist of feature flags exposed to the trading console UI.
+# Adding a key here makes it readable AND writable from the frontend —
+# guard new keys before adding.
+_TRADING_FLAG_KEYS = [
+    "agents:ai_synthesis:enabled",
+    "agents:flow_agent:enabled",
+    "agents:sentiment_agent:enabled",
+    "strategy:iron_butterfly:enabled",
+    "strategy:long_straddle:enabled",
+    "strategy:calendar_spread:enabled",
+    "strategy:ai_hint_override:enabled",
+]
+
+
+@app.get("/admin/trading/intelligence")
+async def get_trading_intelligence():
+    """Return all AI agent brief summaries + feature flag states from Redis.
+
+    Used by the Trading Console War Room to render the AI Intelligence panel.
+    Falls back to empty dicts on any error — never raises.
+    """
+    try:
+        if not redis_client:
+            return {
+                "error": "redis_unavailable",
+                "calendar": {},
+                "macro": {},
+                "flow": {},
+                "sentiment": {},
+                "synthesis": {},
+                "flags": {},
+            }
+
+        import json
+
+        def safe_get(key: str) -> dict:
+            try:
+                raw = redis_client.get(key)
+                return json.loads(raw) if raw else {}
+            except Exception:
+                return {}
+
+        def flag_state(key: str) -> bool:
+            try:
+                val = redis_client.get(key)
+                return val in ("true", b"true")
+            except Exception:
+                return False
+
+        return {
+            "calendar":  safe_get("calendar:today:intel"),
+            "macro":     safe_get("ai:macro:brief"),
+            "flow":      safe_get("ai:flow:brief"),
+            "sentiment": safe_get("ai:sentiment:brief"),
+            "synthesis": safe_get("ai:synthesis:latest"),
+            "flags":     {k: flag_state(k) for k in _TRADING_FLAG_KEYS},
+        }
+    except Exception as exc:
+        logger.error("get_trading_intelligence_failed", error=str(exc))
+        return {"error": str(exc)}
+
+
+@app.get("/admin/trading/feature-flags")
+async def get_feature_flags():
+    """Return the current state of every trading feature flag in Redis."""
+    try:
+        if not redis_client:
+            return {"flags": {}}
+
+        flags = {}
+        for key in _TRADING_FLAG_KEYS:
+            try:
+                val = redis_client.get(key)
+                flags[key] = val in ("true", b"true")
+            except Exception:
+                flags[key] = False
+
+        return {"flags": flags}
+    except Exception as exc:
+        logger.error("get_feature_flags_failed", error=str(exc))
+        return {"flags": {}}
+
+
+@app.post("/admin/trading/feature-flags")
+async def set_feature_flag(payload: dict = FBody(...)):
+    """Enable or disable a single feature flag.
+
+    Body: ``{"flag_key": "strategy:iron_butterfly:enabled", "enabled": true}``
+    Only whitelisted keys in ``_TRADING_FLAG_KEYS`` are accepted.
+    Setting ``enabled=false`` deletes the key (treated as off everywhere).
+    """
+    allowed = set(_TRADING_FLAG_KEYS)
+
+    try:
+        flag_key = payload.get("flag_key", "")
+        enabled = bool(payload.get("enabled", False))
+
+        if flag_key not in allowed:
+            return {"error": f"flag_key not in allowlist: {flag_key}"}
+
+        if not redis_client:
+            return {"error": "redis_unavailable"}
+
+        if enabled:
+            redis_client.set(flag_key, "true")
+        else:
+            redis_client.delete(flag_key)
+
+        logger.info("feature_flag_updated", flag_key=flag_key, enabled=enabled)
+        return {"ok": True, "flag_key": flag_key, "enabled": enabled}
+
+    except Exception as exc:
+        logger.error("set_feature_flag_failed", error=str(exc))
+        return {"error": str(exc)}

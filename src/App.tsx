@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -25,6 +25,7 @@ import MfaEnroll from "./pages/MfaEnroll";
 
 // Layouts (eagerly loaded — shell must be ready immediately)
 import { AdminLayout } from "./layouts/AdminLayout";
+import { TradingLayout } from "./layouts/TradingLayout";
 import { UserLayout } from "./layouts/UserLayout";
 
 // Admin pages (lazy loaded)
@@ -166,38 +167,49 @@ const App = () => (
                     <AdminOnboardingPage />
                   </PermissionGate>
                 } />
-                <Route path="trading/health" element={
-                  <PermissionGate permission="trading.view">
-                    <TradingHealthPage />
-                  </PermissionGate>
-                } />
-                <Route path="trading/warroom" element={
-                  <PermissionGate permission="trading.view">
-                    <TradingWarRoomPage />
-                  </PermissionGate>
-                } />
-                <Route path="trading/positions" element={
+                <Route path="*" element={<DashboardNotFound />} />
+              </Route>
+
+              {/* Trading Console — dedicated /trading/* dashboard (Phase 4C) */}
+              <Route path="/trading" element={<TradingLayout />}>
+                <Route index element={<Navigate to="/trading/warroom" replace />} />
+                <Route path="warroom" element={<TradingWarRoomPage />} />
+                <Route path="positions" element={
                   <PermissionGate permission="trading.view">
                     <TradingPositionsPage />
                   </PermissionGate>
                 } />
-                <Route path="trading/signals" element={
+                <Route path="signals" element={
                   <PermissionGate permission="trading.view">
                     <TradingSignalsPage />
                   </PermissionGate>
                 } />
-                <Route path="trading/performance" element={
+                <Route path="performance" element={
                   <PermissionGate permission="trading.view">
                     <TradingPerformancePage />
                   </PermissionGate>
                 } />
-                <Route path="trading/config" element={
+                <Route path="health" element={
+                  <PermissionGate permission="trading.view">
+                    <TradingHealthPage />
+                  </PermissionGate>
+                } />
+                <Route path="config" element={
                   <PermissionGate permission="trading.configure">
                     <TradingConfigPage />
                   </PermissionGate>
                 } />
                 <Route path="*" element={<DashboardNotFound />} />
               </Route>
+
+              {/* Backward compatibility — redirect old /admin/trading/* to /trading/* */}
+              <Route path="/admin/trading" element={<Navigate to="/trading/warroom" replace />} />
+              <Route path="/admin/trading/warroom" element={<Navigate to="/trading/warroom" replace />} />
+              <Route path="/admin/trading/positions" element={<Navigate to="/trading/positions" replace />} />
+              <Route path="/admin/trading/signals" element={<Navigate to="/trading/signals" replace />} />
+              <Route path="/admin/trading/performance" element={<Navigate to="/trading/performance" replace />} />
+              <Route path="/admin/trading/health" element={<Navigate to="/trading/health" replace />} />
+              <Route path="/admin/trading/config" element={<Navigate to="/trading/config" replace />} />
 
               {/* User panel */}
               <Route path="/dashboard" element={<UserLayout />}>

@@ -37,4 +37,16 @@ export const ROUTES = {
   ADMIN_TRADING_PERFORMANCE: '/admin/trading/performance',
   ADMIN_TRADING_HEALTH: '/admin/trading/health',
   ADMIN_TRADING_CONFIG: '/admin/trading/config',
+
+  // ── Trading Console ──────────────────────────────────────────────────────
+  // Dedicated dashboard at /trading/* — separate from /admin/*
+  // All trading pages moved here from /admin/trading/* in Phase 4C.
+  // Old /admin/trading/* routes redirect here for backward compatibility.
+  TRADING: '/trading',
+  TRADING_WARROOM: '/trading/warroom',
+  TRADING_POSITIONS: '/trading/positions',
+  TRADING_SIGNALS: '/trading/signals',
+  TRADING_PERFORMANCE: '/trading/performance',
+  TRADING_HEALTH: '/trading/health',
+  TRADING_CONFIG: '/trading/config',
 } as const;

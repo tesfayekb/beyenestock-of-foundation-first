@@ -5,7 +5,7 @@
  * Permission: trading.configure (already gated in App.tsx).
  * Shows Tradier connection status, sizing phase, paper phase criteria, kill switch.
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Settings2, AlertTriangle, CheckCircle, Clock, User } from 'lucide-react';
 import { PageHeader } from '@/components/dashboard/PageHeader';
@@ -20,8 +20,24 @@ import {
   CardDescription,
 } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { KillSwitchButton } from '@/components/trading/KillSwitchButton';
 import { useTradingSession } from '@/hooks/trading/useTradingSession';
+import {
+  useFeatureFlags,
+  useSetFeatureFlag,
+  FLAG_DEFINITIONS,
+} from '@/hooks/trading/useFeatureFlags';
 import { supabase } from '@/integrations/supabase/client';
 
 interface PaperCriterionRow {
@@ -149,6 +165,12 @@ export default function TradingConfigPage() {
   });
 
   const { data: session } = useTradingSession();
+
+  const { data: flags, isLoading: flagsLoading } = useFeatureFlags();
+  const setFlag = useSetFeatureFlag();
+  const [pendingToggle, setPendingToggle] = useState<
+    { key: string; label: string; enabled: boolean } | null
+  >(null);
 
   const { data: criteriaData } = useQuery({
     queryKey: ['admin', 'trading', 'paper-criteria'],
@@ -409,7 +431,119 @@ export default function TradingConfigPage() {
         </CardContent>
       </Card>
 
-      {/* Section 4 — Danger Zone */}
+      {/* Section 4 — Feature Flags (Phase 4C) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings2 className="h-4 w-4" />
+            Feature Flags
+          </CardTitle>
+          <CardDescription>
+            Enable strategies and agents in order. Each flag should be
+            validated over the required number of paper trades before enabling
+            the next. Changes take effect on the next trading cycle.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {(['agent', 'strategy'] as const).map((cat) => (
+            <div key={cat}>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                {cat === 'agent' ? 'AI Agents' : 'Strategies'}
+              </p>
+              <div className="space-y-2">
+                {FLAG_DEFINITIONS.filter((f) => f.category === cat).map((flag) => {
+                  const isOn = flags?.[flag.key] ?? false;
+                  return (
+                    <div
+                      key={flag.key}
+                      className="flex items-start justify-between gap-4 rounded-lg border p-3"
+                    >
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium">{flag.label}</p>
+                          {flag.requiredTrades > 0 && (
+                            <Badge variant="outline" className="text-xs">
+                              {flag.requiredTrades}+ trades required
+                            </Badge>
+                          )}
+                          {isOn && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs bg-success/10 text-success border-success/20"
+                            >
+                              ON
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {flag.description}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={isOn}
+                        disabled={flagsLoading || setFlag.isPending}
+                        onCheckedChange={(checked) =>
+                          setPendingToggle({
+                            key: flag.key,
+                            label: flag.label,
+                            enabled: checked,
+                          })
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/*
+        Confirmation dialog — controlled by `pendingToggle` rather than
+        wrapped around each Switch. Switch is not a Radix trigger, so using
+        AlertDialogTrigger on it would not work; instead the Switch's
+        onCheckedChange opens the dialog by setting `pendingToggle`.
+      */}
+      <AlertDialog
+        open={pendingToggle !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingToggle(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingToggle?.enabled ? 'Enable' : 'Disable'}{' '}
+              {pendingToggle?.label}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingToggle?.enabled
+                ? `This activates ${pendingToggle.label} for the next trading cycle. Verify you have met the required trade count before enabling.`
+                : `This deactivates ${pendingToggle?.label} immediately. The system will fall back to the next available strategy.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingToggle(null)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!pendingToggle) return;
+                setFlag.mutate({
+                  flagKey: pendingToggle.key,
+                  enabled: pendingToggle.enabled,
+                });
+                setPendingToggle(null);
+              }}
+            >
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Section 5 — Danger Zone */}
       <Card className="border-destructive/30">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
