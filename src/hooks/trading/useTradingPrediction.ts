@@ -17,7 +17,7 @@ export interface TradingPredictionRow {
   regime_lgbm: string | null;
   regime_agreement: boolean | null;
   rcs: number | null;
-  allocation_tier: string | null;
+  allocation_tier?: string | null;
   cv_stress_score: number | null;
   charm_velocity: number | null;
   vanna_velocity: number | null;
