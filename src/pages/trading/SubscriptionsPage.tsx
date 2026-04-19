@@ -18,10 +18,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-
-const BACKEND_URL =
-    (import.meta.env.VITE_BACKEND_URL as string | undefined) ??
-    'https://diplomatic-mercy-production-7e61.up.railway.app';
+import { supabase } from '@/integrations/supabase/client';
 
 // ─── Service definitions ─────────────────────────────────────────────────────
 
@@ -195,10 +192,17 @@ interface KeyStatus {
 }
 
 async function fetchKeyStatus(): Promise<Record<string, KeyStatus>> {
-    const res = await fetch(`${BACKEND_URL}/admin/subscriptions/key-status`);
-    if (!res.ok) throw new Error('Failed to fetch key status');
-    const data = await res.json();
-    return data.keys ?? {};
+    // CSP-fix: read masked key status via the
+    // `subscription-key-status` Edge Function (it reads its own
+    // Supabase secrets server-side). The Lovable CSP blocks browser
+    // fetches to the Railway API, so we cannot call it directly.
+    const { data, error } = await supabase.functions.invoke(
+        'subscription-key-status',
+        { method: 'GET' },
+    );
+    if (error) throw new Error(error.message);
+    const payload = data as { keys?: Record<string, KeyStatus> } | null;
+    return payload?.keys ?? {};
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────

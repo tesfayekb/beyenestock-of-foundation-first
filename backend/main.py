@@ -1074,6 +1074,12 @@ async def on_startup() -> None:
         # Create today's trading session on startup
         get_or_create_session()
 
+        # CSP-fix: backfill the Redis flag state into the
+        # trading_feature_flags Supabase table so the Lovable-hosted
+        # frontend can read flag state via direct supabase-js queries.
+        # Soft-fails so a Supabase outage cannot block boot.
+        _backfill_feature_flags_to_supabase()
+
         background_tasks.extend(
             [
                 asyncio.create_task(tradier_feed.start()),
@@ -1581,6 +1587,28 @@ async def set_feature_flag(payload: dict = FBody(...)):
             else:
                 redis_client.delete(flag_key)
 
+        # CSP-fix mirror: write the operator's intended state into
+        # trading_feature_flags so the Lovable-hosted frontend can
+        # read it via direct supabase-js queries (bypassing CSP).
+        # Redis is still authoritative for the trading engine; a
+        # Supabase failure must not prevent the flag from taking
+        # effect, so we swallow exceptions silently here.
+        try:
+            get_client().table("trading_feature_flags").upsert(
+                {
+                    "flag_key": flag_key,
+                    "enabled": enabled,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                on_conflict="flag_key",
+            ).execute()
+        except Exception as mirror_exc:
+            logger.warning(
+                "feature_flag_supabase_mirror_failed",
+                flag_key=flag_key,
+                error=str(mirror_exc),
+            )
+
         logger.info(
             "feature_flag_updated",
             flag_key=flag_key,
@@ -1592,3 +1620,43 @@ async def set_feature_flag(payload: dict = FBody(...)):
     except Exception as exc:
         logger.error("set_feature_flag_failed", error=str(exc))
         return {"error": str(exc)}
+
+
+def _backfill_feature_flags_to_supabase() -> None:
+    """Mirror the current Redis flag state into trading_feature_flags
+    once on startup.
+
+    Idempotent — safe to run on every boot. Soft-fails on any error so
+    a Supabase outage cannot block startup. The mirror is only used by
+    the Lovable-hosted frontend (CSP fix); the trading engine still
+    reads Redis directly.
+    """
+    if not redis_client:
+        return
+    try:
+        rows = []
+        now = datetime.now(timezone.utc).isoformat()
+        for key in _TRADING_FLAG_KEYS:
+            try:
+                val = redis_client.get(key)
+            except Exception:
+                val = None
+            if key in _SIGNAL_FLAGS:
+                # Signal flags default ON: only "false" disables.
+                enabled = val not in ("false", b"false")
+            else:
+                enabled = val in ("true", b"true")
+            rows.append(
+                {"flag_key": key, "enabled": enabled, "updated_at": now}
+            )
+        if rows:
+            get_client().table("trading_feature_flags").upsert(
+                rows, on_conflict="flag_key"
+            ).execute()
+        logger.info(
+            "feature_flags_backfilled_to_supabase", count=len(rows)
+        )
+    except Exception as exc:
+        logger.warning(
+            "feature_flag_backfill_failed", error=str(exc)
+        )

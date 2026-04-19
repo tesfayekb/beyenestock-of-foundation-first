@@ -5,16 +5,17 @@
  * Railway fetch) so this works under the Lovable-hosted CSP, which
  * blocks direct browser calls to the Railway API.
  *
- * KNOWN GAP: the upcoming-events list is written to Redis by the
- * 8:45 AM ET scan and is NOT mirrored into Supabase yet. Until
- * Phase 5A-2 adds a persisted events table, the upcoming section
- * stays empty in the UI and the existing empty-state copy carries
- * the message ("Earnings scan runs at 8:45 AM ET …").
+ * The 8:45 AM ET scan now mirrors `earnings:upcoming_events` into
+ * the earnings_upcoming_scan Supabase table (one row per scan).
+ * The hook reads the most recent row by scanned_at; if no scan has
+ * landed yet, the section stays empty and the page shows its
+ * empty-state copy.
  *
- * The earnings_positions table is not in the generated Database
- * types yet — we cast the from() argument with `as never` to
- * satisfy the typed supabase-js client without disabling
- * type-checking elsewhere. Same pattern as useAbComparison.
+ * Both earnings_positions and earnings_upcoming_scan are not in the
+ * generated Database types yet — we cast the from() argument with
+ * `as never` to satisfy the typed supabase-js client without
+ * disabling type-checking elsewhere. Same pattern as
+ * useAbComparison.
  */
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -71,44 +72,57 @@ export interface EarningsStatusResponse {
     last_scan_at: string | null;
 }
 
+interface UpcomingScanRow {
+    scanned_at: string;
+    payload: EarningsUpcomingEvent[];
+}
+
 export function useEarningsStatus() {
     return useQuery<EarningsStatusResponse>({
         queryKey: ['earnings-status'],
         queryFn: async () => {
-            const [recentResult, activeResult] = await Promise.all([
-                supabase
-                    .from('earnings_positions' as never)
-                    .select(
-                        'id, ticker, earnings_date, announce_time, ' +
-                            'entry_date, exit_date, status, exit_reason, ' +
-                            'contracts, total_debit, exit_value, ' +
-                            'net_pnl, net_pnl_pct, implied_move_pct, ' +
-                            'actual_move_pct, historical_edge_score',
-                    )
-                    .order('entry_date', { ascending: false })
-                    .limit(30),
-                supabase
-                    .from('earnings_positions' as never)
-                    .select('*')
-                    .eq('status', 'open')
-                    .eq('position_mode', 'virtual')
-                    .limit(1)
-                    .maybeSingle(),
-            ]);
+            const [recentResult, activeResult, scanResult] =
+                await Promise.all([
+                    supabase
+                        .from('earnings_positions' as never)
+                        .select(
+                            'id, ticker, earnings_date, announce_time, ' +
+                                'entry_date, exit_date, status, exit_reason, ' +
+                                'contracts, total_debit, exit_value, ' +
+                                'net_pnl, net_pnl_pct, implied_move_pct, ' +
+                                'actual_move_pct, historical_edge_score',
+                        )
+                        .order('entry_date', { ascending: false })
+                        .limit(30),
+                    supabase
+                        .from('earnings_positions' as never)
+                        .select('*')
+                        .eq('status', 'open')
+                        .eq('position_mode', 'virtual')
+                        .limit(1)
+                        .maybeSingle(),
+                    supabase
+                        .from('earnings_upcoming_scan' as never)
+                        .select('scanned_at, payload')
+                        .order('scanned_at', { ascending: false })
+                        .limit(1)
+                        .maybeSingle(),
+                ]);
 
             const recent_positions = (recentResult.data ??
                 []) as EarningsRecentPosition[];
             const active = (activeResult.data ??
                 null) as EarningsActivePosition | null;
 
+            const scanRow = (scanResult.data ?? null) as UpcomingScanRow | null;
+            const upcoming = (scanRow?.payload ?? []) as EarningsUpcomingEvent[];
+            const last_scan_at = scanRow?.scanned_at ?? null;
+
             return {
-                // Upcoming events live in Redis (written by the 8:45 AM
-                // scan). Until Phase 5A-2 mirrors them to Supabase, this
-                // stays empty and the page shows its empty-state copy.
-                upcoming: [],
+                upcoming,
                 active,
                 recent_positions,
-                last_scan_at: null,
+                last_scan_at,
             };
         },
         refetchInterval: 5 * 60_000,

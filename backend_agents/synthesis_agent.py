@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import config
+from db import get_client
 from logger import get_logger
 
 logger = get_logger("synthesis_agent")
@@ -177,6 +178,15 @@ def run_synthesis_agent(redis_client) -> dict:
                     1800,  # 30 min TTL — stale synthesis should not affect trades
                     json.dumps(synthesis),
                 )
+                # CSP-fix mirror: dashboard reads via direct supabase-js.
+                get_client().table("trading_ai_briefs").upsert(
+                    {
+                        "brief_kind": "synthesis",
+                        "payload": synthesis,
+                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                    on_conflict="brief_kind",
+                ).execute()
                 logger.info("synthesis_written_to_redis")
             except Exception as e:
                 logger.warning("synthesis_redis_write_failed", error=str(e))

@@ -1,14 +1,25 @@
 /**
- * useTradeIntelligence — reads AI agent brief summaries from the backend.
+ * useTradeIntelligence — reads AI agent brief summaries directly
+ * from Supabase.
  *
- * Phase 4C — backs the AI Intelligence panel on the War Room. Refreshes
- * every 5 minutes (agents only run on a 5-30 min cadence, so faster
- * polling is wasted work). Stale data (> 8 hr old) is flagged via
- * ``isBriefStale`` so the UI can surface it.
+ * CSP-fix: agent briefs are mirrored from Redis into the
+ * trading_ai_briefs table by each agent on every write. The hook
+ * reads the table directly so this works under the Lovable-hosted
+ * CSP (which blocks browser fetches to the Railway API).
+ *
+ * Brief kinds correspond 1:1 to the previous Railway response:
+ *   calendar  ← economic_calendar
+ *   macro     ← macro_agent
+ *   flow      ← flow_agent
+ *   sentiment ← sentiment_agent
+ *   synthesis ← synthesis_agent (also updated by surprise_detector)
+ *
+ * The trading_ai_briefs table is not in the generated Database
+ * types yet — cast the from() argument with `as never`. Same
+ * pattern as useAbComparison / useEarningsStatus.
  */
 import { useQuery } from '@tanstack/react-query';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'https://diplomatic-mercy-production-7e61.up.railway.app';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface CalendarIntel {
     day_classification?: string;
@@ -68,11 +79,49 @@ const EMPTY_INTEL: TradingIntelligence = {
     flags: {},
 };
 
+interface BriefRow {
+    brief_kind: string;
+    payload: Record<string, unknown>;
+    generated_at: string;
+}
+
+interface FlagRow {
+    flag_key: string;
+    enabled: boolean;
+}
+
 async function fetchIntelligence(): Promise<TradingIntelligence> {
-    if (!BACKEND_URL) return EMPTY_INTEL;
-    const res = await fetch(`${BACKEND_URL}/admin/trading/intelligence`);
-    if (!res.ok) throw new Error('Failed to fetch intelligence');
-    return res.json();
+    const [briefsResult, flagsResult] = await Promise.all([
+        supabase
+            .from('trading_ai_briefs' as never)
+            .select('brief_kind, payload, generated_at'),
+        supabase
+            .from('trading_feature_flags' as never)
+            .select('flag_key, enabled'),
+    ]);
+
+    const briefs = (briefsResult.data ?? []) as BriefRow[];
+    const flagRows = (flagsResult.data ?? []) as FlagRow[];
+
+    const byKind = (kind: string): Record<string, unknown> => {
+        const row = briefs.find((b) => b.brief_kind === kind);
+        return row?.payload ?? {};
+    };
+
+    const flags: Record<string, boolean> = {};
+    for (const row of flagRows) {
+        flags[row.flag_key] = row.enabled;
+    }
+
+    return {
+        ...EMPTY_INTEL,
+        calendar: byKind('calendar') as CalendarIntel,
+        macro: byKind('macro'),
+        flow: byKind('flow') as FlowIntel,
+        sentiment: byKind('sentiment') as SentimentIntel,
+        synthesis: byKind('synthesis') as SynthesisIntel,
+        flags,
+    };
 }
 
 export function useTradeIntelligence() {

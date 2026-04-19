@@ -5,14 +5,18 @@
  * Polls every 60 seconds so threshold transitions and new alerts
  * surface without a manual refresh.
  *
- * BACKEND_URL default mirrors useFeatureFlags.ts so both hooks work
- * identically when VITE_BACKEND_URL is unset (Lovable preview).
+ * CSP-fix: queries Supabase directly (Lovable CSP blocks the Railway
+ * API). The four payload fields are derived as follows:
+ *   closed_trade_count → trading_positions count
+ *   flags              → trading_feature_flags rows
+ *   ab_gate            → ab_session_comparison + closed-trade count
+ *   recent_alerts      → system_alerts last 50 unacknowledged
  */
 import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
-const BACKEND_URL =
-    import.meta.env.VITE_BACKEND_URL ??
-    'https://diplomatic-mercy-production-7e61.up.railway.app';
+const ACCOUNT_NOTIONAL = 100_000;
+const TRADING_DAYS_PER_YEAR = 252;
 
 export interface FeatureDefinition {
     key: string;
@@ -290,10 +294,110 @@ export interface ActivationStatus {
     }>;
 }
 
+interface FlagRow {
+    flag_key: string;
+    enabled: boolean;
+}
+
+interface AbDailyRow {
+    a_synthetic_pnl: number | null;
+    b_session_pnl: number | null;
+    session_date: string;
+}
+
+interface AlertRow {
+    fired_at: string;
+    level: string;
+    event: string;
+    detail: string | null;
+    acknowledged: boolean | null;
+}
+
 async function fetchActivationStatus(): Promise<ActivationStatus> {
-    const res = await fetch(`${BACKEND_URL}/admin/activation/status`);
-    if (!res.ok) throw new Error('Failed to fetch activation status');
-    return res.json();
+    const [tradesResult, flagsResult, abRowsResult, alertsResult] =
+        await Promise.all([
+            supabase
+                .from('trading_positions')
+                .select('id', { count: 'exact', head: true })
+                .eq('status', 'closed')
+                .eq('position_mode', 'virtual'),
+            supabase
+                .from('trading_feature_flags' as never)
+                .select('flag_key, enabled'),
+            supabase
+                .from('ab_session_comparison' as never)
+                .select('session_date, a_synthetic_pnl, b_session_pnl')
+                .order('session_date', { ascending: true })
+                .limit(90),
+            supabase
+                .from('system_alerts' as never)
+                .select('fired_at, level, event, detail, acknowledged')
+                .order('fired_at', { ascending: false })
+                .limit(50),
+        ]);
+
+    const closed_trade_count = tradesResult.count ?? 0;
+
+    const flags: Record<string, boolean> = {};
+    for (const row of (flagsResult.data ?? []) as FlagRow[]) {
+        flags[row.flag_key] = row.enabled;
+    }
+
+    // ab_gate: mirror shadow_engine.get_ab_gate_status() math so the
+    // dashboard renders the same numbers whether read from API or DB.
+    const abRows = (abRowsResult.data ?? []) as AbDailyRow[];
+    const firstDate = abRows[0]?.session_date;
+    const daysElapsed = firstDate
+        ? Math.floor(
+              (Date.now() - new Date(firstDate).getTime()) / 86_400_000,
+          )
+        : 0;
+    const tradingDays = abRows.length;
+    const aTotal = abRows.reduce(
+        (s, r) => s + (r.a_synthetic_pnl ?? 0),
+        0,
+    );
+    const bTotal = abRows.reduce(
+        (s, r) => s + (r.b_session_pnl ?? 0),
+        0,
+    );
+    const aAnn =
+        tradingDays > 0
+            ? ((aTotal / ACCOUNT_NOTIONAL) / tradingDays) *
+              TRADING_DAYS_PER_YEAR *
+              100
+            : 0;
+    const bAnn =
+        tradingDays > 0
+            ? ((bTotal / ACCOUNT_NOTIONAL) / tradingDays) *
+              TRADING_DAYS_PER_YEAR *
+              100
+            : 0;
+    const bLead = bAnn - aAnn;
+
+    const ab_gate: ActivationStatus['ab_gate'] = {
+        built: tradingDays > 0,
+        days_elapsed: tradingDays > 0 ? daysElapsed : null,
+        days_required: 90,
+        trades_count: closed_trade_count,
+        trades_required: 100,
+        portfolio_b_lead_pct:
+            tradingDays > 0 ? Math.round(bLead * 100) / 100 : null,
+        gate_passed:
+            daysElapsed >= 90 && closed_trade_count >= 100 && bLead >= 8,
+    };
+
+    const recent_alerts = ((alertsResult.data ?? []) as AlertRow[]).map(
+        (a) => ({
+            fired_at: a.fired_at,
+            level: a.level,
+            event: a.event,
+            detail: a.detail ?? '',
+            acknowledged: Boolean(a.acknowledged),
+        }),
+    );
+
+    return { closed_trade_count, flags, ab_gate, recent_alerts };
 }
 
 export function useActivationStatus() {
