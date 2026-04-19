@@ -32,18 +32,16 @@ logger = get_logger("main")
 app = FastAPI()
 
 # CORS — allow Lovable preview/production deploys and local dev to call
-# the trading API endpoints (e.g. /admin/trading/intelligence). The
-# wildcard subdomains require Starlette/FastAPI to use regex matching,
-# but allow_origins still accepts these patterns and is enforced at the
-# browser level.
+# the trading API endpoints (e.g. /admin/trading/intelligence).
+# Starlette's CORSMiddleware does NOT expand "*" inside allow_origins
+# entries, so wildcard Lovable subdomains must be matched via regex.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://*.lovable.app",
-        "https://*.lovableproject.com",
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ],
+    allow_origin_regex=(
+        r"https://[a-zA-Z0-9\-]+\.lovable\.app"
+        r"|https://[a-zA-Z0-9\-]+\.lovableproject\.com"
+        r"|http://localhost:(5173|3000|8080)"
+    ),
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
