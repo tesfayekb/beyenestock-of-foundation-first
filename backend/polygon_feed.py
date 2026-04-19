@@ -20,6 +20,10 @@ class PolygonFeed:
         self.history: List[float] = []
         self.spx_history: List[float] = []
         self.last_vix: Optional[float] = None
+        # B-1: rolling 20-day VIX history for z-score (Signals D + F).
+        self.vix_history: List[float] = []
+        # B-2: latest VIX9D value (Signal A term ratio numerator).
+        self.last_vix9d: Optional[float] = None
         self._stop_event = asyncio.Event()
 
     async def start(self) -> None:
@@ -46,6 +50,35 @@ class PolygonFeed:
                         self.redis_client.setex(
                             "polygon:vix:current", 3600, str(vix)
                         )
+
+                        # B-1: 20-day rolling VIX z-score for Signals D + F.
+                        # Writes polygon:vix:z_score (and 20d_mean / 20d_std).
+                        # Without this, Signal-D and Signal-F always read 0.0
+                        # and stay neutral — defeating the size-cut logic.
+                        try:
+                            self._store_vix_baseline(vix)
+                        except Exception as bl_exc:
+                            logger.warning(
+                                "vix_baseline_store_failed",
+                                error=str(bl_exc),
+                            )
+
+                        # B-2: VIX9D (9-day implied vol) for Signal-A term
+                        # ratio. Without this, vix_term_ratio falls back
+                        # to 1.0 and Signal-A stays neutral.
+                        try:
+                            vix9d = await self._fetch_vix9d()
+                            if vix9d is not None and vix9d > 0:
+                                self.redis_client.setex(
+                                    "polygon:vix9d:current",
+                                    3600,
+                                    str(vix9d),
+                                )
+                        except Exception as v9_exc:
+                            logger.warning(
+                                "vix9d_fetch_failed",
+                                error=str(v9_exc),
+                            )
 
                         spx_close = await self._fetch_spx_close()
                         if spx_close and spx_close > 0:
@@ -114,6 +147,56 @@ class PolygonFeed:
         self.redis_client.set("polygon:vvix:20d_std", std)
         self.redis_client.set("polygon:vvix:z_score", z_score)
         self.redis_client.set("polygon:vvix:baseline_ready", "True")
+
+    def _store_vix_baseline(self, current: float) -> None:
+        """
+        B-1: Compute rolling 20-day VIX z-score and write to Redis.
+
+        Mirrors _store_baseline() for VVIX — identical rolling window
+        math, different Redis keys (polygon:vix:* NOT polygon:vvix:*).
+        These are separate signals consuming different data — never
+        overwrite VVIX keys here.
+
+        Minimum 5 data points required before writing z-score (avoids
+        noisy early values). After 20 polling cycles the window is
+        full; subsequent calls slide.
+
+        Writes:
+          polygon:vix:20d_mean
+          polygon:vix:20d_std
+          polygon:vix:z_score
+
+        Called every polling cycle from _poll_loop alongside
+        polygon:vix:current. After Session 2 historical backfill (plan
+        addition A2), z-score will be meaningful from minute 1 of the
+        first session.
+        """
+        self.vix_history.append(current)
+        self.vix_history = self.vix_history[-20:]
+
+        if len(self.vix_history) < 5:
+            return  # Not enough data — do not write partial z-score
+
+        n = len(self.vix_history)
+        avg = sum(self.vix_history) / n
+        variance = sum((x - avg) ** 2 for x in self.vix_history) / n
+        std = variance ** 0.5
+
+        if std <= 0:
+            return  # Zero variance — z-score undefined
+
+        z_score = round((current - avg) / std, 4)
+        self.redis_client.set("polygon:vix:20d_mean", round(avg, 4))
+        self.redis_client.set("polygon:vix:20d_std", round(std, 4))
+        self.redis_client.set("polygon:vix:z_score", z_score)
+        logger.debug(
+            "polygon_vix_zscore_updated",
+            vix=round(current, 2),
+            mean=round(avg, 2),
+            std=round(std, 2),
+            z_score=z_score,
+            history_len=n,
+        )
 
     async def _write_daily_open_if_needed(self, vvix_open: float) -> None:
         if not self._is_open_minute():
@@ -228,6 +311,65 @@ class PolygonFeed:
             logger.warning("polygon_vix_fetch_failed", error=type(e).__name__)
 
         return self.last_vix if self.last_vix is not None else 18.0
+
+    async def _fetch_vix9d(self) -> Optional[float]:
+        """
+        B-2: Fetch VIX9D (9-day implied volatility) from Polygon.io.
+        Ticker: I:VIX9D
+
+        VIX9D is the numerator of the term ratio used by Signal-A:
+            vix_term_ratio = VIX9D / VIX
+        ratio > 1.0 = inverted term structure = elevated near-term risk.
+
+        Returns None on failure (caller skips Redis write).
+        Mirrors _fetch_vix() structure exactly.
+        """
+        try:
+            import config
+            api_key = config.POLYGON_API_KEY
+            if not api_key:
+                return None
+
+            import httpx
+            headers = {"Authorization": f"Bearer {api_key}"}
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://api.polygon.io/v3/snapshot",
+                    headers=headers,
+                    params={"ticker.any_of": "I:VIX9D"},
+                )
+                if resp.status_code == 200:
+                    results = resp.json().get("results", [])
+                    if results:
+                        session_data = results[0].get("session", {})
+                        vix9d = float(
+                            session_data.get("close")
+                            or session_data.get("prev_close")
+                            or 0
+                        )
+                        if vix9d > 0:
+                            self.last_vix9d = vix9d
+                            return vix9d
+
+                # Fallback: previous day aggregate
+                resp2 = await client.get(
+                    "https://api.polygon.io/v2/aggs/ticker/I:VIX9D/prev",
+                    headers=headers,
+                )
+                if resp2.status_code == 200:
+                    results2 = resp2.json().get("results", [])
+                    if results2:
+                        vix9d = float(results2[0].get("c", 0.0))
+                        if vix9d > 0:
+                            self.last_vix9d = vix9d
+                            return vix9d
+        except Exception as e:
+            logger.debug(
+                "polygon_vix9d_fetch_failed",
+                error=type(e).__name__,
+            )
+        return None
 
     async def _fetch_spx_close(self) -> Optional[float]:
         """

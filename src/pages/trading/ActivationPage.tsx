@@ -49,7 +49,10 @@ import {
     ALL_FEATURES,
     type FeatureDefinition,
 } from '@/hooks/trading/useActivationStatus';
-import { useSetFeatureFlag } from '@/hooks/trading/useFeatureFlags';
+import {
+    useSetFeatureFlag,
+    isFlagEnabled,
+} from '@/hooks/trading/useFeatureFlags';
 
 // Category icon map — every category in FeatureDefinition['category']
 // must have an entry here.
@@ -93,7 +96,7 @@ function buildStatusLabel(
         };
     }
     if (feature.builtStatus === 'dormant') {
-        const flagOn = flags[feature.key] ?? false;
+        const flagOn = isFlagEnabled(flags, feature.key);
         if (flagOn) {
             return {
                 label: 'Active',
@@ -193,7 +196,10 @@ export default function ActivationPage() {
     const abGate = data?.ab_gate;
     const alerts = data?.recent_alerts ?? [];
 
-    // Count features by state
+    // Count features by state. Signal flags default ON when absent in
+    // the trading_feature_flags table — use isFlagEnabled (not the raw
+    // map) so disabled signal toggles are reflected as 'enabled' here
+    // until the user explicitly disables them.
     const activeCount = ALL_FEATURES.filter((f) => {
         if (f.builtStatus === 'not_built') return false;
         if (f.builtStatus === 'live') {
@@ -202,13 +208,13 @@ export default function ActivationPage() {
                 tradeCount >= f.activationThreshold
             );
         }
-        return flags[f.key] ?? false;
+        return isFlagEnabled(flags, f.key);
     }).length;
 
     const readyCount = ALL_FEATURES.filter(
         (f) =>
             f.builtStatus === 'dormant' &&
-            !(flags[f.key] ?? false) &&
+            !isFlagEnabled(flags, f.key) &&
             f.activationThreshold != null &&
             tradeCount >= f.activationThreshold,
     ).length;
@@ -392,8 +398,13 @@ export default function ActivationPage() {
                                         tradeCount,
                                     );
                                     const StatusIcon = status.icon;
-                                    const flagOn =
-                                        flags[feature.key] ?? false;
+                                    // Signal flags default ON when absent — use
+                                    // isFlagEnabled so the Switch reflects the
+                                    // backend's effective state, not the raw map.
+                                    const flagOn = isFlagEnabled(
+                                        flags,
+                                        feature.key,
+                                    );
                                     const isToggleable =
                                         feature.builtStatus ===
                                             'dormant' &&

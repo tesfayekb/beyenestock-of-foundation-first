@@ -155,7 +155,9 @@ class StrategySelector:
             # 0DTE options remain elevated until ~9:45. GEX data also
             # needs 10-15 min post-open to stabilize.
             # Feature flag: signal:entry_time_gate:enabled (default ON).
-            if self._check_feature_flag("signal:entry_time_gate:enabled"):
+            if self._check_feature_flag(
+                "signal:entry_time_gate:enabled", default=True
+            ):
                 open_floor = 9 * 60 + 45
             else:
                 open_floor = 9 * 60 + 35  # original floor when flag off
@@ -180,20 +182,35 @@ class StrategySelector:
             logger.error("stage0_time_gate_failed", error=str(e))
             return False, f"error:{e}"
 
-    def _check_feature_flag(self, flag_key: str) -> bool:
-        """Check a Redis feature flag. Returns False on any error.
+    def _check_feature_flag(
+        self,
+        flag_key: str,
+        default: bool = False,
+    ) -> bool:
+        """Check a Redis feature flag.
 
-        Accepts both bytes 'true' (decode_responses=False) and string 'true'
-        (decode_responses=True) for forward-compatibility with both Redis
-        client configurations.
+        POLARITY RULES (must match backend/main.py _SIGNAL_FLAGS):
+          default=False  - strategy/agent flags (default OFF):
+                           absent key = disabled, "true" = enabled
+          default=True   - signal flags (default ON):
+                           absent key = enabled, "false" = disabled
+
+        The `default` parameter MUST be passed explicitly at every call
+        site. Missing key returns `default`, not False.
+
+        Accepts both bytes 'true' (decode_responses=False) and string
+        'true' (decode_responses=True) for forward-compatibility with
+        both Redis client configurations.
         """
         try:
             if not self.redis_client:
-                return False
+                return default
             val = self.redis_client.get(flag_key)
+            if val is None:
+                return default
             return val in ("true", b"true")
         except Exception:
-            return False
+            return default
 
     def _check_time_window(
         self, cv_stress: float = 0.0
@@ -225,7 +242,7 @@ class StrategySelector:
         """
         try:
             if not self._check_feature_flag(
-                "signal:vix_term_filter:enabled"
+                "signal:vix_term_filter:enabled", default=True
             ):
                 return 1.0, "flag_off"
 
@@ -298,7 +315,7 @@ class StrategySelector:
         """
         try:
             if not self._check_feature_flag(
-                "signal:gex_directional_bias:enabled"
+                "signal:gex_directional_bias:enabled", default=True
             ):
                 return 1.0, "flag_off"
 
@@ -370,7 +387,7 @@ class StrategySelector:
         """
         try:
             if not self._check_feature_flag(
-                "signal:market_breadth:enabled"
+                "signal:market_breadth:enabled", default=True
             ):
                 return 1.0, "flag_off"
 
@@ -417,7 +434,7 @@ class StrategySelector:
         """
         try:
             if not self._check_feature_flag(
-                "signal:earnings_proximity:enabled"
+                "signal:earnings_proximity:enabled", default=True
             ):
                 return 1.0, "flag_off"
 
@@ -477,7 +494,7 @@ class StrategySelector:
         """
         try:
             if not self._check_feature_flag(
-                "signal:iv_rank_filter:enabled"
+                "signal:iv_rank_filter:enabled", default=True
             ):
                 return 1.0, "flag_off"
 
@@ -534,7 +551,9 @@ class StrategySelector:
         try:
             # Phase 2B: Gamma pin override (feature-flagged, default OFF)
             try:
-                if self._check_feature_flag("strategy:iron_butterfly:enabled"):
+                if self._check_feature_flag(
+                    "strategy:iron_butterfly:enabled", default=False
+                ):
                     nearest_wall_raw = (
                         self.redis_client.get("gex:nearest_wall")
                         if self.redis_client else None
@@ -662,7 +681,9 @@ class StrategySelector:
             # Falls back to regime-based on any error or low confidence.
             strategy_type = ordered[0]  # default: regime-based
             try:
-                if self._check_feature_flag("strategy:ai_hint_override:enabled"):
+                if self._check_feature_flag(
+                    "strategy:ai_hint_override:enabled", default=False
+                ):
                     strategy_hint = prediction.get("strategy_hint", "")
                     hint_confidence = float(prediction.get("confidence", 0.0))
                     valid_strategies = set(STATIC_SLIPPAGE_BY_STRATEGY.keys())
@@ -694,7 +715,7 @@ class StrategySelector:
             if strategy_type == "calendar_spread":
                 try:
                     cal_flag = self._check_feature_flag(
-                        "strategy:calendar_spread:enabled"
+                        "strategy:calendar_spread:enabled", default=False
                     )
                     if not cal_flag:
                         ordered_remaining = [
@@ -816,7 +837,7 @@ class StrategySelector:
             opening_mult = 1.0
             try:
                 if self._check_feature_flag(
-                    "signal:entry_time_gate:enabled"
+                    "signal:entry_time_gate:enabled", default=True
                 ):
                     import zoneinfo
                     _et = zoneinfo.ZoneInfo("America/New_York")
@@ -887,6 +908,24 @@ class StrategySelector:
                     iv_rank=iv_status,
                 )
 
+            # A5: Production observability smoke signal.
+            # has_vix_z_data=False means polygon:vix:z_score was never
+            # written. Check Railway logs on Day 1 after deploy — if this
+            # is False for every cycle, the VIX z-score writer didn't
+            # start (e.g., polygon_feed needs to collect 5 cycles or the
+            # service didn't restart).
+            logger.info(
+                "signal_mult_audit",
+                signal_mult=signal_mult,
+                vix_z=round(vix_z, 3),
+                has_vix_z_data=(vix_z != 0.0),
+                breadth=breadth_status,
+                iv_rank=iv_status,
+                vix_term=vix_term_status,
+                gex_bias=gex_status,
+                earnings=earnings_status,
+            )
+
             # Apply signal multiplier to sizing (mirrors event_size_mult)
             if signal_mult != 1.0 and sizing["contracts"] > 0:
                 original = sizing["contracts"]
@@ -926,6 +965,45 @@ class StrategySelector:
 
             is_short_gamma = strategy_type in SHORT_GAMMA_STRATEGIES
 
+            # A2: Capture decision context at SELECTION TIME for the
+            # Loop 2 meta-label audit trail. Captures flag state and
+            # signal multipliers at the exact moment the strategy was
+            # selected — not when the order was placed (which can lag
+            # by seconds and reflect a different flag state).
+            #
+            # ExecutionEngine persists whatever is in
+            # signal["decision_context"] into the trading_positions
+            # JSONB column. No ExecutionEngine changes needed here.
+            _SIGNAL_FLAG_DEFAULTS = {
+                "signal:vix_term_filter:enabled": True,
+                "signal:entry_time_gate:enabled": True,
+                "signal:gex_directional_bias:enabled": True,
+                "signal:market_breadth:enabled": True,
+                "signal:earnings_proximity:enabled": True,
+                "signal:iv_rank_filter:enabled": True,
+            }
+            _decision_context = {
+                "signal_mult": signal_mult,
+                "vix_term_mult": vix_term_mult,
+                "vix_term_status": vix_term_status,
+                "gex_mult": gex_mult,
+                "gex_status": gex_status,
+                "opening_mult": opening_mult,
+                "breadth_mult": breadth_mult,
+                "breadth_status": breadth_status,
+                "earnings_mult": earnings_mult,
+                "earnings_status": earnings_status,
+                "iv_mult": iv_mult,
+                "iv_status": iv_status,
+                "vix_z": round(vix_z, 3),
+                "has_vix_z_data": (vix_z != 0.0),
+                "flags_at_selection": {
+                    k: self._check_feature_flag(k, default=v)
+                    for k, v in _SIGNAL_FLAG_DEFAULTS.items()
+                },
+                "selected_at": datetime.now(timezone.utc).isoformat(),
+            }
+
             signal = {
                 "session_id": session_id,
                 "signal_at": datetime.now(timezone.utc).isoformat(),
@@ -953,6 +1031,7 @@ class StrategySelector:
                 "stop_loss_level": None,
                 "profit_target": None,
                 "ev_net": None,
+                "decision_context": _decision_context,
             }
 
             logger.info(
@@ -968,13 +1047,13 @@ class StrategySelector:
                     else "regime"
                 ),
                 ai_hint_flag=self._check_feature_flag(
-                    "strategy:ai_hint_override:enabled"
+                    "strategy:ai_hint_override:enabled", default=False
                 ),
                 butterfly_flag=self._check_feature_flag(
-                    "strategy:iron_butterfly:enabled"
+                    "strategy:iron_butterfly:enabled", default=False
                 ),
                 straddle_flag=self._check_feature_flag(
-                    "strategy:long_straddle:enabled"
+                    "strategy:long_straddle:enabled", default=False
                 ),
             )
             self.write_heartbeat()
