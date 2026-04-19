@@ -1,4 +1,4 @@
-import { Shield, Home, type LucideIcon } from 'lucide-react';
+import { Shield, Home, TrendingUp, type LucideIcon } from 'lucide-react';
 import type { AuthorizationContext } from '@/lib/rbac';
 import { checkPermission } from '@/lib/rbac';
 
@@ -13,6 +13,7 @@ export interface DashboardEntry {
 
 export const dashboards: DashboardEntry[] = [
   { id: 'admin', label: 'Admin Console', icon: Shield, basePath: '/admin', permission: 'admin.access' },
+  { id: 'trading', label: 'Trading Console', icon: TrendingUp, basePath: '/trading', permission: 'trading.view' },
   { id: 'user', label: 'My Dashboard', icon: Home, basePath: '/dashboard', permission: null },
 ];
 

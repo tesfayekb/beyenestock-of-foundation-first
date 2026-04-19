@@ -269,7 +269,7 @@ export default function TradingWarRoomPage() {
                 Open Positions
               </CardTitle>
               <Link
-                to={ROUTES.ADMIN_TRADING_POSITIONS}
+                to={ROUTES.TRADING_POSITIONS}
                 className="text-xs text-primary hover:underline"
               >
                 View all
