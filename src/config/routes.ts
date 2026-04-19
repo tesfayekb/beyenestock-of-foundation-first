@@ -53,4 +53,5 @@ export const ROUTES = {
   TRADING_FLAGS: '/trading/flags',
   TRADING_STRATEGIES: '/trading/strategies',
   TRADING_MILESTONES: '/trading/milestones',
+  TRADING_SUBSCRIPTIONS: '/trading/subscriptions',
 } as const;

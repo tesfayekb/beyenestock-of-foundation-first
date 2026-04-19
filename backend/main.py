@@ -929,6 +929,106 @@ async def get_feature_flags():
         return {"flags": {}}
 
 
+def _mask_key(key_value: str) -> str:
+    """Return masked key: first 4 chars + '...' + last 6 chars.
+
+    Returns 'not set' if empty. Never returns the full key. Never reveals
+    more than 10 characters of the key value (4 prefix + 6 suffix).
+    """
+    if not key_value:
+        return "not set"
+    if len(key_value) <= 10:
+        return "****"
+    return f"{key_value[:4]}...{key_value[-6:]}"
+
+
+@app.get("/admin/subscriptions/key-status")
+async def get_subscription_key_status():
+    """Return key configured status + masked preview for each API key.
+
+    Reads os.environ via config.py only — never touches Supabase.
+    Masked format: first 4 chars + '...' + last 6 chars.
+    Full key values are never transmitted to the frontend.
+    """
+    try:
+        import config as _cfg
+
+        # Today's AI token usage from Redis (Anthropic/OpenAI)
+        today_tokens_in = 0
+        today_tokens_out = 0
+        try:
+            if redis_client:
+                from datetime import date
+                day = date.today().isoformat()
+                tin = redis_client.get(f"ai:tokens:in:{day}")
+                tout = redis_client.get(f"ai:tokens:out:{day}")
+                today_tokens_in = int(tin) if tin else 0
+                today_tokens_out = int(tout) if tout else 0
+        except Exception:
+            # Soft failure — counters are observability only.
+            pass
+
+        keys = {
+            "supabase_url": {
+                "configured": bool(_cfg.SUPABASE_URL),
+                "masked": _mask_key(_cfg.SUPABASE_URL or ""),
+                "env_var": "SUPABASE_URL",
+            },
+            "databento": {
+                "configured": bool(_cfg.DATABENTO_API_KEY),
+                "masked": _mask_key(_cfg.DATABENTO_API_KEY or ""),
+                "env_var": "DATABENTO_API_KEY",
+            },
+            "tradier": {
+                "configured": bool(_cfg.TRADIER_API_KEY),
+                "masked": _mask_key(_cfg.TRADIER_API_KEY or ""),
+                "env_var": "TRADIER_API_KEY",
+                "sandbox": _cfg.TRADIER_SANDBOX,
+            },
+            "polygon": {
+                "configured": bool(_cfg.POLYGON_API_KEY),
+                "masked": _mask_key(_cfg.POLYGON_API_KEY or ""),
+                "env_var": "POLYGON_API_KEY",
+            },
+            "finnhub": {
+                "configured": bool(_cfg.FINNHUB_API_KEY),
+                "masked": _mask_key(_cfg.FINNHUB_API_KEY or ""),
+                "env_var": "FINNHUB_API_KEY",
+            },
+            "anthropic": {
+                "configured": bool(_cfg.ANTHROPIC_API_KEY),
+                "masked": _mask_key(_cfg.ANTHROPIC_API_KEY or ""),
+                "env_var": "ANTHROPIC_API_KEY",
+                "today_tokens_in": today_tokens_in,
+                "today_tokens_out": today_tokens_out,
+            },
+            "openai": {
+                "configured": bool(_cfg.OPENAI_API_KEY),
+                "masked": _mask_key(_cfg.OPENAI_API_KEY or ""),
+                "env_var": "OPENAI_API_KEY",
+            },
+            "unusual_whales": {
+                "configured": bool(_cfg.UNUSUAL_WHALES_API_KEY),
+                "masked": _mask_key(_cfg.UNUSUAL_WHALES_API_KEY or ""),
+                "env_var": "UNUSUAL_WHALES_API_KEY",
+            },
+            "newsapi": {
+                "configured": bool(_cfg.NEWSAPI_KEY),
+                "masked": _mask_key(_cfg.NEWSAPI_KEY or ""),
+                "env_var": "NEWSAPI_KEY",
+            },
+            "ai_provider": {
+                "provider": getattr(_cfg, "AI_PROVIDER", "anthropic"),
+                "model": getattr(_cfg, "AI_MODEL", "claude-sonnet-4-5"),
+            },
+        }
+        return {"keys": keys}
+
+    except Exception as exc:
+        logger.error("get_subscription_key_status_failed", error=str(exc))
+        return {"keys": {}, "error": str(exc)}
+
+
 @app.post("/admin/trading/feature-flags")
 async def set_feature_flag(payload: dict = FBody(...)):
     """Enable or disable a single feature flag.

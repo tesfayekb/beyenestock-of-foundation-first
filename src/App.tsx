@@ -51,6 +51,7 @@ const TradingIntelligencePage = lazy(() => import("./pages/trading/IntelligenceP
 const TradingFeatureFlagsPage = lazy(() => import("./pages/trading/FeatureFlagsPage"));
 const TradingStrategyLibraryPage = lazy(() => import("./pages/trading/StrategyLibraryPage"));
 const TradingMilestonesPage = lazy(() => import("./pages/trading/MilestonesPage"));
+const TradingSubscriptionsPage = lazy(() => import("./pages/trading/SubscriptionsPage"));
 
 // User pages (lazy loaded)
 const UserDashboard = lazy(() => import("./pages/user/UserDashboard"));
@@ -223,6 +224,11 @@ const App = () => (
                 <Route path="milestones" element={
                   <PermissionGate permission="trading.view">
                     <TradingMilestonesPage />
+                  </PermissionGate>
+                } />
+                <Route path="subscriptions" element={
+                  <PermissionGate permission="trading.configure">
+                    <TradingSubscriptionsPage />
                   </PermissionGate>
                 } />
                 <Route path="*" element={<DashboardNotFound />} />

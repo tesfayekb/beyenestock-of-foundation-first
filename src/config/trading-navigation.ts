@@ -9,6 +9,7 @@ import {
   Flag,
   BookOpen,
   Target,
+  CreditCard,
 } from 'lucide-react';
 import type { NavSection } from './navigation.types';
 import { ROUTES } from './routes';
@@ -91,6 +92,12 @@ export const tradingNavigation: NavSection[] = [
         url: ROUTES.TRADING_MILESTONES,
         icon: Target,
         permission: 'trading.view',
+      },
+      {
+        title: 'Subscriptions',
+        url: ROUTES.TRADING_SUBSCRIPTIONS,
+        icon: CreditCard,
+        permission: 'trading.configure',
       },
     ],
   },
