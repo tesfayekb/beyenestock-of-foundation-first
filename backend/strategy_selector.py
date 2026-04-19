@@ -79,6 +79,26 @@ _NEUTRAL_PREFERRED = {
     "iron_condor", "iron_butterfly", "long_straddle", "calendar_spread",
 }
 
+# ── Signal enhancement constants (module scope) ─────────────────────────────
+# Kept at module scope (not inside the class) so they can be tuned without
+# touching the class body and so tests can import them directly.
+
+# Signal-A: VIX term structure thresholds.
+# vix_term_ratio = VIX9D / VIX. Above 1.0 = inverted (near-term vol >
+# medium-term) = elevated near-term event risk → condors face higher
+# blowout risk and should be sized down or skipped entirely.
+_VIX_TERM_SKIP        = 1.35   # skip trade (strong near-term risk event)
+_VIX_TERM_REDUCE_HARD = 1.20   # 50% size reduction
+_VIX_TERM_REDUCE_SOFT = 1.10   # 25% size reduction
+_VIX_TERM_THIN_FLOOR  = 0.80   # 15% reduction (thin 0DTE premium)
+
+# Signal-C: GEX directional bias thresholds.
+# gex_net > 0: market makers long gamma → mean-reversion → good for condors.
+# gex_net < 0: market makers short gamma → trending → bad for condors.
+_GEX_TRENDING_HARD    = -1_000_000_000   # strongly trending → 50% size cut
+_GEX_TRENDING_SOFT    =   -500_000_000   # mildly trending → 25% size cut
+_GEX_MEAN_REVERT      =  1_000_000_000   # strong mean-revert → 10% boost
+
 
 class StrategySelector:
 
@@ -112,10 +132,21 @@ class StrategySelector:
             if total_minutes >= 15 * 60 + 45:
                 return False, "after_345pm_d011"
 
-            # Before 9:35 AM — opening auction noise (GEX/ZG valid at open,
-            # but 5-min buffer for SPX tape to stabilize)
-            if total_minutes < 9 * 60 + 35:
-                return False, "before_935am"
+            # Signal-B: 9:45 AM floor (was 9:35).
+            # Opening auction settles by 9:35 but bid/ask spreads on
+            # 0DTE options remain elevated until ~9:45. GEX data also
+            # needs 10-15 min post-open to stabilize.
+            # Feature flag: signal:entry_time_gate:enabled (default ON).
+            if self._check_feature_flag("signal:entry_time_gate:enabled"):
+                open_floor = 9 * 60 + 45
+            else:
+                open_floor = 9 * 60 + 35  # original floor when flag off
+
+            if total_minutes < open_floor:
+                return (
+                    False,
+                    f"before_{open_floor // 60:02d}{open_floor % 60:02d}am",
+                )
 
             # D-010: after 2:30 PM — long-gamma only
             if total_minutes >= 14 * 60 + 30:
@@ -145,6 +176,149 @@ class StrategySelector:
             return val in ("true", b"true")
         except Exception:
             return False
+
+    def _check_time_window(
+        self, cv_stress: float = 0.0
+    ) -> Tuple[Union[bool, str], Optional[str]]:
+        """
+        Public alias for _stage0_time_gate. Signal-B uses this name and
+        the test surface in test_signal_enhancements.py also calls it.
+        Behavior identical to _stage0_time_gate.
+        """
+        return self._stage0_time_gate(cv_stress)
+
+    def _vix_term_modifier(
+        self, prediction: dict
+    ) -> Tuple[float, str]:
+        """
+        Signal-A: VIX term structure sizing modifier.
+        Returns (multiplier, status_label).
+
+        vix_term_ratio = VIX9D / VIX. High ratio (> 1.0) = inverted term
+        structure = elevated near-term uncertainty = condors face higher
+        blowout risk.
+
+        Reads vix_term_ratio from prediction dict; if absent, falls back
+        to computing it from polygon:vix9d:current / polygon:vix:current
+        in Redis. Final fallback is 1.0 (treated as normal).
+
+        Returns (1.0, "normal") when flag is off or ratio is in range.
+        Never raises.
+        """
+        try:
+            if not self._check_feature_flag(
+                "signal:vix_term_filter:enabled"
+            ):
+                return 1.0, "flag_off"
+
+            ratio_raw = prediction.get("vix_term_ratio")
+            if ratio_raw is None:
+                # Fallback: compute from Redis (prediction_engine writes
+                # VIX9D and VIX, but doesn't always emit the ratio).
+                try:
+                    v9 = (
+                        self.redis_client.get("polygon:vix9d:current")
+                        if self.redis_client else None
+                    )
+                    v = (
+                        self.redis_client.get("polygon:vix:current")
+                        if self.redis_client else None
+                    )
+                    if v9 is not None and v is not None:
+                        ratio = float(v9) / max(float(v), 1.0)
+                    else:
+                        ratio = 1.0
+                except Exception:
+                    ratio = 1.0
+            else:
+                ratio = float(ratio_raw)
+
+            if ratio >= _VIX_TERM_SKIP:
+                logger.info(
+                    "signal_vix_term_skip",
+                    ratio=round(ratio, 3),
+                    threshold=_VIX_TERM_SKIP,
+                )
+                return 0.0, "strongly_inverted_skip"
+
+            if ratio >= _VIX_TERM_REDUCE_HARD:
+                logger.info(
+                    "signal_vix_term_reduce_hard", ratio=round(ratio, 3)
+                )
+                return 0.50, "strongly_inverted"
+
+            if ratio >= _VIX_TERM_REDUCE_SOFT:
+                logger.info(
+                    "signal_vix_term_reduce_soft", ratio=round(ratio, 3)
+                )
+                return 0.75, "inverted"
+
+            if ratio <= _VIX_TERM_THIN_FLOOR:
+                # Thin near-term premium — slight reduction
+                return 0.85, "thin_premium"
+
+            return 1.0, "normal"
+
+        except Exception as exc:
+            logger.warning("vix_term_modifier_failed", error=str(exc))
+            return 1.0, "error"
+
+    def _gex_bias_modifier(
+        self, prediction: dict, strategy_type: str
+    ) -> Tuple[float, str]:
+        """
+        Signal-C: GEX directional bias sizing modifier.
+        Returns (multiplier, status_label).
+
+        Negative GEX = market makers short gamma = trending behavior.
+        Iron condors perform poorly in trending markets — reduce size.
+        Positive GEX = mean-reversion — slight boost for condors.
+
+        Only applies to short-gamma strategies (condors, butterflies,
+        credit spreads). Long-gamma strategies are unaffected.
+        Never raises.
+        """
+        try:
+            if not self._check_feature_flag(
+                "signal:gex_directional_bias:enabled"
+            ):
+                return 1.0, "flag_off"
+
+            short_gamma = {
+                "iron_condor", "iron_butterfly",
+                "put_credit_spread", "call_credit_spread",
+            }
+            if strategy_type not in short_gamma:
+                return 1.0, "not_applicable"
+
+            gex_net = float(prediction.get("gex_net") or 0.0)
+
+            if gex_net <= _GEX_TRENDING_HARD:
+                logger.info(
+                    "signal_gex_trending_hard",
+                    gex_net=gex_net,
+                    strategy=strategy_type,
+                )
+                return 0.50, "strongly_trending"
+
+            if gex_net <= _GEX_TRENDING_SOFT:
+                logger.info(
+                    "signal_gex_trending_soft",
+                    gex_net=gex_net,
+                    strategy=strategy_type,
+                )
+                return 0.75, "trending"
+
+            if gex_net >= _GEX_MEAN_REVERT:
+                # Strong mean-reversion regime → slight condor boost.
+                # Capped at 1.10 to keep risk bounded.
+                return 1.10, "strong_mean_reversion"
+
+            return 1.0, "neutral"
+
+        except Exception as exc:
+            logger.warning("gex_bias_modifier_failed", error=str(exc))
+            return 1.0, "error"
 
     def _get_spx_price(self) -> float:
         """Read current SPX price from Redis. Returns 5200.0 fallback."""
@@ -438,6 +612,81 @@ class StrategySelector:
                 kelly_multiplier=kelly_mult,
                 strategy_type=strategy_type,  # Phase 2B — debit/straddle sizing
             )
+
+            # ── Signal enhancements (Signal-A, Signal-B, Signal-C) ────
+            # Each returns a multiplier in [0.0, 1.1]. Combined multiplier
+            # is the product, capped at 1.1. 0.0 = skip this trade.
+
+            # Signal-A: VIX term structure
+            vix_term_mult, vix_term_status = self._vix_term_modifier(
+                prediction
+            )
+            if vix_term_mult == 0.0:
+                logger.info(
+                    "signal_a_skip_trade",
+                    reason="vix_term_strongly_inverted",
+                    ratio=prediction.get("vix_term_ratio"),
+                )
+                return None  # Skip — strong near-term event risk
+
+            # Signal-B: opening volatility window (9:45-10:00 AM ET)
+            opening_mult = 1.0
+            try:
+                if self._check_feature_flag(
+                    "signal:entry_time_gate:enabled"
+                ):
+                    import zoneinfo
+                    _et = zoneinfo.ZoneInfo("America/New_York")
+                    _now = datetime.now(_et)
+                    _mins = _now.hour * 60 + _now.minute
+                    # 9:45-10:00 AM: opening vol residue → 25% reduction
+                    if 9 * 60 + 45 <= _mins < 10 * 60:
+                        opening_mult = 0.75
+                        logger.debug(
+                            "signal_b_opening_window_reduction",
+                            time=f"{_now.hour}:{_now.minute:02d}",
+                        )
+            except Exception:
+                pass
+
+            # Signal-C: GEX directional bias
+            gex_mult, gex_status = self._gex_bias_modifier(
+                prediction, strategy_type
+            )
+
+            signal_mult = round(
+                min(1.1, vix_term_mult * opening_mult * gex_mult), 4
+            )
+
+            if signal_mult != 1.0:
+                logger.info(
+                    "signal_sizing_applied",
+                    signal_mult=signal_mult,
+                    vix_term=vix_term_status,
+                    gex_bias=gex_status,
+                    opening_mult=opening_mult,
+                )
+
+            # Apply signal multiplier to sizing (mirrors event_size_mult)
+            if signal_mult != 1.0 and sizing["contracts"] > 0:
+                original = sizing["contracts"]
+                sizing = {
+                    **sizing,
+                    "contracts": max(
+                        1, int(sizing["contracts"] * signal_mult)
+                    ),
+                    "risk_pct": round(
+                        sizing["risk_pct"] * signal_mult, 4
+                    ),
+                }
+                if sizing["contracts"] != original:
+                    logger.info(
+                        "signal_contracts_adjusted",
+                        original=original,
+                        adjusted=sizing["contracts"],
+                        multiplier=signal_mult,
+                    )
+            # ── End signal enhancements ───────────────────────────────
 
             # Apply event-day multiplier after sizing
             if event_size_mult < 1.0 and sizing["contracts"] > 0:

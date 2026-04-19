@@ -9,15 +9,20 @@ def test_commission_is_035_per_leg():
         "Old 0.65 commission still present"
 
 
-def test_entry_gate_is_935am_not_1000am():
-    """Entry gate must be 9:35 AM not 10:00 AM."""
+def test_entry_gate_floor_is_935_or_945_not_1000am():
+    """Entry gate floor must be 9:35 AM (flag off) or 9:45 AM (Signal-B
+    flag on, default). Must never be 10:00 AM. Updated for Signal-B
+    which adds a flag-gated 9:45 floor on top of the original 9:35.
+    """
     import inspect
     from strategy_selector import StrategySelector
     source = inspect.getsource(StrategySelector._stage0_time_gate)
     assert "9 * 60 + 35" in source, \
-        "Entry gate must be 9:35 AM (9*60+35=575)"
-    assert "before_935am" in source, \
-        "Reason string must be before_935am"
+        "Original 9:35 AM floor must remain as the flag-off fallback"
+    assert "9 * 60 + 45" in source, \
+        "Signal-B 9:45 AM floor must be present as the default"
+    assert "before_" in source, \
+        "Pre-floor reason string prefix must remain"
     assert "10 * 60" not in source or "10 * 60 + 30" in source, \
         "Old 10:00 AM gate still present (10*60=600)"
 

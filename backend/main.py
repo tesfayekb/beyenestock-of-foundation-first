@@ -1049,7 +1049,21 @@ _TRADING_FLAG_KEYS = [
     "strategy:long_straddle:enabled",
     "strategy:calendar_spread:enabled",
     "strategy:ai_hint_override:enabled",
+    # Signal enhancements — REVERSE polarity: absent key = ON (default),
+    # explicit "false" = OFF. The POST handler in set_feature_flag()
+    # handles the polarity inversion when toggled from the UI.
+    "signal:vix_term_filter:enabled",
+    "signal:entry_time_gate:enabled",
+    "signal:gex_directional_bias:enabled",
 ]
+
+# Signal flags follow REVERSE polarity (default ON). Set membership for
+# the POST handler to dispatch correctly.
+_SIGNAL_FLAGS = {
+    "signal:vix_term_filter:enabled",
+    "signal:entry_time_gate:enabled",
+    "signal:gex_directional_bias:enabled",
+}
 
 
 @app.get("/admin/trading/intelligence")
@@ -1102,7 +1116,12 @@ async def get_trading_intelligence():
 
 @app.get("/admin/trading/feature-flags")
 async def get_feature_flags():
-    """Return the current state of every trading feature flag in Redis."""
+    """Return the current state of every trading feature flag in Redis.
+
+    Strategy/agent flags are default OFF (absent key = false).
+    Signal flags are default ON (absent key = true; only "false"
+    explicitly disables them) — see _SIGNAL_FLAGS.
+    """
     try:
         if not redis_client:
             return {"flags": {}}
@@ -1111,9 +1130,12 @@ async def get_feature_flags():
         for key in _TRADING_FLAG_KEYS:
             try:
                 val = redis_client.get(key)
-                flags[key] = val in ("true", b"true")
+                if key in _SIGNAL_FLAGS:
+                    flags[key] = val not in ("false", b"false")
+                else:
+                    flags[key] = val in ("true", b"true")
             except Exception:
-                flags[key] = False
+                flags[key] = key in _SIGNAL_FLAGS  # default ON for signals
 
         return {"flags": flags}
     except Exception as exc:
@@ -1360,7 +1382,13 @@ async def set_feature_flag(payload: dict = FBody(...)):
 
     Body: ``{"flag_key": "strategy:iron_butterfly:enabled", "enabled": true}``
     Only whitelisted keys in ``_TRADING_FLAG_KEYS`` are accepted.
-    Setting ``enabled=false`` deletes the key (treated as off everywhere).
+
+    Polarity differs by flag type:
+      - Strategy/agent flags (default OFF): enabled=true sets "true",
+        enabled=false deletes the key.
+      - Signal flags (default ON): enabled=true deletes the key
+        (restores default ON), enabled=false sets "false" (explicit
+        disable). See _SIGNAL_FLAGS.
     """
     allowed = set(_TRADING_FLAG_KEYS)
 
@@ -1374,12 +1402,26 @@ async def set_feature_flag(payload: dict = FBody(...)):
         if not redis_client:
             return {"error": "redis_unavailable"}
 
-        if enabled:
-            redis_client.set(flag_key, "true")
+        if flag_key in _SIGNAL_FLAGS:
+            # Signal flags: default ON. Toggling ON deletes the key
+            # (restores default). Toggling OFF sets "false" (explicit).
+            if enabled:
+                redis_client.delete(flag_key)
+            else:
+                redis_client.set(flag_key, "false")
         else:
-            redis_client.delete(flag_key)
+            # Strategy/agent flags: default OFF. Standard polarity.
+            if enabled:
+                redis_client.set(flag_key, "true")
+            else:
+                redis_client.delete(flag_key)
 
-        logger.info("feature_flag_updated", flag_key=flag_key, enabled=enabled)
+        logger.info(
+            "feature_flag_updated",
+            flag_key=flag_key,
+            enabled=enabled,
+            polarity="signal" if flag_key in _SIGNAL_FLAGS else "standard",
+        )
         return {"ok": True, "flag_key": flag_key, "enabled": enabled}
 
     except Exception as exc:
