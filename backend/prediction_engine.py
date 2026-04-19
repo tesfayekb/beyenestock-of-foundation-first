@@ -183,6 +183,43 @@ class PredictionEngine:
         """
         import math
 
+        # ROI-1: Check for catalyst/earnings day FIRST.
+        # calendar:today:intel is written by economic_calendar at 8:45 AM ET.
+        # When today is a major catalyst (FOMC/CPI/NFP) or major earnings day,
+        # override regime to "event" so strategy_selector picks long_straddle
+        # or calendar_spread from REGIME_STRATEGY_MAP["event"]. Previously
+        # _compute_regime never read calendar intel, so the entire "event"
+        # branch was dead code — straddle/calendar were unreachable.
+        # RCS is capped at 55 on event days: IV is elevated (entry is fine)
+        # but direction is uncertain (no max-confidence sizing).
+        try:
+            cal_raw = self._read_redis("calendar:today:intel", None)
+            if cal_raw:
+                import json as _json
+                intel = _json.loads(cal_raw)
+                if (
+                    intel.get("has_major_catalyst")
+                    or intel.get("has_major_earnings")
+                ):
+                    logger.info(
+                        "regime_event_day_override",
+                        has_catalyst=intel.get("has_major_catalyst"),
+                        has_earnings=intel.get("has_major_earnings"),
+                        day_classification=intel.get("day_classification"),
+                    )
+                    return {
+                        "regime": "event",
+                        "regime_hmm": "event",
+                        "regime_lgbm": "event",
+                        "regime_agreement": True,
+                        "rcs": 55.0,
+                        "allocation_tier": "moderate",
+                        "gex_flip_zone_used": None,
+                        "gex_conf_at_regime": 0.0,
+                    }
+        except Exception:
+            pass  # Calendar unavailable — fall through to normal regime logic
+
         # --- Read all signals ---
         vvix_z_raw = self._read_redis("polygon:vvix:z_score", None)
         try:
@@ -400,10 +437,30 @@ class PredictionEngine:
                                 strategy_hint=strategy_hint,
                                 age_seconds=int(age_s),
                             )
+                            # ROI-4: ensure the probability triplet sums to 1.0.
+                            # The previous shape returned only p_bull + p_bear,
+                            # leaving downstream consumers (PredictionConfidence,
+                            # cv_stress sizing) to assume p_neutral. Make it
+                            # explicit and renormalise on any floating-point drift.
+                            _p_bull = (
+                                confidence if direction == "bull"
+                                else (1 - confidence) * 0.5
+                            )
+                            _p_bear = (
+                                confidence if direction == "bear"
+                                else (1 - confidence) * 0.5
+                            )
+                            _p_neutral = max(0.0, 1.0 - _p_bull - _p_bear)
+                            _total = _p_bull + _p_bear + _p_neutral
+                            if _total > 0 and abs(_total - 1.0) > 0.001:
+                                _p_bull /= _total
+                                _p_bear /= _total
+                                _p_neutral /= _total
                             return {
                                 "direction": direction,
-                                "p_bull": confidence if direction == "bull" else (1 - confidence) * 0.5,
-                                "p_bear": confidence if direction == "bear" else (1 - confidence) * 0.5,
+                                "p_bull": _p_bull,
+                                "p_bear": _p_bear,
+                                "p_neutral": _p_neutral,
                                 "confidence": confidence,
                                 "strategy_hint": strategy_hint,
                                 "sizing_modifier": sizing_modifier,

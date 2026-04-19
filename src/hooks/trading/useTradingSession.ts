@@ -19,7 +19,15 @@ export interface TradingSessionRow {
 }
 
 export function useTradingSession() {
-  const today = new Date().toISOString().slice(0, 10);
+  // P1-14: session_date is the ET trading date, not UTC.
+  // Around UTC midnight (which is ~8 PM ET) the UTC date rolls over
+  // before the ET trading day ends — using toISOString here loaded
+  // tomorrow's (non-existent) session row from 8 PM ET onward, hiding
+  // the actual session for the rest of the evening. en-CA locale
+  // produces YYYY-MM-DD, matching the session_date column format.
+  const today = new Date().toLocaleDateString('en-CA', {
+    timeZone: 'America/New_York',
+  });
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['trading', 'session', today],

@@ -79,23 +79,40 @@ def run_synthesis_agent(redis_client) -> dict:
         flag = redis_client.get("agents:ai_synthesis:enabled") if redis_client else None
         enabled = flag and flag.decode() == "true" if isinstance(flag, bytes) else flag == "true"
 
-        # Read macro brief
-        macro_raw = redis_client.get("ai:macro:brief") if redis_client else None
-        if not macro_raw:
-            return {}
-
-        macro = json.loads(macro_raw)
-
-        # Phase 2C: read flow brief (best-effort, may be missing)
+        # ROI-2: Don't gate synthesis on the macro brief alone.
+        # On quiet macro days (no FOMC/CPI/NFP) ai:macro:brief may be
+        # absent or stale even though flow + sentiment + calendar +
+        # GEX + feedback are all fresh. The prior gate
+        # `if not macro_raw: return {}` made synthesis silently skip
+        # most mornings — running weekly instead of daily. New gate:
+        # only skip when ALL four primary signal sources are absent.
+        macro_raw = (
+            redis_client.get("ai:macro:brief") if redis_client else None
+        )
         flow_raw = (
             redis_client.get("ai:flow:brief") if redis_client else None
         )
-        flow = json.loads(flow_raw) if flow_raw else {}
-
-        # Phase 2C: read sentiment brief (best-effort, may be missing)
         sentiment_raw = (
             redis_client.get("ai:sentiment:brief") if redis_client else None
         )
+        calendar_raw = (
+            redis_client.get("calendar:today:intel") if redis_client else None
+        )
+
+        if (
+            not macro_raw
+            and not flow_raw
+            and not sentiment_raw
+            and not calendar_raw
+        ):
+            logger.info(
+                "synthesis_agent_skipped",
+                reason="all_primary_signals_absent",
+            )
+            return {}
+
+        macro = json.loads(macro_raw) if macro_raw else {}
+        flow = json.loads(flow_raw) if flow_raw else {}
         sentiment = json.loads(sentiment_raw) if sentiment_raw else {}
 
         # Phase 2C: confluence across macro + flow + sentiment directions

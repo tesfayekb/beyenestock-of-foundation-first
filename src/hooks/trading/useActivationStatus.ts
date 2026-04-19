@@ -336,6 +336,15 @@ async function fetchActivationStatus(): Promise<ActivationStatus> {
                 .limit(50),
         ]);
 
+    // P1-10: throw on primary-query errors so React Query exposes
+    // isError instead of rendering an empty/default-zero dashboard
+    // that looks identical to "system is healthy with no data".
+    // alertsResult is best-effort — system_alerts may not exist yet
+    // in fresh installs, so we tolerate that one failing.
+    if (tradesResult.error) throw tradesResult.error;
+    if (flagsResult.error) throw flagsResult.error;
+    if (abRowsResult.error) throw abRowsResult.error;
+
     const closed_trade_count = tradesResult.count ?? 0;
 
     const flags: Record<string, boolean> = {};

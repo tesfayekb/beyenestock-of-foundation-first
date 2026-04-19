@@ -146,11 +146,22 @@ class PolygonFeed:
             await asyncio.sleep(10)
 
     def _store_baseline(self, current: float) -> None:
-        self.redis_client.set("polygon:vvix:current", current)
+        # P1-16: every polygon:vvix:* write uses setex(3600) so a crashed
+        # poller can never leave stale VVIX values in Redis indefinitely.
+        # 1-hour TTL is comfortably longer than the 10-second polling
+        # cadence — under healthy operation each key is overwritten well
+        # before expiry; under an outage the keys vanish and downstream
+        # readers (regime, prediction) cleanly fall back to defaults
+        # instead of trading on yesterday's vol.
+        self.redis_client.setex("polygon:vvix:current", 3600, str(current))
         if len(self.history) < 20:
-            self.redis_client.set("polygon:vvix:baseline_ready", "False")
-            self.redis_client.set(
-                "polygon:vvix:fallback_thresholds", json.dumps([120, 140, 160])
+            self.redis_client.setex(
+                "polygon:vvix:baseline_ready", 3600, "False"
+            )
+            self.redis_client.setex(
+                "polygon:vvix:fallback_thresholds",
+                3600,
+                json.dumps([120, 140, 160]),
             )
             return
 
@@ -158,10 +169,12 @@ class PolygonFeed:
         std = pstdev(self.history) or 0.0
         z_score = (current - avg) / std if std > 0 else 0.0
 
-        self.redis_client.set("polygon:vvix:20d_mean", avg)
-        self.redis_client.set("polygon:vvix:20d_std", std)
-        self.redis_client.set("polygon:vvix:z_score", z_score)
-        self.redis_client.set("polygon:vvix:baseline_ready", "True")
+        self.redis_client.setex("polygon:vvix:20d_mean", 3600, str(avg))
+        self.redis_client.setex("polygon:vvix:20d_std", 3600, str(std))
+        self.redis_client.setex("polygon:vvix:z_score", 3600, str(z_score))
+        self.redis_client.setex(
+            "polygon:vvix:baseline_ready", 3600, "True"
+        )
 
     def _store_vix_baseline(self, current: float) -> None:
         """

@@ -109,6 +109,14 @@ export function useEarningsStatus() {
                         .maybeSingle(),
                 ]);
 
+            // P1-10: throw on primary-query errors so React Query
+            // exposes isError. activeResult uses maybeSingle (null is
+            // a valid result), so we still throw on actual errors.
+            // scanResult is best-effort — earnings_upcoming_scan may
+            // be empty before the first 8:45 AM scan lands.
+            if (recentResult.error) throw recentResult.error;
+            if (activeResult.error) throw activeResult.error;
+
             const recent_positions = (recentResult.data ??
                 []) as EarningsRecentPosition[];
             const active = (activeResult.data ??

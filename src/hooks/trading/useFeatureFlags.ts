@@ -14,6 +14,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 // Signal flags use REVERSE polarity (default ON). Keep this set in
 // sync with _SIGNAL_FLAGS in backend/main.py.
@@ -149,10 +150,22 @@ export function useFeatureFlags() {
 
 export function useSetFeatureFlag() {
     const qc = useQueryClient();
+    const { toast } = useToast();
     return useMutation({
         mutationFn: ({ flagKey, enabled }: { flagKey: string; enabled: boolean }) =>
             postFlag(flagKey, enabled),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['feature-flags'] }),
+        // P1-13: surface failed toggles. Without this, an Edge Function
+        // 4xx/5xx silently became a no-op and the optimistic UI made
+        // the operator think the flag had flipped.
+        onError: (error: Error) => {
+            toast({
+                title: 'Flag toggle failed',
+                description:
+                    error.message ?? 'Could not update flag. Check permissions.',
+                variant: 'destructive',
+            });
+        },
     });
 }
 

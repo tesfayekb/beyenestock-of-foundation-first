@@ -41,18 +41,37 @@ import {
 } from '@/hooks/trading/useTradeIntelligence';
 import { ROUTES } from '@/config/routes';
 
+// P1-15: Single source of truth — must match HealthPage.tsx EXPECTED_SERVICES
+// exactly. Phantom services (learning_engine, sentinel, cboe_feed) were
+// removed because they have not been built yet and were permanently
+// reporting "offline", inflating the "missing services" count and
+// scaring the operator. Add them back when actually implemented.
 const EXPECTED_SERVICES = [
+  // Trading engine (continuous heartbeat)
   'prediction_engine',
   'gex_engine',
   'strategy_selector',
   'risk_engine',
   'execution_engine',
-  'learning_engine',
   'data_ingestor',
-  'sentinel',
   'tradier_websocket',
   'databento_feed',
-  'cboe_feed',
+  'polygon_feed',
+  // Morning AI agents (once-per-day health writes)
+  'economic_calendar',
+  'macro_agent',
+  'synthesis_agent',
+  'surprise_detector',
+  'flow_agent',
+  'sentiment_agent',
+  // Phase 5A: earnings volatility scan
+  'earnings_scanner',
+  // Phase A (Loop 1): closed-loop feedback brief
+  'feedback_agent',
+  // HARD-A: circuit-breaker health services
+  'prediction_watchdog',
+  'emergency_backstop',
+  'position_reconciliation',
 ] as const;
 
 const REGIME_MAX_TRADES: Record<string, number> = {
