@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { safeRedirectPath } from '@/lib/safe-redirect';
 import TurnstileWidget, { type TurnstileWidgetHandle } from '@/components/auth/TurnstileWidget';
 import { DEV_MODE, DEV_PASSWORD_MIN_LENGTH, TURNSTILE_ACTIVE } from '@/lib/dev-mode';
+import { AppBrand } from '@/components/AppBrand';
 
 
 export default function SignIn() {
@@ -135,7 +136,10 @@ export default function SignIn() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Welcome back</CardTitle>
+          <div className="flex justify-center mb-2">
+            <AppBrand size="lg" showName={false} />
+          </div>
+          <CardTitle className="text-2xl">Beyene'sMarketMuse</CardTitle>
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

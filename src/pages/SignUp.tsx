@@ -13,6 +13,7 @@ import { DEV_MODE, DEV_PASSWORD_MIN_LENGTH, TURNSTILE_ACTIVE } from '@/lib/dev-m
 import { InviteOnlyMessage } from '@/components/auth/InviteOnlyMessage';
 import { useOnboardingMode } from '@/hooks/useOnboardingMode';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
+import { AppBrand } from '@/components/AppBrand';
 
 export default function SignUp() {
   const [email, setEmail] = useState('');
@@ -142,8 +143,11 @@ export default function SignUp() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Create an account</CardTitle>
-          <CardDescription>Get started with your account</CardDescription>
+          <div className="flex justify-center mb-2">
+            <AppBrand size="lg" showName={false} />
+          </div>
+          <CardTitle className="text-2xl">Beyene'sMarketMuse</CardTitle>
+          <CardDescription>Create your account to get started</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
