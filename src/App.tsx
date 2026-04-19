@@ -54,6 +54,7 @@ const TradingMilestonesPage = lazy(() => import("./pages/trading/MilestonesPage"
 const TradingSubscriptionsPage = lazy(() => import("./pages/trading/SubscriptionsPage"));
 const TradingActivationPage = lazy(() => import("./pages/trading/ActivationPage"));
 const TradingAbComparisonPage = lazy(() => import("./pages/trading/AbComparisonPage"));
+const TradingEarningsPage = lazy(() => import("./pages/trading/EarningsPage"));
 
 // User pages (lazy loaded)
 const UserDashboard = lazy(() => import("./pages/user/UserDashboard"));
@@ -241,6 +242,11 @@ const App = () => (
                 <Route path="ab-comparison" element={
                   <PermissionGate permission="trading.view">
                     <TradingAbComparisonPage />
+                  </PermissionGate>
+                } />
+                <Route path="earnings" element={
+                  <PermissionGate permission="trading.view">
+                    <TradingEarningsPage />
                   </PermissionGate>
                 } />
                 <Route path="*" element={<DashboardNotFound />} />
