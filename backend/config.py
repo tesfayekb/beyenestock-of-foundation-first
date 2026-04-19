@@ -33,7 +33,17 @@ POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
 # Phase 2A: Economic Intelligence Layer (all optional — system works without them)
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
+
+# Phase 2A: AI provider selection for synthesis_agent.
+# AI_PROVIDER must be one of: "anthropic" | "openai".
+# Both default to current production values — flip via Railway env vars
+# to A/B-test or fall back if one provider is degraded. The chosen
+# provider's API key (ANTHROPIC_API_KEY / OPENAI_API_KEY) must be set
+# or synthesis_agent will skip silently.
+AI_PROVIDER = os.getenv("AI_PROVIDER", "anthropic").lower()
+AI_MODEL = os.getenv("AI_MODEL", "claude-sonnet-4-5")
 
 # Phase 2C: Options flow + sentiment intelligence (optional)
 # Without UNUSUAL_WHALES_API_KEY, flow_agent falls back to Polygon put/call only.

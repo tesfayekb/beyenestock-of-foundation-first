@@ -2,7 +2,8 @@
 AI synthesis agent — Phase 2A Tier 2 (final step).
 
 Reads: ai:macro:brief + gex signals from Redis
-Uses: Claude API (anthropic SDK) to synthesize a structured trade recommendation
+Uses: Configurable AI provider (Anthropic or OpenAI) to synthesize a
+      structured trade recommendation. Selected via config.AI_PROVIDER.
 Writes: ai:synthesis:latest (TTL 8hr)
 
 CRITICAL DESIGN RULES:
@@ -11,6 +12,9 @@ CRITICAL DESIGN RULES:
 3. On ANY failure: return empty dict, never update ai:synthesis:latest
 4. The prediction_engine reads ai:synthesis:latest as Priority 0
    but only if the key exists and is fresh (<30 min old)
+5. Both providers must be given the IDENTICAL system prompt and must
+   return JSON conforming to the same schema. Safety bounds are applied
+   centrally in _call_ai_provider().
 """
 
 from __future__ import annotations
@@ -57,8 +61,17 @@ def run_synthesis_agent(redis_client) -> dict:
     Returns synthesis dict. Only writes to Redis if feature flag enabled.
     """
     try:
-        if not config.ANTHROPIC_API_KEY:
-            logger.info("synthesis_agent_skipped", reason="no_api_key")
+        provider = (getattr(config, "AI_PROVIDER", "anthropic") or "").lower()
+        api_key_present = (
+            (provider == "openai" and bool(getattr(config, "OPENAI_API_KEY", "")))
+            or (provider != "openai" and bool(config.ANTHROPIC_API_KEY))
+        )
+        if not api_key_present:
+            logger.info(
+                "synthesis_agent_skipped",
+                reason="no_api_key",
+                provider=provider,
+            )
             return {}
 
         # Check feature flag
@@ -95,14 +108,19 @@ def run_synthesis_agent(redis_client) -> dict:
             macro, gex_context, flow, sentiment, confluence_score
         )
 
-        # Call Claude API
-        synthesis = _call_claude(config.ANTHROPIC_API_KEY, user_message)
+        # Call configured AI provider (Anthropic or OpenAI)
+        synthesis = _call_ai_provider(user_message)
         if not synthesis:
             return {}
 
         # Add metadata
         synthesis["generated_at"] = datetime.now(timezone.utc).isoformat()
+        # Keep "claude_synthesis" as the canonical source label for
+        # downstream consumers (dashboards, log filters). Provider
+        # actually used is recorded separately for auditability.
         synthesis["source"] = "claude_synthesis"
+        synthesis["provider"] = provider
+        synthesis["model"] = getattr(config, "AI_MODEL", "")
         synthesis["day_classification"] = macro.get("day_classification", "normal")
         synthesis["confluence_score"] = confluence_score
         synthesis["flow_direction"] = flow.get("flow_direction", "neutral")
@@ -281,48 +299,106 @@ Synthesize all signals above. Weight high-confluence setups more aggressively.
 Provide your structured trade recommendation as JSON."""
 
 
-def _call_claude(api_key: str, user_message: str) -> Optional[dict]:
-    """Call Claude API and parse structured JSON response."""
+def _strip_code_fences(text: str) -> str:
+    """Drop triple-backtick fences that some providers wrap JSON in."""
+    if text.startswith("```"):
+        lines = text.split("\n")
+        text = "\n".join(l for l in lines if not l.startswith("```"))
+    return text
+
+
+def _validate_and_clamp(result: dict) -> Optional[dict]:
+    """
+    Shared validation + safety bounds for any provider's response.
+    Returns None if the response is malformed (caller logs context).
+    """
+    required = {"direction", "confidence", "strategy", "rationale", "risk_level"}
+    if not required.issubset(result.keys()):
+        logger.warning(
+            "synthesis_missing_fields",
+            present=list(result.keys()),
+        )
+        return None
+
+    # Safety bounds — never above 0.85 confidence; risk 1-10; sizing 0.25-1.2.
+    result["confidence"] = max(0.0, min(0.85, float(result["confidence"])))
+    result["risk_level"] = max(1, min(10, int(result["risk_level"])))
+    result["sizing_modifier"] = max(
+        0.25, min(1.2, float(result.get("sizing_modifier", 1.0)))
+    )
+    return result
+
+
+def _call_ai_provider(user_message: str) -> Optional[dict]:
+    """
+    Dispatch to the configured AI provider and return a validated
+    synthesis dict, or None on any failure.
+
+    Provider is selected via config.AI_PROVIDER ("anthropic" | "openai")
+    and the model via config.AI_MODEL. Both providers receive the
+    identical SYSTEM_PROMPT and are expected to return JSON matching
+    the same schema. All safety bounds are applied centrally.
+    """
+    provider = (getattr(config, "AI_PROVIDER", "anthropic") or "").lower()
+    model = getattr(config, "AI_MODEL", "claude-sonnet-4-5")
+    try:
+        if provider == "openai":
+            response_text = _call_openai(
+                config.OPENAI_API_KEY, model, user_message,
+            )
+        else:
+            response_text = _call_claude(
+                config.ANTHROPIC_API_KEY, model, user_message,
+            )
+        if not response_text:
+            return None
+
+        result = json.loads(_strip_code_fences(response_text.strip()))
+        return _validate_and_clamp(result)
+    except Exception as exc:
+        logger.warning(
+            "ai_provider_failed",
+            provider=provider,
+            model=model,
+            error=str(exc),
+        )
+        return None
+
+
+def _call_claude(api_key: str, model: str, user_message: str) -> Optional[str]:
+    """Anthropic backend — returns the raw assistant text or None."""
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
-
         message = client.messages.create(
-            model="claude-sonnet-4-5",
+            model=model,
             max_tokens=256,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
         )
-
-        response_text = message.content[0].text.strip()
-
-        # Parse JSON
-        if response_text.startswith("```"):
-            lines = response_text.split("\n")
-            response_text = "\n".join(
-                l for l in lines if not l.startswith("```")
-            )
-
-        result = json.loads(response_text)
-
-        # Validate required fields
-        required = {"direction", "confidence", "strategy", "rationale", "risk_level"}
-        if not required.issubset(result.keys()):
-            logger.warning(
-                "synthesis_missing_fields",
-                present=list(result.keys()),
-            )
-            return None
-
-        # Safety bounds
-        result["confidence"] = max(0.0, min(0.85, float(result["confidence"])))
-        result["risk_level"] = max(1, min(10, int(result["risk_level"])))
-        result["sizing_modifier"] = max(
-            0.25, min(1.2, float(result.get("sizing_modifier", 1.0)))
-        )
-
-        return result
-
+        return message.content[0].text
     except Exception as exc:
-        logger.warning("claude_api_failed", error=str(exc))
+        logger.warning("claude_api_failed", error=str(exc), model=model)
+        return None
+
+
+def _call_openai(api_key: str, model: str, user_message: str) -> Optional[str]:
+    """
+    OpenAI backend — returns the raw assistant text or None.
+    Requires openai>=1.0.0.
+    """
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        completion = client.chat.completions.create(
+            model=model,
+            max_tokens=256,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message},
+            ],
+        )
+        return completion.choices[0].message.content
+    except Exception as exc:
+        logger.warning("openai_api_failed", error=str(exc), model=model)
         return None
