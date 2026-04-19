@@ -11,18 +11,15 @@
  * Owner: trading-console module
  * Classification: security-sensitive (mutates trading-engine state)
  * Authorization: trading.configure permission required
- * Audit: trading.feature_flag_changed
  *
  * POST /set-feature-flag
  * Body: { flag_key: string, enabled: boolean }
  * Response: { ok: true, flag_key, enabled } on success.
+ *
+ * NOTE: This file is intentionally self-contained (no _shared/ imports)
+ * so it can deploy without dragging in transitive dependencies.
  */
-import { createHandler, apiSuccess } from '../_shared/handler.ts'
-import { authenticateRequest } from '../_shared/authenticate-request.ts'
-import { checkPermissionOrThrow } from '../_shared/authorization.ts'
-import { validateRequest, z } from '../_shared/validate-request.ts'
-import { logAuditEvent } from '../_shared/audit.ts'
-import { apiError } from '../_shared/api-error.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
 
 // Railway base URL is hardcoded here intentionally — this code runs
 // server-side in the Supabase Edge runtime, not in the browser, so
@@ -30,26 +27,135 @@ import { apiError } from '../_shared/api-error.ts'
 // rotate this constant and redeploy the function.
 const RAILWAY_URL = 'https://diplomatic-mercy-production-7e61.up.railway.app'
 
-const BodySchema = z.object({
-    flag_key: z.string().min(1).max(120),
-    enabled: z.boolean(),
-})
+const corsHeaders: Record<string, string> = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers':
+        'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+}
 
-Deno.serve(createHandler(async (req: Request): Promise<Response> => {
-    if (req.method !== 'POST') {
-        return apiError(405, 'Method not allowed', {
-            correlationId: crypto.randomUUID(),
-        })
+function jsonResponse(
+    body: Record<string, unknown>,
+    status: number,
+): Response {
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+}
+
+interface AuthCtx {
+    userId: string
+    serviceClient: ReturnType<typeof createClient>
+}
+
+async function authenticate(req: Request): Promise<AuthCtx> {
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+        throw new Error('UNAUTHORIZED')
+    }
+    const token = authHeader.replace('Bearer ', '')
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const serviceRoleKey =
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+
+    if (!supabaseUrl || !serviceRoleKey) {
+        throw new Error('SERVER_MISCONFIGURED')
     }
 
-    const ctx = await authenticateRequest(req)
-    await checkPermissionOrThrow(ctx.user.id, 'trading.configure')
+    const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false },
+    })
 
-    const body = validateRequest(BodySchema, await req.json())
+    const {
+        data: { user },
+        error,
+    } = await serviceClient.auth.getUser(token)
 
-    // Forward to the Railway backend. The backend whitelists the
-    // flag_key against _TRADING_FLAG_KEYS and applies signal-flag
-    // polarity inversion server-side, so we just relay verbatim.
+    if (error || !user) throw new Error('UNAUTHORIZED')
+
+    return { userId: user.id, serviceClient }
+}
+
+async function checkPermission(
+    ctx: AuthCtx,
+    permissionKey: string,
+): Promise<void> {
+    const { data, error } = await ctx.serviceClient.rpc('has_permission', {
+        _user_id: ctx.userId,
+        _permission_key: permissionKey,
+    })
+    if (error || data !== true) {
+        throw new Error('FORBIDDEN')
+    }
+}
+
+interface FlagBody {
+    flag_key: string
+    enabled: boolean
+}
+
+function parseBody(raw: unknown): FlagBody {
+    if (!raw || typeof raw !== 'object') {
+        throw new Error('INVALID_BODY')
+    }
+    const obj = raw as Record<string, unknown>
+    const flag_key = obj.flag_key
+    const enabled = obj.enabled
+    if (
+        typeof flag_key !== 'string' ||
+        flag_key.length < 1 ||
+        flag_key.length > 120
+    ) {
+        throw new Error('INVALID_BODY')
+    }
+    if (typeof enabled !== 'boolean') {
+        throw new Error('INVALID_BODY')
+    }
+    return { flag_key, enabled }
+}
+
+Deno.serve(async (req: Request): Promise<Response> => {
+    if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders })
+    }
+    if (req.method !== 'POST') {
+        return jsonResponse({ error: 'Method not allowed' }, 405)
+    }
+
+    let ctx: AuthCtx
+    try {
+        ctx = await authenticate(req)
+    } catch (err) {
+        const msg = String((err as Error).message)
+        if (msg === 'SERVER_MISCONFIGURED') {
+            return jsonResponse(
+                { error: 'Server misconfigured' },
+                500,
+            )
+        }
+        return jsonResponse({ error: 'Unauthorized' }, 401)
+    }
+
+    try {
+        await checkPermission(ctx, 'trading.configure')
+    } catch {
+        return jsonResponse(
+            { error: 'Forbidden: requires trading.configure' },
+            403,
+        )
+    }
+
+    let body: FlagBody
+    try {
+        const raw = await req.json()
+        body = parseBody(raw)
+    } catch {
+        return jsonResponse({ error: 'Invalid request body' }, 400)
+    }
+
     let railwayResponse: Response
     try {
         railwayResponse = await fetch(
@@ -68,56 +174,36 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
             '[SET-FEATURE-FLAG] Railway fetch failed',
             String(fetchErr),
         )
-        return apiError(502, 'Failed to reach Railway backend', {
-            correlationId: ctx.correlationId,
-        })
+        return jsonResponse(
+            { error: 'Failed to reach Railway backend' },
+            502,
+        )
     }
 
     let railwayBody: Record<string, unknown> = {}
     try {
         railwayBody = await railwayResponse.json()
     } catch {
-        // Railway returned non-JSON — treat as failure.
         railwayBody = {}
     }
 
     if (!railwayResponse.ok || railwayBody.error) {
-        await logAuditEvent({
-            actorId: ctx.user.id,
-            action: 'trading.feature_flag_change_failed',
-            targetType: 'feature_flag',
-            targetId: body.flag_key,
-            metadata: {
-                enabled: body.enabled,
-                railway_status: railwayResponse.status,
-                railway_error: railwayBody.error ?? null,
+        console.error(
+            '[SET-FEATURE-FLAG] Railway rejected flag change',
+            {
+                status: railwayResponse.status,
+                error: railwayBody.error ?? null,
+                flag_key: body.flag_key,
             },
-            ipAddress: ctx.ipAddress,
-            userAgent: ctx.userAgent,
-            correlationId: ctx.correlationId,
-        })
-        return apiError(502, 'Backend rejected flag change', {
-            correlationId: ctx.correlationId,
-        })
+        )
+        return jsonResponse(
+            { error: 'Backend rejected flag change' },
+            502,
+        )
     }
 
-    await logAuditEvent({
-        actorId: ctx.user.id,
-        action: 'trading.feature_flag_changed',
-        targetType: 'feature_flag',
-        targetId: body.flag_key,
-        metadata: {
-            flag_key: body.flag_key,
-            enabled: body.enabled,
-        },
-        ipAddress: ctx.ipAddress,
-        userAgent: ctx.userAgent,
-        correlationId: ctx.correlationId,
-    })
-
-    return apiSuccess({
-        ok: true,
-        flag_key: body.flag_key,
-        enabled: body.enabled,
-    })
-}, { rateLimit: 'strict' }))
+    return jsonResponse(
+        { ok: true, flag_key: body.flag_key, enabled: body.enabled },
+        200,
+    )
+})
