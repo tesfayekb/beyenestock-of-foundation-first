@@ -8,7 +8,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 
-const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL as string | undefined) ?? '';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'https://diplomatic-mercy-production-7e61.up.railway.app';
 
 export interface CalendarIntel {
     day_classification?: string;
