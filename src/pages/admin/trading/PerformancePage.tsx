@@ -82,6 +82,134 @@ function MetricRow({
   );
 }
 
+/**
+ * StrategyBreakdownCard (Phase 4C)
+ * Per-strategy win rate and avg P&L across all closed virtual positions.
+ * Strategies with fewer than 5 trades show "<5 trades" instead of metrics —
+ * win rate is too noisy to trust under that sample size.
+ *
+ * MUST be defined above TradingPerformancePage default export so React's
+ * function-name resolution sees it without hoisting surprises.
+ */
+function StrategyBreakdownCard() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['strategy-breakdown'],
+    queryFn: async () => {
+      const { data: rows, error } = await supabase
+        .from('trading_positions')
+        .select('strategy_type, net_pnl, status')
+        .eq('status', 'closed')
+        .eq('position_mode', 'virtual');
+      if (error) throw error;
+      return rows ?? [];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const breakdown = useMemo(() => {
+    if (!data) return [];
+    const map: Record<
+      string,
+      { wins: number; losses: number; totalPnl: number; count: number }
+    > = {};
+    for (const pos of data) {
+      const key = (pos.strategy_type as string | null) ?? 'unknown';
+      if (!map[key]) map[key] = { wins: 0, losses: 0, totalPnl: 0, count: 0 };
+      map[key].count += 1;
+      const pnl = (pos.net_pnl as number | null) ?? 0;
+      map[key].totalPnl += pnl;
+      if (pnl > 0) map[key].wins += 1;
+      else map[key].losses += 1;
+    }
+    return Object.entries(map)
+      .map(([strategy, s]) => ({
+        strategy,
+        count: s.count,
+        winRate: s.count > 0 ? (s.wins / s.count) * 100 : 0,
+        avgPnl: s.count > 0 ? s.totalPnl / s.count : 0,
+        totalPnl: s.totalPnl,
+        insufficient: s.count < 5,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [data]);
+
+  if (isLoading) return <LoadingSkeleton variant="card" rows={2} />;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium">Strategy Breakdown</CardTitle>
+        <CardDescription>
+          Per-strategy P&amp;L across all closed paper trades.
+          Strategies with fewer than 5 trades show insufficient data.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!breakdown.length ? (
+          <EmptyState
+            icon={BarChart2}
+            title="No closed trades yet"
+            description="Breakdown appears after the first paper trade closes."
+          />
+        ) : (
+          <div className="space-y-2">
+            {breakdown.map((s) => (
+              <div
+                key={s.strategy}
+                className="flex items-center gap-3 rounded-lg border p-3"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium capitalize">
+                    {s.strategy.replace(/_/g, ' ')}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {s.count} trade{s.count !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                {s.insufficient ? (
+                  <Badge
+                    variant="outline"
+                    className="text-xs bg-muted text-muted-foreground border-border"
+                  >
+                    &lt;5 trades
+                  </Badge>
+                ) : (
+                  <>
+                    <div className="text-right">
+                      <p
+                        className={`text-sm font-semibold font-mono ${
+                          s.winRate >= 60
+                            ? 'text-success'
+                            : s.winRate >= 40
+                            ? 'text-amber-500'
+                            : 'text-destructive'
+                        }`}
+                      >
+                        {s.winRate.toFixed(0)}%
+                      </p>
+                      <p className="text-xs text-muted-foreground">win</p>
+                    </div>
+                    <div className="text-right">
+                      <p
+                        className={`text-sm font-semibold font-mono ${
+                          s.avgPnl >= 0 ? 'text-success' : 'text-destructive'
+                        }`}
+                      >
+                        {s.avgPnl >= 0 ? '+' : ''}${s.avgPnl.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">avg</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function TradingPerformancePage() {
   const {
     data: sessions,
@@ -421,6 +549,9 @@ export default function TradingPerformancePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Section 4 — Strategy Breakdown (Phase 4C) */}
+      <StrategyBreakdownCard />
     </div>
   );
 }
