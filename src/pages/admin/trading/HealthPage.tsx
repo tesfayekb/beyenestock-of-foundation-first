@@ -9,7 +9,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
-import { Activity, AlertTriangle, CheckCircle, XCircle, CircleSlash, HeartPulse, Bell } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle, XCircle, CircleSlash, Clock, HeartPulse, Bell } from 'lucide-react';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
@@ -19,8 +19,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
+import { isMarketOpen, isMarketDay, getMarketStatusLabel } from '@/lib/market-calendar';
 
-type ServiceStatus = 'healthy' | 'degraded' | 'error' | 'offline';
+type ServiceStatus = 'healthy' | 'degraded' | 'error' | 'offline' | 'idle';
 
 interface TradingHealthRow {
   id: string;
@@ -79,33 +80,20 @@ const STATUS_CONFIG: Record<ServiceStatus, { Icon: typeof CheckCircle; badgeClas
     badgeClass: 'bg-muted text-muted-foreground border-border',
     iconClass: 'text-muted-foreground',
   },
+  // 'idle' = not running because market is closed (weekend, holiday,
+  // outside hours). Neutral grey + Clock icon — not an alarm color.
+  idle: {
+    Icon: Clock,
+    badgeClass: 'bg-muted text-muted-foreground border-border',
+    iconClass: 'text-muted-foreground',
+  },
 };
 
 function normalizeStatus(status: string): ServiceStatus {
   const s = status.toLowerCase();
-  if (s === 'healthy' || s === 'degraded' || s === 'error' || s === 'offline') return s;
+  if (s === 'healthy' || s === 'degraded' || s === 'error' || s === 'offline' || s === 'idle') return s;
   if (s === 'unhealthy') return 'error';
   return 'offline';
-}
-
-/** Returns true if current time is within US market hours: 9:30 AM – 4:00 PM ET. */
-function isMarketHoursET(now: Date = new Date()): boolean {
-  // Get the wall-clock time in America/New_York
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    weekday: 'short',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false,
-  });
-  const parts = fmt.formatToParts(now);
-  const weekday = parts.find((p) => p.type === 'weekday')?.value;
-  const hour = Number(parts.find((p) => p.type === 'hour')?.value);
-  const minute = Number(parts.find((p) => p.type === 'minute')?.value);
-  if (!weekday || Number.isNaN(hour) || Number.isNaN(minute)) return false;
-  if (weekday === 'Sat' || weekday === 'Sun') return false;
-  const minutes = hour * 60 + minute;
-  return minutes >= 9 * 60 + 30 && minutes <= 16 * 60;
 }
 
 interface TradingServiceCardProps {
@@ -206,7 +194,14 @@ export default function TradingHealthPage() {
     let n = 0;
     for (const name of EXPECTED_SERVICES) {
       const row = serviceMap.get(name);
-      if (!row || normalizeStatus(row.status) === 'offline') n += 1;
+      // Idle services are NOT offline — they're calmly off because the
+      // market is closed. Only true 'offline' or missing rows count.
+      if (!row) {
+        n += 1;
+        continue;
+      }
+      const status = normalizeStatus(row.status);
+      if (status === 'offline') n += 1;
     }
     return n;
   }, [serviceMap]);
@@ -220,8 +215,13 @@ export default function TradingHealthPage() {
     return n;
   }, [serviceMap]);
 
-  const marketHours = isMarketHoursET();
-  const showCriticalBanner = marketHours && offlineCount > 0;
+  const marketOpen = isMarketOpen();
+  const marketDay = isMarketDay();
+  const marketStatusLabel = getMarketStatusLabel();
+  // Critical banner fires ONLY when the market is currently open AND we
+  // have offline services. Weekends, holidays, pre-market, and after
+  // close all suppress it — those are expected idle states, not alarms.
+  const showCriticalBanner = marketOpen && offlineCount > 0;
   const isEmpty = !isLoading && !error && (data?.health.length ?? 0) === 0;
 
   return (
@@ -258,14 +258,17 @@ export default function TradingHealthPage() {
             <StatCard title="Expected Services" value={EXPECTED_SERVICES.length} icon={Activity} />
             <StatCard title="Healthy" value={healthyCount} icon={CheckCircle} />
             <StatCard title="Offline" value={offlineCount} icon={CircleSlash} />
-            <StatCard title="Market Status" value={marketHours ? 'Open' : 'Closed'} icon={HeartPulse} />
+            <StatCard title="Market Status" value={marketStatusLabel} icon={HeartPulse} />
           </div>
 
-          {!marketHours && (
+          {!marketOpen && (
             <p className="text-xs text-muted-foreground">
-              Outside market hours (Mon–Fri 9:30–16:00 ET). Data feeds
-              show <span className="font-medium">degraded</span> when
-              markets are closed — this is expected behavior, not an error.
+              {marketDay
+                ? 'Outside market hours (Mon–Fri 9:30–16:00 ET).'
+                : 'Market closed (weekend or holiday).'}{' '}
+              Data feeds report <span className="font-medium">idle</span>{' '}
+              when markets are closed — this is expected behavior, not an
+              error.
             </p>
           )}
 

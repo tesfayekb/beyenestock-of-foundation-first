@@ -15,6 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover
 from config import REDIS_URL
 from db import write_health_status
 from logger import get_logger
+from market_calendar import is_market_open
 
 logger = get_logger("tradier_feed")
 
@@ -261,9 +262,11 @@ class TradierFeed:
         # Don't write error on clean stop
         if self._stop_event.is_set():
             return
+        # Outside market hours a disconnect is expected, not an alarm.
+        _status = "degraded" if is_market_open() else "idle"
         write_health_status(
             "tradier_websocket",
-            "degraded",
+            _status,
             last_error_message="disconnected",
         )
 
@@ -294,12 +297,16 @@ class TradierFeed:
 
             status = "healthy"
             if lag is not None and lag >= 30:
-                status = "degraded"
+                # Lag outside market hours is expected — flag as 'idle'
+                # rather than a 'degraded' alarm.
+                status = "degraded" if is_market_open() else "idle"
 
             if self.disconnect_started_at is not None:
                 disconnect_age = int(now_ts - self.disconnect_started_at)
                 if disconnect_age >= 120:
-                    status = "offline"
+                    # A persistent disconnect outside market hours is
+                    # also expected (provider may sever the socket).
+                    status = "offline" if is_market_open() else "idle"
                     logger.critical(
                         "tradier_disconnect_persistent",
                         disconnect_age_seconds=disconnect_age,
