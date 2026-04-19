@@ -309,6 +309,46 @@ def run_eod_reconciliation_job() -> None:
         logger.error("eod_reconciliation_job_error", error=str(exc))
 
 
+def run_ab_eod_job() -> None:
+    """Phase 3B: EOD A/B comparison. Runs at 4:30 PM ET after market close."""
+    try:
+        if not is_market_day():
+            return
+        from datetime import date
+        from shadow_engine import compute_eod_comparison, get_ab_gate_status
+        result = compute_eod_comparison(
+            session_date=date.today().isoformat(),
+            redis_client=redis_client,
+        )
+        if result:
+            logger.info(
+                "ab_eod_job_done",
+                a_pnl=result.get("a_synthetic_pnl"),
+                b_pnl=result.get("b_session_pnl"),
+            )
+            # Check if A/B gate just passed — send alert
+            gate = get_ab_gate_status()
+            if gate.get("gate_passed"):
+                try:
+                    from alerting import send_alert, INFO
+                    send_alert(
+                        INFO,
+                        "ab_gate_passed",
+                        (
+                            f"Portfolio B leads Portfolio A by "
+                            f"{gate.get('portfolio_b_lead_pct', 0):.1f}% "
+                            f"annualized after "
+                            f"{gate.get('days_elapsed', 0)} days and "
+                            f"{gate.get('trades_count', 0)} trades. "
+                            f"System validated for real capital deployment."
+                        ),
+                    )
+                except Exception:
+                    pass  # alerting must never break EOD job
+    except Exception as exc:
+        logger.error("ab_eod_job_failed", error=str(exc))
+
+
 def run_market_open_job() -> None:
     """Transitions session to 'active' at 9:30 AM ET (13:30 UTC)."""
     try:
@@ -842,6 +882,15 @@ async def on_startup() -> None:
             timezone="America/New_York",
             replace_existing=True,
         )
+        # Phase 3B: A/B EOD comparison at 4:30 PM ET
+        scheduler.add_job(
+            run_ab_eod_job,
+            trigger="cron",
+            hour=16, minute=30,
+            id="trading_ab_eod",
+            timezone="America/New_York",
+            replace_existing=True,
+        )
         # Session open: 9:30 AM ET
         scheduler.add_job(
             run_market_open_job,
@@ -1218,16 +1267,14 @@ async def get_activation_status():
             except Exception:
                 flags[key] = True
 
-        # A/B validation gate — Phase 3B placeholder until built
-        ab_gate = {
-            "built": False,
-            "days_elapsed": None,
-            "days_required": 90,
-            "trades_count": closed_count,
-            "trades_required": 100,
-            "portfolio_b_lead_pct": None,
-            "gate_passed": False,
-        }
+        # A/B validation gate — Phase 3B is now built. Soft-fail to a
+        # built/not-passed dict so the activation page never breaks
+        # when shadow_engine or its tables are unavailable.
+        try:
+            from shadow_engine import get_ab_gate_status
+            ab_gate = get_ab_gate_status()
+        except Exception:
+            ab_gate = {"built": True, "gate_passed": False}
 
         # Recent alerts — system_alerts table may not exist until the
         # DASH-A migration runs. Soft-fail to [] in that case.
@@ -1259,8 +1306,51 @@ async def get_activation_status():
         return {
             "closed_trade_count": 0,
             "flags": {},
-            "ab_gate": {"built": False, "gate_passed": False},
+            "ab_gate": {"built": True, "gate_passed": False},
             "recent_alerts": [],
+        }
+
+
+@app.get("/admin/ab/status")
+async def get_ab_status():
+    """
+    Phase 3B: Returns A/B gate status and recent daily comparisons.
+
+    Powers /trading/ab-comparison. Returns:
+      - gate: get_ab_gate_status() dict (days/trades progress, lead%)
+      - daily: last 90 ab_session_comparison rows in chronological order
+    Soft-fails to a built/not-passed gate + empty daily list so the
+    page renders cleanly before the migration is applied or before
+    the first session writes a row.
+    """
+    try:
+        from shadow_engine import get_ab_gate_status
+        gate = get_ab_gate_status()
+
+        rows: list = []
+        try:
+            result = (
+                get_client()
+                .table("ab_session_comparison")
+                .select(
+                    "session_date, a_synthetic_pnl, b_session_pnl, "
+                    "move_pct, a_no_trade, b_no_trade, a_regime"
+                )
+                .order("session_date", desc=False)
+                .limit(90)
+                .execute()
+            )
+            rows = result.data or []
+        except Exception:
+            rows = []
+
+        return {"gate": gate, "daily": rows}
+
+    except Exception as exc:
+        logger.error("get_ab_status_failed", error=str(exc))
+        return {
+            "gate": {"built": True, "gate_passed": False},
+            "daily": [],
         }
 
 

@@ -11,6 +11,7 @@ import {
   Target,
   CreditCard,
   Layers,
+  GitCompare,
 } from 'lucide-react';
 import type { NavSection } from './navigation.types';
 import { ROUTES } from './routes';
@@ -69,6 +70,12 @@ export const tradingNavigation: NavSection[] = [
         title: 'AI Intelligence',
         url: ROUTES.TRADING_INTELLIGENCE,
         icon: Brain,
+        permission: 'trading.view',
+      },
+      {
+        title: 'A/B Gate',
+        url: ROUTES.TRADING_AB_COMPARISON,
+        icon: GitCompare,
         permission: 'trading.view',
       },
       {
