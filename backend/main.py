@@ -1267,16 +1267,14 @@ async def get_activation_status():
             except Exception:
                 flags[key] = True
 
-        # A/B validation gate — Phase 3B placeholder until built
-        ab_gate = {
-            "built": False,
-            "days_elapsed": None,
-            "days_required": 90,
-            "trades_count": closed_count,
-            "trades_required": 100,
-            "portfolio_b_lead_pct": None,
-            "gate_passed": False,
-        }
+        # A/B validation gate — Phase 3B is now built. Soft-fail to a
+        # built/not-passed dict so the activation page never breaks
+        # when shadow_engine or its tables are unavailable.
+        try:
+            from shadow_engine import get_ab_gate_status
+            ab_gate = get_ab_gate_status()
+        except Exception:
+            ab_gate = {"built": True, "gate_passed": False}
 
         # Recent alerts — system_alerts table may not exist until the
         # DASH-A migration runs. Soft-fail to [] in that case.
@@ -1308,8 +1306,51 @@ async def get_activation_status():
         return {
             "closed_trade_count": 0,
             "flags": {},
-            "ab_gate": {"built": False, "gate_passed": False},
+            "ab_gate": {"built": True, "gate_passed": False},
             "recent_alerts": [],
+        }
+
+
+@app.get("/admin/ab/status")
+async def get_ab_status():
+    """
+    Phase 3B: Returns A/B gate status and recent daily comparisons.
+
+    Powers /trading/ab-comparison. Returns:
+      - gate: get_ab_gate_status() dict (days/trades progress, lead%)
+      - daily: last 90 ab_session_comparison rows in chronological order
+    Soft-fails to a built/not-passed gate + empty daily list so the
+    page renders cleanly before the migration is applied or before
+    the first session writes a row.
+    """
+    try:
+        from shadow_engine import get_ab_gate_status
+        gate = get_ab_gate_status()
+
+        rows: list = []
+        try:
+            result = (
+                get_client()
+                .table("ab_session_comparison")
+                .select(
+                    "session_date, a_synthetic_pnl, b_session_pnl, "
+                    "move_pct, a_no_trade, b_no_trade, a_regime"
+                )
+                .order("session_date", desc=False)
+                .limit(90)
+                .execute()
+            )
+            rows = result.data or []
+        except Exception:
+            rows = []
+
+        return {"gate": gate, "daily": rows}
+
+    except Exception as exc:
+        logger.error("get_ab_status_failed", error=str(exc))
+        return {
+            "gate": {"built": True, "gate_passed": False},
+            "daily": [],
         }
 
 

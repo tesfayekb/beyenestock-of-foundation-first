@@ -55,4 +55,5 @@ export const ROUTES = {
   TRADING_MILESTONES: '/trading/milestones',
   TRADING_SUBSCRIPTIONS: '/trading/subscriptions',
   TRADING_ACTIVATION: '/trading/activation',
+  TRADING_AB_COMPARISON: '/trading/ab-comparison',
 } as const;
