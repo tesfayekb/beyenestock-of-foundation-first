@@ -20,93 +20,126 @@ _client_lock = threading.Lock()
 
 def get_client():
     """
-    Lazily build the singleton Supabase client.
+    Return the singleton Supabase client.
 
     Why this is non-trivial:
-      postgrest-py 2.x hard-codes ``http2=True`` when it constructs its own
-      httpx.Client (see postgrest/_sync/client.py:102). The h2 HTTP/2 state
-      machine maintains internal collections.deque buffers that are NOT
-      thread-safe. Our APScheduler uses a ThreadPoolExecutor for sync jobs
-      (~10 keepalives every 30s + the trading cycle) AND the asyncio event
-      loop runs ``heartbeat_check`` on top of the same client. Concurrent
-      access produced three production failure modes — all the same race:
+      postgrest-py hard-codes ``http2=True`` when it constructs its own
+      httpx.Client (postgrest/_sync/client.py:~102 in 2.x). The h2 HTTP/2
+      state machine maintains internal collections.deque buffers that are
+      NOT thread-safe. Our APScheduler ThreadPoolExecutor (~10
+      ``*_keepalive`` jobs every 30s + the trading cycle) and the asyncio
+      event loop (``heartbeat_check``) both reach into the same shared
+      client, producing three production failure modes — all the same race:
 
         ERROR 1: "deque mutated during iteration"        (h2 frame buffer)
         ERROR 2: "[Errno 32] Broken pipe" /
                  "ConnectionTerminated error_code:1"     (server GOAWAY)
         ERROR 3: "Received pseudo-header in trailer"     (corrupted frames)
 
-    The fix has two parts:
+    Version-safety note:
+      Our previous attempt passed ``httpx_client`` via ``ClientOptions``.
+      That field only exists in supabase-py >= 2.16-ish; Railway pins
+      ``supabase==2.10.0`` (requirements.txt), where the kwarg is rejected
+      with ``SyncClientOptions.__init__() got an unexpected keyword
+      argument 'httpx_client'``. Local dev had 2.28.3, so tests passed
+      locally and the bug only surfaced after deploy.
 
-      1. Inject our own httpx.Client with ``http2=False`` via
-         ``ClientOptions.httpx_client``. supabase-py forwards this to
-         postgrest, storage, functions, and auth (see
-         supabase/_sync/client.py:189). HTTP/1.1 connection pools are
-         Lock-guarded and thread-safe by design.
+      The version-safe approach is to let supabase-py build its own client
+      and then *replace* ``postgrest.session`` with our HTTP/1.1
+      ``httpx.Client``. ``.session`` is the canonical attribute on
+      postgrest-py's sync client across all 2.x releases.
+
+    Layers of defence (in order of effectiveness):
+
+      1. Replace ``postgrest.session`` with ``httpx.Client(http2=False, ...)``
+         so the actual wire protocol is HTTP/1.1. HTTP/1.1 connection pools
+         are Lock-guarded and thread-safe by design.
 
       2. Serialise every DB call site behind ``_client_lock`` (see
-         write_health_status / write_audit_log). Defense-in-depth — if a
-         future dependency upgrade slips HTTP/2 back in, the lock prevents
-         concurrent access to the same connection from corrupting state.
+         ``write_health_status`` / ``write_audit_log``). Defense-in-depth:
+         if a future dependency upgrade slips HTTP/2 back in, the lock
+         still prevents concurrent access to a single connection from
+         corrupting state.
+
+      3. Belt-and-suspenders: optionally set ``HTTPX_NO_H2=1`` in Railway
+         env vars. Currently a no-op for httpx 0.27/0.28 (neither honours
+         that variable) but reserved for any future version that may.
 
     Lock discipline:
       ``_client_lock`` is a non-reentrant ``threading.Lock``. Callers MUST
       resolve the client *outside* the lock and then hold the lock only
-      around the ``.execute()`` call. Doing ``with _client_lock: get_client()``
-      would deadlock the same thread on the first call (get_client also
-      acquires _client_lock for init). See write_health_status below.
+      around the ``.execute()`` call. Doing ``with _client_lock:
+      get_client()`` would deadlock the same thread on the first call
+      (get_client also acquires _client_lock for init).
 
-    Imports of supabase / httpx / ClientOptions are deferred to the inner
-    block so:
-      - the ``patch("supabase.create_client", ...)`` test path keeps working
-      - environments that never call get_client() do not pull h2/httpx at
-        import time
-
-    Full migration to ``create_async_client`` is a larger refactor (every
-    sync ``*_keepalive`` job in main.py would have to become async) and
-    is deliberately deferred.
+    If the session-replacement patch fails for any reason (e.g. postgrest-py
+    refactors the attribute name), the client still works — it just falls
+    back to whatever transport supabase-py constructed by default. The
+    lock serialisation in (2) keeps the system from corrupting in that
+    degraded state. ``supabase_http2_patch_failed`` is logged so the
+    failure is visible in Railway.
     """
     global _client
     if _client is None:
         with _client_lock:
             if _client is None:  # double-checked locking
-                from supabase import ClientOptions, create_client
+                from supabase import create_client
                 import httpx
 
-                # NOTE: import ClientOptions from the top-level ``supabase``
-                # namespace — that re-export resolves to ``SyncClientOptions``
-                # which carries the ``httpx_client`` field. The base class in
-                # ``supabase.lib.client_options`` does NOT accept it.
-                #
-                # Headers and base_url are intentionally NOT set on the
-                # shared session: postgrest passes its own base_url and auth
-                # headers per request (see postgrest/_sync/client.py
-                # session.request), so a "blank" client is the safest neutral
-                # container.
-                shared_session = httpx.Client(
-                    timeout=httpx.Timeout(10.0, connect=5.0),
-                    follow_redirects=True,
-                    http2=False,
-                    limits=httpx.Limits(
-                        max_keepalive_connections=10,
-                        max_connections=20,
-                        keepalive_expiry=30.0,  # < Cloudflare's idle reaper
-                    ),
-                )
-                options = ClientOptions(
-                    postgrest_client_timeout=10,
-                    httpx_client=shared_session,
-                )
                 _client = create_client(
-                    SUPABASE_URL,
-                    SUPABASE_SERVICE_ROLE_KEY,
-                    options=options,
+                    SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
                 )
-                logger.info(
-                    "supabase_client_initialised",
-                    http2_enabled=False,
-                    keepalive_expiry_s=30,
-                )
+
+                # Replace the postgrest httpx session with an HTTP/1.1
+                # client to eliminate the h2 thread-safety race. We can't
+                # pass ``httpx_client=`` to ClientOptions on supabase-py
+                # 2.10 (Railway), so we patch after construction instead.
+                # ``.session`` is the standard attribute on postgrest-py's
+                # sync client across 2.x; storage/functions/auth still use
+                # their own clients but those code paths are not currently
+                # exercised by our trading hot path.
+                try:
+                    postgrest = _client.postgrest
+                    session = getattr(postgrest, "session", None)
+                    if session is not None and isinstance(session, httpx.Client):
+                        new_session = httpx.Client(
+                            base_url=str(session.base_url),
+                            headers=dict(session.headers),
+                            timeout=httpx.Timeout(10.0),
+                            follow_redirects=True,
+                            http2=False,
+                            limits=httpx.Limits(
+                                max_keepalive_connections=5,
+                                max_connections=10,
+                                keepalive_expiry=25.0,  # < Cloudflare's 30s reaper
+                            ),
+                        )
+                        postgrest.session = new_session
+                        # Best-effort cleanup of the original h2-enabled
+                        # client. If close() raises we don't care — the
+                        # GC will drop it eventually.
+                        try:
+                            session.close()
+                        except Exception:
+                            pass
+                        logger.info(
+                            "supabase_client_initialised",
+                            http2_enabled=False,
+                            patch_method="session_replacement",
+                        )
+                    else:
+                        logger.warning(
+                            "supabase_client_initialised",
+                            http2_enabled="unknown",
+                            patch_method="none_session_not_found",
+                            session_type=type(session).__name__ if session else "None",
+                        )
+                except Exception as patch_exc:
+                    logger.warning(
+                        "supabase_http2_patch_failed",
+                        error=str(patch_exc),
+                    )
+
     return _client
 
 
