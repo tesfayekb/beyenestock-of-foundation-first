@@ -20,6 +20,30 @@ from session_manager import update_session
 
 logger = get_logger("risk_engine")
 
+# Lazy Redis client used only for HARD-B alert sentinels (the
+# pre-halt -1.5% drawdown warning fires once per session and uses
+# Redis to remember it already fired). Returning None on any failure
+# is intentional — alerting must never block risk management.
+_redis_client = None
+
+
+def _get_redis():
+    """Lazy singleton Redis client. Returns None on any failure."""
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+    try:
+        import redis as _redis_lib
+        from config import REDIS_URL
+        _redis_client = _redis_lib.Redis.from_url(
+            REDIS_URL, decode_responses=True
+        )
+        return _redis_client
+    except Exception as exc:
+        logger.warning("risk_engine_redis_init_failed", error=str(exc))
+        return None
+
+
 # D-014: risk percentages by sizing phase and position type
 _RISK_PCT = {
     1: {"core": 0.005, "satellite": 0.0025},
@@ -314,6 +338,28 @@ def check_daily_drawdown(
         if account_value <= 0:
             return False
         drawdown_pct = current_daily_pnl / account_value
+
+        # HARD-B: WARNING band at -1.5% (approaching the -3% halt).
+        # Purely informational — does NOT influence sizing or halt logic.
+        # Sent at most once per trading session via a Redis sentinel
+        # so the operator gets one heads-up rather than one per cycle.
+        if -0.03 < drawdown_pct <= -0.015:
+            try:
+                from alerting import send_alert, WARNING
+                redis_client = _get_redis()
+                warning_key = "alert:drawdown_warning_sent_today"
+                if redis_client and not redis_client.get(warning_key):
+                    redis_client.setex(warning_key, 86400, "1")
+                    send_alert(
+                        WARNING,
+                        "drawdown_warning_approaching_halt",
+                        f"Daily drawdown at {drawdown_pct:.2%}. "
+                        f"Halt triggers at -3.0%. Monitor closely. "
+                        f"Session P&L: ${current_daily_pnl:.2f}.",
+                    )
+            except Exception:
+                pass  # Never let alerting block risk management
+
         if drawdown_pct <= -0.03:
             update_session(
                 session_id,
@@ -339,6 +385,20 @@ def check_daily_drawdown(
                 session_id=session_id,
                 drawdown_pct=round(drawdown_pct * 100, 3),
             )
+            # HARD-B: external alert on -3% daily halt.
+            # Imported lazily inside the try block to avoid any
+            # circular-import risk at module load time.
+            try:
+                from alerting import send_alert, CRITICAL
+                send_alert(
+                    CRITICAL,
+                    "daily_halt_triggered",
+                    f"Daily drawdown reached {drawdown_pct:.2%}. "
+                    f"All positions closed. Trading halted for today. "
+                    f"Session P&L: ${current_daily_pnl:.2f}.",
+                )
+            except Exception:
+                pass  # Never let alerting block risk management
             return True
         return False
 

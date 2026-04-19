@@ -51,3 +51,12 @@ UNUSUAL_WHALES_API_KEY = os.getenv("UNUSUAL_WHALES_API_KEY", "")
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+# HARD-B: External alerting via Gmail
+# Set ALERT_EMAIL to receive critical trading event notifications.
+# Set ALERT_GMAIL_APP_PASSWORD to a Gmail App Password (not your account password).
+# To create: Google Account → Security → 2-Step Verification → App Passwords
+# If either is empty, alerting is silently disabled (no error, no crash).
+ALERT_EMAIL = os.getenv("ALERT_EMAIL", "")
+ALERT_GMAIL_APP_PASSWORD = os.getenv("ALERT_GMAIL_APP_PASSWORD", "")
+ALERT_FROM_EMAIL = os.getenv("ALERT_FROM_EMAIL", ALERT_EMAIL)

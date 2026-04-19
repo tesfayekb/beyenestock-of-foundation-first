@@ -342,6 +342,22 @@ def _agent_flag_enabled(flag_key: str) -> bool:
         return False
 
 
+def _get_closed_trade_count() -> int:
+    """Return count of closed virtual positions. Returns 0 on any error."""
+    try:
+        result = (
+            get_client()
+            .table("trading_positions")
+            .select("id", count="exact")
+            .eq("status", "closed")
+            .eq("position_mode", "virtual")
+            .execute()
+        )
+        return result.count or 0
+    except Exception:
+        return 0
+
+
 def _run_economic_calendar_job() -> None:
     try:
         import sys
@@ -500,6 +516,39 @@ def _run_feedback_agent_job() -> None:
             status=status,
             trade_count=result.get("trade_count"),
         )
+
+        # HARD-B: notify when trade count crosses key milestones.
+        # Each milestone fires at most once via a Redis sentinel key
+        # (90-day TTL). Failure is silently swallowed so an alerting
+        # issue can never block the feedback job.
+        try:
+            from alerting import send_alert, INFO
+            milestones = [
+                (10, "loop1_feedback_active",
+                 "Trade #10 reached. Loop 1 feedback agent now produces "
+                 "real briefs."),
+                (20, "kelly_full_sizing_active",
+                 "Trade #20 reached. Full Kelly sizing now active."),
+                (100, "meta_label_model_ready",
+                 "Trade #100 reached. Run: railway run python "
+                 "scripts/train_meta_label.py"),
+                (200, "signal_calibration_ready",
+                 "Trade #200 reached. Enable "
+                 "model:signal_calibration:enabled flag."),
+            ]
+            closed_count = _get_closed_trade_count()
+            for threshold, event_key, detail in milestones:
+                sentinel = f"alert:milestone:{event_key}:sent"
+                if (
+                    closed_count >= threshold
+                    and redis_client
+                    and not redis_client.get(sentinel)
+                ):
+                    redis_client.setex(sentinel, 90 * 86400, "1")
+                    send_alert(INFO, event_key, detail)
+        except Exception:
+            pass
+
     except Exception as exc:
         write_health_status("feedback_agent", "error", error=str(exc))
         logger.error("feedback_agent_job_failed", error=str(exc))

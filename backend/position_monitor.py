@@ -211,6 +211,20 @@ def run_emergency_backstop() -> dict:
                     "Time stop failure detected — positions were open at 3:55 PM"
                 ),
             )
+            # HARD-B: external alert on backstop trigger (indicates
+            # the 3:45 PM time stop failed for some reason). Imported
+            # lazily inside the try block to avoid circular imports.
+            try:
+                from alerting import send_alert, CRITICAL
+                send_alert(
+                    CRITICAL,
+                    "emergency_backstop_triggered",
+                    f"{closed} position(s) were still open at 3:55 PM ET. "
+                    f"The 3:45 PM time stop may have failed. "
+                    f"Check Railway logs for time_stop_345pm_failed.",
+                )
+            except Exception:
+                pass
 
         return {"closed": closed, "triggered": closed > 0}
 
@@ -300,6 +314,20 @@ def run_prediction_watchdog() -> dict:
                 "positions_closed": closed,
             },
         )
+        # HARD-B: external alert on watchdog trigger. Imported
+        # lazily inside the try block to avoid circular imports.
+        try:
+            from alerting import send_alert, CRITICAL
+            send_alert(
+                CRITICAL,
+                "prediction_watchdog_triggered",
+                f"Prediction engine silent for "
+                f"{round(age_minutes, 1)} minutes. "
+                f"{closed} open position(s) were closed as a precaution. "
+                f"Check Railway logs for prediction_engine errors.",
+            )
+        except Exception:
+            pass
 
         return {
             "status": "triggered",
