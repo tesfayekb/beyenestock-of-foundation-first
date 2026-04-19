@@ -46,6 +46,12 @@ const TradingSignalsPage = lazy(() => import("./pages/admin/trading/SignalsPage"
 const TradingPerformancePage = lazy(() => import("./pages/admin/trading/PerformancePage"));
 const TradingConfigPage = lazy(() => import("./pages/admin/trading/ConfigPage"));
 
+// New trading-console pages (Phase 4C — dedicated /trading/* sections)
+const TradingIntelligencePage = lazy(() => import("./pages/trading/IntelligencePage"));
+const TradingFeatureFlagsPage = lazy(() => import("./pages/trading/FeatureFlagsPage"));
+const TradingStrategyLibraryPage = lazy(() => import("./pages/trading/StrategyLibraryPage"));
+const TradingMilestonesPage = lazy(() => import("./pages/trading/MilestonesPage"));
+
 // User pages (lazy loaded)
 const UserDashboard = lazy(() => import("./pages/user/UserDashboard"));
 const ProfilePage = lazy(() => import("./pages/user/ProfilePage"));
@@ -197,6 +203,26 @@ const App = () => (
                 <Route path="config" element={
                   <PermissionGate permission="trading.configure">
                     <TradingConfigPage />
+                  </PermissionGate>
+                } />
+                <Route path="intelligence" element={
+                  <PermissionGate permission="trading.view">
+                    <TradingIntelligencePage />
+                  </PermissionGate>
+                } />
+                <Route path="flags" element={
+                  <PermissionGate permission="trading.configure">
+                    <TradingFeatureFlagsPage />
+                  </PermissionGate>
+                } />
+                <Route path="strategies" element={
+                  <PermissionGate permission="trading.view">
+                    <TradingStrategyLibraryPage />
+                  </PermissionGate>
+                } />
+                <Route path="milestones" element={
+                  <PermissionGate permission="trading.view">
+                    <TradingMilestonesPage />
                   </PermissionGate>
                 } />
                 <Route path="*" element={<DashboardNotFound />} />

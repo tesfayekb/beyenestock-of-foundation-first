@@ -49,4 +49,8 @@ export const ROUTES = {
   TRADING_PERFORMANCE: '/trading/performance',
   TRADING_HEALTH: '/trading/health',
   TRADING_CONFIG: '/trading/config',
+  TRADING_INTELLIGENCE: '/trading/intelligence',
+  TRADING_FLAGS: '/trading/flags',
+  TRADING_STRATEGIES: '/trading/strategies',
+  TRADING_MILESTONES: '/trading/milestones',
 } as const;

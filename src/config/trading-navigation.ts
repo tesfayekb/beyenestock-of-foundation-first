@@ -5,6 +5,10 @@ import {
   BarChart2,
   HeartPulse,
   Settings2,
+  Brain,
+  Flag,
+  BookOpen,
+  Target,
 } from 'lucide-react';
 import type { NavSection } from './navigation.types';
 import { ROUTES } from './routes';
@@ -53,6 +57,40 @@ export const tradingNavigation: NavSection[] = [
         url: ROUTES.TRADING_CONFIG,
         icon: Settings2,
         permission: 'trading.configure',
+      },
+    ],
+  },
+  {
+    label: 'Intelligence',
+    items: [
+      {
+        title: 'AI Intelligence',
+        url: ROUTES.TRADING_INTELLIGENCE,
+        icon: Brain,
+        permission: 'trading.view',
+      },
+      {
+        title: 'Feature Flags',
+        url: ROUTES.TRADING_FLAGS,
+        icon: Flag,
+        permission: 'trading.configure',
+      },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      {
+        title: 'Strategy Library',
+        url: ROUTES.TRADING_STRATEGIES,
+        icon: BookOpen,
+        permission: 'trading.view',
+      },
+      {
+        title: 'Milestones',
+        url: ROUTES.TRADING_MILESTONES,
+        icon: Target,
+        permission: 'trading.view',
       },
     ],
   },
