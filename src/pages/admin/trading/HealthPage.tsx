@@ -63,6 +63,14 @@ const EXPECTED_SERVICES = [
   'sentiment_agent',
   // Phase A (Loop 1): closed-loop feedback brief, runs 9:10 AM ET
   'feedback_agent',
+  // HARD-A: Circuit breaker health services
+  // - prediction_watchdog: every 5 min during market hours, idle outside
+  // - emergency_backstop: once at 3:55 PM ET
+  // - position_reconciliation: once at 4:15 PM ET
+  // All three show 'offline' until first write — this is correct.
+  'prediction_watchdog',
+  'emergency_backstop',
+  'position_reconciliation',
 ] as const;
 // NOTE: learning_engine, sentinel, cboe_feed removed — these services
 // have not been built yet and never write health status. They were

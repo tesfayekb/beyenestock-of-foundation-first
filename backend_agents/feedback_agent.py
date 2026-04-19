@@ -55,6 +55,52 @@ HIGH_CONFIDENCE_THRESHOLD = 0.70
 LOW_CONFIDENCE_THRESHOLD = 0.55
 
 
+# ─── Brief validation (HARD-A) ────────────────────────────────────────────────
+
+def _validate_brief(brief: dict) -> bool:
+    """
+    HARD-A: Validate brief structure before writing to Redis.
+    Returns False if brief is malformed — prevents corrupt data
+    from biasing Claude's reasoning.
+    """
+    if not isinstance(brief, dict):
+        return False
+
+    required_keys = ["status", "generated_at", "trade_count"]
+    if not all(k in brief for k in required_keys):
+        logger.warning(
+            "feedback_brief_missing_required_keys",
+            missing=[k for k in required_keys if k not in brief],
+        )
+        return False
+
+    valid_statuses = {"ready", "insufficient_history"}
+    if brief.get("status") not in valid_statuses:
+        logger.warning(
+            "feedback_brief_invalid_status", status=brief.get("status")
+        )
+        return False
+
+    # Deep validation only needed for ready briefs
+    if brief.get("status") == "ready":
+        overall = brief.get("overall", {})
+        win_rate = overall.get("win_rate")
+        if win_rate is not None and not (0.0 <= win_rate <= 1.0):
+            logger.warning(
+                "feedback_brief_invalid_win_rate", win_rate=win_rate
+            )
+            return False
+
+        trade_count = brief.get("trade_count", 0)
+        if not isinstance(trade_count, int) or trade_count < 0:
+            logger.warning(
+                "feedback_brief_invalid_trade_count", count=trade_count
+            )
+            return False
+
+    return True
+
+
 # ─── Main entry point ─────────────────────────────────────────────────────────
 
 def run_feedback_agent(redis_client) -> dict:
@@ -103,11 +149,21 @@ def run_feedback_agent(redis_client) -> dict:
 
         if redis_client:
             try:
-                redis_client.setex(
-                    "ai:feedback:brief",
-                    BRIEF_TTL_SECONDS,
-                    json.dumps(brief),
-                )
+                if not _validate_brief(brief):
+                    # HARD-A: Do NOT write invalid brief — leave previous
+                    # one intact so synthesis_agent can still use the last
+                    # known-good context until next run.
+                    logger.error(
+                        "feedback_brief_validation_failed",
+                        status=brief.get("status"),
+                        trade_count=brief.get("trade_count"),
+                    )
+                else:
+                    redis_client.setex(
+                        "ai:feedback:brief",
+                        BRIEF_TTL_SECONDS,
+                        json.dumps(brief),
+                    )
             except Exception as e:
                 logger.warning("feedback_redis_write_failed", error=str(e))
 

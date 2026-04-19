@@ -31,6 +31,7 @@ from market_calendar import (
     get_time_stop_230pm,
     get_time_stop_345pm,
     is_market_day,
+    is_market_open,
 )
 
 logger = get_logger("main")
@@ -240,6 +241,72 @@ def run_time_stop_345pm_job() -> None:
         logger.info("time_stop_345pm_job_done", **result)
     except Exception as exc:
         logger.error("time_stop_345pm_job_error", error=str(exc))
+
+
+def run_emergency_backstop_job() -> None:
+    """HARD-A: Backstop at 3:55 PM — catches stuck positions if time stop failed."""
+    try:
+        if not is_market_day():
+            return
+        from position_monitor import run_emergency_backstop
+        result = run_emergency_backstop()
+        if result.get("triggered"):
+            write_health_status(
+                "emergency_backstop", "degraded",
+                error=f"Backstop closed {result['closed']} stuck positions",
+            )
+        else:
+            write_health_status("emergency_backstop", "healthy")
+        logger.info("emergency_backstop_job_done", **result)
+    except Exception as exc:
+        write_health_status("emergency_backstop", "error", error=str(exc))
+        logger.error("emergency_backstop_job_error", error=str(exc))
+
+
+def run_prediction_watchdog_job() -> None:
+    """HARD-A: Runs every 5 min during market hours.
+
+    Closes positions if prediction engine is silent for >12 minutes.
+    Writes 'idle' outside market hours so the health page shows neutral.
+    """
+    try:
+        if not is_market_open():
+            write_health_status("prediction_watchdog", "idle")
+            return
+        from position_monitor import run_prediction_watchdog
+        result = run_prediction_watchdog()
+        if result.get("status") == "triggered":
+            write_health_status(
+                "prediction_watchdog", "error",
+                error=f"Engine silent {result.get('age_minutes')}min",
+            )
+        else:
+            write_health_status("prediction_watchdog", "healthy")
+    except Exception as exc:
+        write_health_status("prediction_watchdog", "error", error=str(exc))
+        logger.error("prediction_watchdog_job_error", error=str(exc))
+
+
+def run_eod_reconciliation_job() -> None:
+    """HARD-A: EOD position reconciliation at 4:15 PM ET."""
+    try:
+        if not is_market_day():
+            return
+        from position_monitor import run_eod_position_reconciliation
+        result = run_eod_position_reconciliation()
+        if result.get("mismatches", 0) > 0:
+            write_health_status(
+                "position_reconciliation", "degraded",
+                error=(
+                    f"{result['mismatches']} stale positions found and closed"
+                ),
+            )
+        else:
+            write_health_status("position_reconciliation", "healthy")
+        logger.info("eod_reconciliation_job_done", **result)
+    except Exception as exc:
+        write_health_status("position_reconciliation", "error", error=str(exc))
+        logger.error("eod_reconciliation_job_error", error=str(exc))
 
 
 def run_market_open_job() -> None:
@@ -697,6 +764,33 @@ async def on_startup() -> None:
             hour=15,
             minute=45,
             id="trading_time_stop_345pm",
+            replace_existing=True,
+        )
+        # HARD-A: Emergency backstop at 3:55 PM ET (10 min after time stop)
+        scheduler.add_job(
+            run_emergency_backstop_job,
+            trigger="cron",
+            hour=15, minute=55,
+            id="trading_emergency_backstop",
+            timezone="America/New_York",
+            replace_existing=True,
+        )
+        # HARD-A: Prediction watchdog every 5 min, market hours only
+        scheduler.add_job(
+            run_prediction_watchdog_job,
+            trigger="cron",
+            hour="9-15", minute="*/5",
+            id="trading_prediction_watchdog",
+            timezone="America/New_York",
+            replace_existing=True,
+        )
+        # HARD-A: EOD reconciliation at 4:15 PM ET
+        scheduler.add_job(
+            run_eod_reconciliation_job,
+            trigger="cron",
+            hour=16, minute=15,
+            id="trading_eod_reconciliation",
+            timezone="America/New_York",
             replace_existing=True,
         )
         # Session open: 9:30 AM ET

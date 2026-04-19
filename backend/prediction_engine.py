@@ -4,7 +4,7 @@ Phase 2: placeholder model outputs. Real models trained in Phase 4.
 """
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 try:
     import redis as redis_lib
@@ -80,6 +80,65 @@ class PredictionEngine:
             return raw if raw is not None else default
         except Exception:
             return default
+
+    def _safe_redis(
+        self,
+        key: str,
+        default: Any = None,
+        max_age_seconds: Optional[int] = None,
+        age_key: Optional[str] = None,
+    ) -> tuple[Any, bool]:
+        """
+        HARD-A: Safe Redis read with optional staleness check.
+
+        Returns (value, is_fresh) tuple.
+        is_fresh = False if:
+          - Redis is down (fallback used)
+          - Value is missing (default used)
+          - Value is older than max_age_seconds (if specified)
+
+        age_key: a separate Redis key holding the write timestamp
+        (ISO string). If omitted, staleness is not checked.
+
+        Usage:
+          value, fresh = self._safe_redis(
+              "gex:net", "0",
+              max_age_seconds=3600,
+              age_key="gex:updated_at",
+          )
+          if not fresh:
+              logger.warning("gex_data_stale")
+
+        Fail-open: if the age_key parse fails, the value is returned
+        and marked fresh — better to use slightly stale data than to
+        block trading on a metadata error.
+        """
+        raw = self._read_redis(key, default)
+
+        if raw is None or raw == default:
+            return default, False
+
+        if max_age_seconds is None or age_key is None:
+            return raw, True
+
+        try:
+            ts_raw = self._read_redis(age_key, None)
+            if ts_raw is None:
+                return raw, True
+            ts_str = ts_raw.decode() if isinstance(ts_raw, bytes) else ts_raw
+            ts = datetime.fromisoformat(ts_str)
+            age = (datetime.now(timezone.utc) - ts).total_seconds()
+            if age > max_age_seconds:
+                logger.warning(
+                    "redis_value_stale",
+                    key=key,
+                    age_seconds=round(age),
+                    threshold=max_age_seconds,
+                )
+                return raw, False
+            return raw, True
+        except Exception:
+            return raw, True
 
     def _get_spx_price(self) -> float:
         """Read current SPX price from Redis. Falls back to 5200.0."""
