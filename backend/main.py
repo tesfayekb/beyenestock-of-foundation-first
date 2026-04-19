@@ -1172,6 +1172,98 @@ async def get_subscription_key_status():
         return {"keys": {}, "error": str(exc)}
 
 
+@app.get("/admin/activation/status")
+async def get_activation_status():
+    """
+    DASH-A: Phase Activation Dashboard data.
+
+    Returns the complete activation state in a single payload:
+      - closed_trade_count: paper-trade total (drives auto-enable thresholds)
+      - flags: every trading + signal flag with its current bool state
+      - ab_gate: Phase 3B progress (built=False until 3B ships)
+      - recent_alerts: last 20 system_alerts rows (empty if table missing)
+
+    Strategy/agent flags default OFF (None means "not set"); signal flags
+    default ON (None means "not yet disabled"). The system_alerts query
+    is wrapped in try/except so the endpoint still works before the
+    DASH-A migration adds that table.
+    """
+    try:
+        closed_count = _get_closed_trade_count()
+
+        # Trading flags (strategy + agent) — default OFF
+        flags: dict[str, bool] = {}
+        for key in _TRADING_FLAG_KEYS:
+            try:
+                val = redis_client.get(key) if redis_client else None
+                flags[key] = val in ("true", b"true")
+            except Exception:
+                flags[key] = False
+
+        # Signal-enhancement flags — default ON when missing.
+        # Treated as enabled unless explicitly set to "false" so a
+        # newly-built signal does not require a deploy to activate.
+        signal_flags = [
+            "signal:vix_term_filter:enabled",
+            "signal:entry_time_gate:enabled",
+            "signal:gex_directional_bias:enabled",
+            "signal:market_breadth:enabled",
+            "signal:earnings_proximity:enabled",
+            "signal:iv_rank_filter:enabled",
+        ]
+        for key in signal_flags:
+            try:
+                val = redis_client.get(key) if redis_client else None
+                flags[key] = val not in ("false", b"false")
+            except Exception:
+                flags[key] = True
+
+        # A/B validation gate — Phase 3B placeholder until built
+        ab_gate = {
+            "built": False,
+            "days_elapsed": None,
+            "days_required": 90,
+            "trades_count": closed_count,
+            "trades_required": 100,
+            "portfolio_b_lead_pct": None,
+            "gate_passed": False,
+        }
+
+        # Recent alerts — system_alerts table may not exist until the
+        # DASH-A migration runs. Soft-fail to [] in that case.
+        recent_alerts: list = []
+        try:
+            result = (
+                get_client()
+                .table("system_alerts")
+                .select(
+                    "fired_at, level, event, detail, acknowledged"
+                )
+                .order("fired_at", desc=True)
+                .limit(20)
+                .execute()
+            )
+            recent_alerts = result.data or []
+        except Exception:
+            recent_alerts = []
+
+        return {
+            "closed_trade_count": closed_count,
+            "flags": flags,
+            "ab_gate": ab_gate,
+            "recent_alerts": recent_alerts,
+        }
+
+    except Exception as exc:
+        logger.error("get_activation_status_failed", error=str(exc))
+        return {
+            "closed_trade_count": 0,
+            "flags": {},
+            "ab_gate": {"built": False, "gate_passed": False},
+            "recent_alerts": [],
+        }
+
+
 @app.post("/admin/trading/feature-flags")
 async def set_feature_flag(payload: dict = FBody(...)):
     """Enable or disable a single feature flag.

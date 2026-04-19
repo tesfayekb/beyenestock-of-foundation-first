@@ -10,6 +10,7 @@ import {
   BookOpen,
   Target,
   CreditCard,
+  Layers,
 } from 'lucide-react';
 import type { NavSection } from './navigation.types';
 import { ROUTES } from './routes';
@@ -92,6 +93,12 @@ export const tradingNavigation: NavSection[] = [
         url: ROUTES.TRADING_MILESTONES,
         icon: Target,
         permission: 'trading.view',
+      },
+      {
+        title: 'Activation',
+        url: ROUTES.TRADING_ACTIVATION,
+        icon: Layers,
+        permission: 'trading.configure',
       },
       {
         title: 'Subscriptions',
