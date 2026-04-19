@@ -99,6 +99,24 @@ _GEX_TRENDING_HARD    = -1_000_000_000   # strongly trending → 50% size cut
 _GEX_TRENDING_SOFT    =   -500_000_000   # mildly trending → 25% size cut
 _GEX_MEAN_REVERT      =  1_000_000_000   # strong mean-revert → 10% boost
 
+# Signal-D: Market breadth thresholds (via VIX z-score).
+# vix_z_score = (VIX_current - VIX_20d_mean) / VIX_20d_std
+# HIGH z = VIX elevated vs recent history = market anxiety = condor blowout risk.
+_BREADTH_SEVERE    = 2.5    # 50% size cut (extreme fear)
+_BREADTH_HIGH      = 1.5    # 25% size cut (elevated anxiety)
+_BREADTH_STRONG    = -0.5   # 5% boost (calm market, strong breadth)
+
+# Signal-E: Earnings proximity (post-market major earnings day).
+_EARNINGS_PROX_CUT = 0.75   # 25% size reduction on earnings day
+
+# Signal-F: IV rank thresholds (also via VIX z-score — same Redis read as D).
+# LOW z = thin premium = not worth selling condors for small credit.
+# MODERATE elevation = rich premium = slight condor boost.
+_IV_VERY_THIN      = -2.0   # skip trade entirely (premium too thin)
+_IV_THIN           = -1.5   # 25% reduction
+_IV_SOMEWHAT_THIN  = -0.8   # 10% reduction
+_IV_RICH           =  0.8   # 5% boost (premium is relatively rich)
+
 
 class StrategySelector:
 
@@ -318,6 +336,171 @@ class StrategySelector:
 
         except Exception as exc:
             logger.warning("gex_bias_modifier_failed", error=str(exc))
+            return 1.0, "error"
+
+    def _read_redis_float(self, key: str, default: float = 0.0) -> float:
+        """
+        Read a float value from Redis. Returns default on any error.
+        Used by Signal-D (breadth) and Signal-F (IV rank) to read
+        vix_z_score without duplicating error handling.
+        """
+        try:
+            if not self.redis_client:
+                return default
+            raw = self.redis_client.get(key)
+            return float(raw) if raw is not None else default
+        except Exception:
+            return default
+
+    def _market_breadth_modifier(
+        self, vix_z: float
+    ) -> Tuple[float, str]:
+        """
+        Signal-D: Market breadth sizing modifier via VIX z-score.
+
+        HIGH vix_z = VIX elevated above its recent norm = broad market
+        anxiety = condors at risk of blowout from gap moves = reduce size.
+
+        LOW vix_z = VIX below recent norm = calm market = slight condor
+        boost.
+
+        vix_z_score source: Redis key 'polygon:vix:z_score'
+        (written by polygon_feed, 20-day rolling mean/std).
+        Never raises.
+        """
+        try:
+            if not self._check_feature_flag(
+                "signal:market_breadth:enabled"
+            ):
+                return 1.0, "flag_off"
+
+            if vix_z >= _BREADTH_SEVERE:
+                logger.info(
+                    "signal_d_breadth_severe",
+                    vix_z=round(vix_z, 2),
+                    threshold=_BREADTH_SEVERE,
+                )
+                return 0.50, "severe_anxiety"
+
+            if vix_z >= _BREADTH_HIGH:
+                logger.info(
+                    "signal_d_breadth_high",
+                    vix_z=round(vix_z, 2),
+                )
+                return 0.75, "elevated_anxiety"
+
+            if vix_z <= _BREADTH_STRONG:
+                return 1.05, "strong_breadth"
+
+            return 1.0, "normal"
+
+        except Exception as exc:
+            logger.warning(
+                "market_breadth_modifier_failed", error=str(exc)
+            )
+            return 1.0, "error"
+
+    def _earnings_proximity_modifier(
+        self, strategy_type: str
+    ) -> Tuple[float, str]:
+        """
+        Signal-E: Earnings proximity guard.
+
+        If a major SPX-moving stock reports earnings TODAY, SPX options
+        IV is elevated and the market can gap unexpectedly. Reduces
+        condor size by 25% as a precaution.
+
+        Data source: Redis key 'calendar:today:intel'
+        (written 8:45 AM daily by economic_calendar agent).
+        Only affects short-gamma strategies — long gamma benefits from
+        moves. Never raises.
+        """
+        try:
+            if not self._check_feature_flag(
+                "signal:earnings_proximity:enabled"
+            ):
+                return 1.0, "flag_off"
+
+            _short_gamma = {
+                "iron_condor", "iron_butterfly",
+                "put_credit_spread", "call_credit_spread",
+            }
+            if strategy_type not in _short_gamma:
+                return 1.0, "not_applicable"
+
+            import json as _json
+            raw = None
+            try:
+                if self.redis_client:
+                    raw = self.redis_client.get("calendar:today:intel")
+            except Exception:
+                pass
+
+            if not raw:
+                return 1.0, "no_calendar_data"
+
+            intel = _json.loads(raw)
+            if not intel.get("has_major_earnings", False):
+                return 1.0, "no_major_earnings"
+
+            earnings_list = intel.get("earnings", [])
+            tickers = [e.get("symbol", "") for e in earnings_list]
+            logger.info(
+                "signal_e_earnings_proximity",
+                tickers=tickers,
+                strategy=strategy_type,
+            )
+            return _EARNINGS_PROX_CUT, "major_earnings_today"
+
+        except Exception as exc:
+            logger.warning(
+                "earnings_proximity_modifier_failed", error=str(exc)
+            )
+            return 1.0, "error"
+
+    def _iv_rank_modifier(self, vix_z: float) -> Tuple[float, str]:
+        """
+        Signal-F: IV rank sizing modifier via VIX z-score.
+
+        Uses the SAME vix_z_score value as Signal-D (computed once and
+        passed in — no duplicate Redis reads).
+
+        LOW vix_z = VIX below recent norm = thin premium = not worth
+        selling condors for small credit = reduce size.
+
+        MODERATE elevation (0.8 to <1.5) = premium relatively rich =
+        slight boost for short-premium strategies.
+
+        HIGH vix_z (>= 1.5) = blowout risk dominates = handled by
+        Signal-D. Signal-F is neutral above the rich threshold to avoid
+        double-cutting. Never raises.
+        """
+        try:
+            if not self._check_feature_flag(
+                "signal:iv_rank_filter:enabled"
+            ):
+                return 1.0, "flag_off"
+
+            if vix_z <= _IV_VERY_THIN:
+                logger.info(
+                    "signal_f_iv_very_thin",
+                    vix_z=round(vix_z, 2),
+                )
+                return 0.0, "skip_very_thin_premium"
+
+            if vix_z <= _IV_THIN:
+                return 0.75, "thin_premium"
+
+            if vix_z <= _IV_SOMEWHAT_THIN:
+                return 0.90, "somewhat_thin_premium"
+
+            if vix_z >= _IV_RICH and vix_z < _BREADTH_HIGH:
+                return 1.05, "rich_premium"
+
+            return 1.0, "normal"
+
+        except Exception as exc:
+            logger.warning("iv_rank_modifier_failed", error=str(exc))
             return 1.0, "error"
 
     def _get_spx_price(self) -> float:
@@ -654,8 +837,42 @@ class StrategySelector:
                 prediction, strategy_type
             )
 
+            # Signal-D + F: read VIX z-score ONCE and share between
+            # both signals — one Redis round-trip, not two.
+            vix_z = self._read_redis_float(
+                "polygon:vix:z_score", 0.0
+            )
+
+            # Signal-D: Market breadth
+            breadth_mult, breadth_status = (
+                self._market_breadth_modifier(vix_z)
+            )
+
+            # Signal-E: Earnings proximity guard (reads Redis intel)
+            earnings_mult, earnings_status = (
+                self._earnings_proximity_modifier(strategy_type)
+            )
+
+            # Signal-F: IV rank filter (reuses vix_z from Signal-D)
+            iv_mult, iv_status = self._iv_rank_modifier(vix_z)
+
+            # Signal-F skip (very thin premium) — same pattern as
+            # Signal-A skip on a strongly inverted VIX term.
+            if iv_mult == 0.0:
+                logger.info(
+                    "signal_f_skip_trade",
+                    reason="iv_very_thin_premium",
+                    vix_z=round(vix_z, 2),
+                )
+                return None  # Skip — premium too thin to sell
+
             signal_mult = round(
-                min(1.1, vix_term_mult * opening_mult * gex_mult), 4
+                min(
+                    1.1,
+                    vix_term_mult * opening_mult * gex_mult
+                    * breadth_mult * earnings_mult * iv_mult,
+                ),
+                4,
             )
 
             if signal_mult != 1.0:
@@ -665,6 +882,9 @@ class StrategySelector:
                     vix_term=vix_term_status,
                     gex_bias=gex_status,
                     opening_mult=opening_mult,
+                    breadth=breadth_status,
+                    earnings=earnings_status,
+                    iv_rank=iv_status,
                 )
 
             # Apply signal multiplier to sizing (mirrors event_size_mult)

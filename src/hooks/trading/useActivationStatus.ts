@@ -116,33 +116,33 @@ export const ALL_FEATURES: FeatureDefinition[] = [
         label: 'Market Breadth Filter',
         category: 'signal',
         description:
-            'Breadth divergence warning when index direction is narrow.',
-        activationThreshold: 10,
-        thresholdType: 'trades',
-        autoEnable: true,
-        builtStatus: 'not_built',
+            'Reduces condor size when VIX z-score is elevated (broad market anxiety); slight boost when below recent norm.',
+        activationThreshold: null,
+        thresholdType: null,
+        autoEnable: false,
+        builtStatus: 'live',
     },
     {
         key: 'signal:earnings_proximity:enabled',
         label: 'Earnings Proximity Guard',
         category: 'signal',
         description:
-            'Widens condor strikes when major earnings are 1-2 days away.',
+            'Cuts short-gamma size 25% on days when a major SPX-mover reports earnings (reads economic calendar).',
         activationThreshold: null,
         thresholdType: null,
         autoEnable: false,
-        builtStatus: 'not_built',
+        builtStatus: 'live',
     },
     {
         key: 'signal:iv_rank_filter:enabled',
         label: 'IV Rank Entry Filter',
         category: 'signal',
         description:
-            'Sizes up when IV rank > 50%, down when < 30%.',
+            'Skips trade when premium is very thin; reduces size on thin premium; slight boost on relatively rich premium.',
         activationThreshold: null,
         thresholdType: null,
         autoEnable: false,
-        builtStatus: 'not_built',
+        builtStatus: 'live',
     },
 
     // ── Strategies (manual enable after threshold) ────────────────────

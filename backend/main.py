@@ -1153,6 +1153,10 @@ _TRADING_FLAG_KEYS = [
     "signal:vix_term_filter:enabled",
     "signal:entry_time_gate:enabled",
     "signal:gex_directional_bias:enabled",
+    # Signal-D/E/F (default ON — same reverse polarity as A/B/C)
+    "signal:market_breadth:enabled",
+    "signal:earnings_proximity:enabled",
+    "signal:iv_rank_filter:enabled",
 ]
 
 # Signal flags follow REVERSE polarity (default ON). Set membership for
@@ -1161,6 +1165,9 @@ _SIGNAL_FLAGS = {
     "signal:vix_term_filter:enabled",
     "signal:entry_time_gate:enabled",
     "signal:gex_directional_bias:enabled",
+    "signal:market_breadth:enabled",
+    "signal:earnings_proximity:enabled",
+    "signal:iv_rank_filter:enabled",
 }
 
 
