@@ -88,6 +88,70 @@ These checks confirm the signal polarity fix is working in production.
 - [ ] `trading_feature_flags` table has 13 rows with correct polarity
 - [ ] `decision_context` column populated in trading_positions
 
+### 1F — Post-Consolidation S4-S6 Monitoring
+**Run after next Railway restart post-S6 merge (commit a8175dd on main).**
+
+**On Railway startup — confirm within 2 minutes:**
+- [ ] `supabase_client_initialised http2_enabled=False patch_method=session_replacement`
+  → HTTP/2 race fix still active. If missing, Railway is on old code.
+- [ ] `vix_history_backfilled days=20 latest_vix=...`
+  → VIX daily history seeded. z_score_daily meaningful from cycle 1.
+- [ ] `feature_flags_backfilled_to_supabase count=14`
+  → All 14 flags (including earnings_straddle) written with correct polarity.
+
+**S4 kill switch verification (next time a trading session exists):**
+- [ ] Toggle Kill Switch on `/trading/war-room`
+  - Railway logs: `trading_cycle_skipped reason=session_halted` ✅
+  - Railway logs: `position_monitor` still running (existing positions managed) ✅
+  - Supabase `trading_sessions`: `session_status = 'halted'` ✅
+- [ ] Confirm resume works: toggle Resume → `session_status = 'active'` ✅
+
+**S4 flag endpoint auth verification:**
+- [ ] Confirm `RAILWAY_ADMIN_KEY` is set in Railway Variables
+- [ ] Confirm `RAILWAY_ADMIN_KEY` is set in Supabase Edge Function secrets
+- [ ] Test toggle from `/trading/flags` still works after key is set
+- [ ] If toggle fails: redeploy `set-feature-flag` Edge Function:
+  `supabase functions deploy set-feature-flag --no-verify-jwt`
+
+**S5 event regime verification (next FOMC/CPI/NFP/earnings day):**
+- [ ] Railway logs at 9:30-10:00 AM ET: `regime_event_day_override`
+  - Shows `has_catalyst=true` or `has_earnings=true`
+  - `prediction.regime == "event"` in trading_prediction_outputs
+- [ ] Strategy selector picks `long_straddle` or `calendar_spread`
+  (not `iron_condor`) on event day
+- [ ] If `regime_event_day_override` absent: check calendar agent fired at 8:45 AM
+  (`economic_calendar_job_complete` in logs) and wrote `calendar:today:intel` to Redis
+
+**S6 data feed verification (within 30 minutes of market open):**
+- [ ] `polygon_vix_zscore_updated history_source="daily"` in Railway logs
+  → Confirms VIX z-score uses 20-day daily history (not 100-min intraday window).
+  If `history_source="intraday_fallback"`: daily history not yet seeded —
+  wait for EOD append or redeploy to re-run backfill.
+- [ ] `signal_mult_audit` shows `vix_z` values reflecting weekly/monthly
+  VIX regime (typically 0.5-2.0 range), not minute-to-minute noise
+- [ ] In Supabase `trading_positions`, check a closed databento-sourced trade:
+  `implied_vol` field should be ~0.16-0.18 (VIX/100) not exactly 0.20
+  → Confirms E-4 live VIX fix is active for GEX calculations
+- [ ] `polygon:spx:return_5m` and `polygon:spx:return_1h` in Redis
+  should show DIFFERENT values during an active trading session
+  → Confirms E-1 fix: SPX features now use live intraday price not prev-day close
+
+**S6 VIX daily history maturation (after first full trading day):**
+- [ ] EOD (after 3 PM ET): `polygon_vix_zscore_updated history_source="daily"`
+  with `daily_days=1` (first daily append)
+- [ ] After 5 trading days: `daily_days=5` — z-score now uses 5 real daily values
+- [ ] After 20 trading days: `daily_days=20` — full 20-day window active,
+  backfill values fully replaced with real production data
+
+**If any S4-S6 check fails, see:**
+- Kill switch not halting: S4 not on Railway — force redeploy
+- `history_source="intraday_fallback"` persists: `vix_daily_history` not
+  being seeded — check `_backfill_vix_history` ran at startup
+- `implied_vol` still 0.20: `polygon:vix:current` not in Redis —
+  check polygon_feed is running and healthy on the Health page
+- Event regime not firing: check `calendar:today:intel` key exists in Redis
+  after 8:45 AM ET on a FOMC/CPI/NFP day
+
 ---
 
 ## SECTION 2 — FEATURE FLAG ACTIVATION (In Order)
@@ -372,6 +436,13 @@ Status: PR open, baking 1 trading day before merge
 - [ ] Phase closure docs: 2A, 2B, 2C, 3C, 4C, Phase A
 - [ ] Risk register: add 4 new risks from audit
 
+**Session 6 — Data Feed Correctness (merged a8175dd)**
+- [x] E-1: SPX features use live intraday price not prev-day close (commit: a8175dd)
+- [x] E-2: VIX z-score daily history separate from 5-min intraday window (commit: a8175dd)
+- [x] E-4: databento_feed reads live VIX for GEX implied_vol (commit: a8175dd)
+- [x] P1-4: gex_conf regime selection aligned to 0.4 (commit: a8175dd)
+- [ ] VVIX intraday-window bug — deferred to S7 (same issue as E-2/E-3 for VVIX self.history)
+
 ### Health Check Quality
 
 - [ ] gex_engine: healthy only if gex:by_strike has > 5 entries
@@ -414,6 +485,9 @@ Document and preserve. Do not build yet.
 ## SECTION 10 — CURRENT SYSTEM STATUS
 
 Last updated: April 19, 2026
+
+**Consolidation Sprint:** S1-S6 complete (commits on main through a8175dd).
+S7 (reliability), S8 (tests), S9 (docs) pending.
 
 ### Infrastructure
 | Component | Status |
