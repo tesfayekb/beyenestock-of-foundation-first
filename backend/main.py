@@ -1468,6 +1468,79 @@ async def get_ab_status():
         }
 
 
+@app.get("/admin/earnings/status")
+async def get_earnings_status():
+    """
+    Phase 5A: Returns earnings system snapshot.
+
+    Powers /trading/earnings. Returns:
+      - upcoming:         JSON list from `earnings:upcoming_events`
+                          (written by the 8:45 AM scan)
+      - active:           JSON dict from `earnings:active_position`
+                          (the most recently entered open position)
+      - recent_positions: last 30 rows of earnings_positions DESC
+      - last_scan_at:     ISO timestamp of the last scan, or null
+
+    Soft-fails to empty / null payload so the page renders cleanly
+    before the migration is applied or before the first scan runs.
+    """
+    payload = {
+        "upcoming": [],
+        "active": None,
+        "recent_positions": [],
+        "last_scan_at": None,
+    }
+    try:
+        if redis_client:
+            try:
+                raw_upcoming = redis_client.get("earnings:upcoming_events")
+                if raw_upcoming:
+                    payload["upcoming"] = json.loads(raw_upcoming) or []
+            except Exception:
+                pass
+            try:
+                raw_active = redis_client.get("earnings:active_position")
+                if raw_active:
+                    payload["active"] = json.loads(raw_active)
+            except Exception:
+                pass
+            try:
+                raw_scan = redis_client.get("earnings:last_scan_at")
+                if raw_scan:
+                    payload["last_scan_at"] = (
+                        raw_scan.decode("utf-8")
+                        if isinstance(raw_scan, bytes)
+                        else str(raw_scan)
+                    )
+            except Exception:
+                pass
+
+        try:
+            result = (
+                get_client()
+                .table("earnings_positions")
+                .select(
+                    "id, ticker, earnings_date, announce_time, "
+                    "entry_date, exit_date, status, exit_reason, "
+                    "contracts, total_debit, exit_value, net_pnl, "
+                    "net_pnl_pct, implied_move_pct, actual_move_pct, "
+                    "historical_edge_score"
+                )
+                .order("entry_date", desc=True)
+                .limit(30)
+                .execute()
+            )
+            payload["recent_positions"] = result.data or []
+        except Exception:
+            payload["recent_positions"] = []
+
+        return payload
+
+    except Exception as exc:
+        logger.error("get_earnings_status_failed", error=str(exc))
+        return payload
+
+
 @app.post("/admin/trading/feature-flags")
 async def set_feature_flag(payload: dict = FBody(...)):
     """Enable or disable a single feature flag.

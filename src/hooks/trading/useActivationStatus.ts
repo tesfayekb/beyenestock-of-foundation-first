@@ -186,6 +186,17 @@ export const ALL_FEATURES: FeatureDefinition[] = [
         autoEnable: false,
         builtStatus: 'dormant',
     },
+    {
+        key: 'strategy:earnings_straddle:enabled',
+        label: 'Earnings Volatility Straddle',
+        category: 'strategy',
+        description:
+            'Phase 5A — buys ATM straddles on NVDA/AAPL/META/TSLA/AMZN/GOOGL 2-3 trading days before earnings. Isolated alpha stream in backend_earnings/.',
+        activationThreshold: null,
+        thresholdType: 'manual',
+        autoEnable: false,
+        builtStatus: 'live',
+    },
 
     // ── AI agents ─────────────────────────────────────────────────────
     {

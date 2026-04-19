@@ -56,4 +56,5 @@ export const ROUTES = {
   TRADING_SUBSCRIPTIONS: '/trading/subscriptions',
   TRADING_ACTIVATION: '/trading/activation',
   TRADING_AB_COMPARISON: '/trading/ab-comparison',
+  TRADING_EARNINGS: '/trading/earnings',
 } as const;

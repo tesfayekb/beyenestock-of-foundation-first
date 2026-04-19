@@ -12,6 +12,7 @@ import {
   CreditCard,
   Layers,
   GitCompare,
+  CalendarClock,
 } from 'lucide-react';
 import type { NavSection } from './navigation.types';
 import { ROUTES } from './routes';
@@ -76,6 +77,12 @@ export const tradingNavigation: NavSection[] = [
         title: 'A/B Gate',
         url: ROUTES.TRADING_AB_COMPARISON,
         icon: GitCompare,
+        permission: 'trading.view',
+      },
+      {
+        title: 'Earnings',
+        url: ROUTES.TRADING_EARNINGS,
+        icon: CalendarClock,
         permission: 'trading.view',
       },
       {
