@@ -27,6 +27,11 @@ from criteria_evaluator import run_criteria_evaluation
 from model_retraining import run_weekly_model_performance
 from position_monitor import run_time_stop_230pm, run_time_stop_345pm, run_position_monitor
 from mark_to_market import run_mark_to_market
+from market_calendar import (
+    get_time_stop_230pm,
+    get_time_stop_345pm,
+    is_market_day,
+)
 
 logger = get_logger("main")
 app = FastAPI()
@@ -188,8 +193,25 @@ def run_mark_to_market_job() -> None:
 
 
 def run_time_stop_230pm_job() -> None:
-    """D-010: Close all short-gamma positions at 2:30 PM ET (19:30 UTC)."""
+    """D-010: Close all short-gamma positions at dynamic time (market-calendar aware).
+
+    Skips weekends and holidays. On early-close days the stop fires at
+    11:30 AM ET (90 min before the 1:00 PM close) instead of 2:30 PM.
+    The scheduler still triggers this job at the original cron, but we
+    only act when within 2 minutes of the calendar-correct stop time.
+    """
     try:
+        if not is_market_day():
+            logger.debug("time_stop_230pm_skipped_non_trading_day")
+            return
+        now_et = datetime.now(ZoneInfo("America/New_York"))
+        stop_time = get_time_stop_230pm()
+        delta_min = abs(
+            (now_et.hour * 60 + now_et.minute)
+            - (stop_time.hour * 60 + stop_time.minute)
+        )
+        if delta_min > 2:
+            return
         result = run_time_stop_230pm()
         logger.info("time_stop_230pm_job_done", **result)
     except Exception as exc:
@@ -197,8 +219,23 @@ def run_time_stop_230pm_job() -> None:
 
 
 def run_time_stop_345pm_job() -> None:
-    """D-011: Close ALL positions at 3:45 PM ET (20:45 UTC)."""
+    """D-011: Close ALL positions at dynamic time (market-calendar aware).
+
+    Skips weekends and holidays. On early-close days the stop fires at
+    12:45 PM ET (15 min before the 1:00 PM close) instead of 3:45 PM.
+    """
     try:
+        if not is_market_day():
+            logger.debug("time_stop_345pm_skipped_non_trading_day")
+            return
+        now_et = datetime.now(ZoneInfo("America/New_York"))
+        stop_time = get_time_stop_345pm()
+        delta_min = abs(
+            (now_et.hour * 60 + now_et.minute)
+            - (stop_time.hour * 60 + stop_time.minute)
+        )
+        if delta_min > 2:
+            return
         result = run_time_stop_345pm()
         logger.info("time_stop_345pm_job_done", **result)
     except Exception as exc:

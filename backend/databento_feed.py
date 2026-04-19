@@ -35,6 +35,7 @@ import redis
 from config import REDIS_URL
 from db import write_health_status
 from logger import get_logger
+from market_calendar import is_market_open
 
 logger = get_logger("databento_feed")
 
@@ -73,9 +74,12 @@ class DatabentoFeed:
                     error=str(exc),
                     backoff=backoff,
                 )
+                # Only write 'degraded' during market hours.
+                # Outside hours the feed is expected to be quiet — write 'idle'.
+                _status = "degraded" if is_market_open() else "idle"
                 write_health_status(
                     "databento_feed",
-                    "degraded",
+                    _status,
                     databento_connected=False,
                 )
                 await asyncio.sleep(backoff)
@@ -139,9 +143,11 @@ class DatabentoFeed:
             with contextlib.suppress(asyncio.CancelledError):
                 await heartbeat_task
             self.connected = False
+            # Same idle-vs-degraded logic on stream teardown.
+            _status = "degraded" if is_market_open() else "idle"
             write_health_status(
                 "databento_feed",
-                "degraded",
+                _status,
                 databento_connected=False,
             )
 
@@ -321,7 +327,9 @@ class DatabentoFeed:
             )
 
             if not self.connected or lag is None or lag > 30:
-                status = "degraded"
+                # Outside market hours, no trades are expected — 'idle'
+                # is the correct neutral state, not 'degraded'.
+                status = "degraded" if is_market_open() else "idle"
             else:
                 status = "healthy"
 
