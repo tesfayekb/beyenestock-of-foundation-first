@@ -120,37 +120,68 @@ class ExecutionEngine:
                 "status": "open",
             }
 
-            # Phase A: decision_context snapshot for A/B analysis.
-            # Records which flags/models were active when this trade fired.
-            # Enables future analysis of "what changed between period A and B".
-            # ExecutionEngine has no Redis client, so flag fields default
-            # to False; static config + prediction metadata are always written.
-            try:
-                import config as _cfg
-                redis_client = getattr(self, "redis_client", None)
+            # Phase A / Session 1+2: decision_context snapshot.
+            # The strategy selector now provides a rich decision_context
+            # dict (signal multipliers, flag state at the exact moment of
+            # selection) via signal["decision_context"]. Prefer it.
+            #
+            # C-2 fix: ExecutionEngine has no Redis client of its own, so
+            # the legacy fallback path defaulted every flag field to False
+            # — corrupting the audit trail. The selector-provided context
+            # is always more accurate (captured at selection time, not at
+            # order time which can lag by seconds).
+            #
+            # The fallback path below is preserved for any signal that
+            # somehow arrives without selector context (legacy callers,
+            # tests, future strategy modules that bypass the selector).
+            signal_ctx = signal.get("decision_context")
+            if signal_ctx:
+                try:
+                    import config as _cfg
+                    position["decision_context"] = {
+                        **signal_ctx,
+                        # Layer in static config + prediction metadata
+                        # that the selector does not have access to.
+                        "ai_provider":       getattr(_cfg, "AI_PROVIDER", "anthropic"),
+                        "ai_model":          getattr(_cfg, "AI_MODEL", "claude-sonnet-4-5"),
+                        "prediction_source": prediction.get("source", "rule_based"),
+                        "prediction_confidence": prediction.get("confidence"),
+                        "confluence_score":  prediction.get("confluence_score"),
+                    }
+                except Exception:
+                    position["decision_context"] = signal_ctx
+            else:
+                # Legacy fallback — stale flag reads from this engine's
+                # Redis client (typically absent → all False). Marked
+                # with context_source so analytics can filter these out
+                # of the meta-label training set.
+                try:
+                    import config as _cfg
+                    redis_client = getattr(self, "redis_client", None)
 
-                def _flag(key: str) -> bool:
-                    if not redis_client:
-                        return False
-                    try:
-                        raw = redis_client.get(key)
-                        return raw in ("true", b"true")
-                    except Exception:
-                        return False
+                    def _flag(key: str) -> bool:
+                        if not redis_client:
+                            return False
+                        try:
+                            raw = redis_client.get(key)
+                            return raw in ("true", b"true")
+                        except Exception:
+                            return False
 
-                position["decision_context"] = {
-                    "synthesis_enabled": _flag("agents:ai_synthesis:enabled"),
-                    "flow_enabled":      _flag("agents:flow_agent:enabled"),
-                    "sentiment_enabled": _flag("agents:sentiment_agent:enabled"),
-                    "ai_hint_override":  _flag("strategy:ai_hint_override:enabled"),
-                    "ai_provider":       getattr(_cfg, "AI_PROVIDER", "anthropic"),
-                    "ai_model":          getattr(_cfg, "AI_MODEL", "claude-sonnet-4-5"),
-                    "prediction_source": prediction.get("source", "rule_based"),
-                    "prediction_confidence": prediction.get("confidence"),
-                    "confluence_score":  prediction.get("confluence_score"),
-                }
-            except Exception:
-                position["decision_context"] = {}
+                    position["decision_context"] = {
+                        "synthesis_enabled": _flag("agents:ai_synthesis:enabled"),
+                        "flow_enabled":      _flag("agents:flow_agent:enabled"),
+                        "sentiment_enabled": _flag("agents:sentiment_agent:enabled"),
+                        "ai_hint_override":  _flag("strategy:ai_hint_override:enabled"),
+                        "ai_provider":       getattr(_cfg, "AI_PROVIDER", "anthropic"),
+                        "ai_model":          getattr(_cfg, "AI_MODEL", "claude-sonnet-4-5"),
+                        "prediction_source": prediction.get("source", "rule_based"),
+                        "prediction_confidence": prediction.get("confidence"),
+                        "confluence_score":  prediction.get("confluence_score"),
+                        "context_source":    "fallback_no_selector_context",
+                    }
+                except Exception:
+                    position["decision_context"] = {}
 
             # Phase A: record FK to the prediction that drove this trade
             # (required for Loop 2 meta-label model). Optional — column
