@@ -211,7 +211,89 @@ print('Thresholds: 5=butterfly, 20=kelly+straddle+flow+sentiment, 40=ai_hint, 10
 
 ---
 
-## SECTION 7 — ONGOING HARDENING (Any Sprint)
+## SECTION 7 — COMPLETED PHASES (April 2026)
+
+### Phase 2A — Economic Intelligence Layer
+- [x] Economic calendar agent (Finnhub + FRED, day classification)
+- [x] Macro agent (CME FedWatch, consensus direction bias)
+- [x] Synthesis agent (Claude/OpenAI, configurable via AI_PROVIDER env var)
+- [x] Surprise detector (actual vs consensus on catalyst days)
+- [x] Prediction engine reads ai:synthesis:latest when fresh
+
+### Phase 2B — Strategy Wiring
+- [x] Iron butterfly (gamma pin, GEX wall within 0.3%)
+- [x] Long straddle (pre-catalyst, exits 30min before announcement)
+- [x] AI hint override flag (confidence ≥0.65 overrides regime)
+- [x] Risk engine debit risk table per strategy type
+
+### Phase 2C — Flow + Sentiment Agents
+- [x] Flow agent (Unusual Whales + Polygon P/C ratio)
+- [x] Sentiment agent (NewsAPI + Fear/Greed + overnight gap)
+- [x] Synthesis reads flow + sentiment briefs, computes confluence_score
+
+### Phase 3C — Calendar Spread
+- [x] Post-catalyst IV crush strategy (sell 0DTE ATM / buy next-Friday)
+- [x] Fires only after announcement time (≥14:30 ET on event days)
+- [x] DB migration: long_straddle + calendar_spread constraint, far_expiry_date
+
+### Phase 4C — Trading Console
+- [x] Dedicated /trading/* dashboard (TradingLayout, own nav, own permissions)
+- [x] /admin/trading/* backward-compat redirects
+- [x] Trading Console in dashboard switcher (gated on trading.view)
+- [x] /trading/intelligence — AI Intelligence page (synthesis/flow/sentiment/calendar)
+- [x] /trading/flags — Feature Flags page (toggle switches, confirmation dialogs)
+- [x] /trading/strategies — Strategy Library (all 7 strategies, conditions, sizing)
+- [x] /trading/milestones — Trade milestones with progress bar
+- [x] /trading/subscriptions — All services, costs, masked API key previews
+- [x] Backend: /admin/trading/intelligence, /admin/trading/feature-flags endpoints
+- [x] Backend: /admin/subscriptions/key-status endpoint
+
+### Phase A — Closed-Loop AI Feedback (Loop 1)
+- [x] feedback_agent.py with temporal lateral join (not session-level)
+- [x] Wilson CI on every win-rate cell (95% confidence intervals)
+- [x] Per-cell avg winner / avg loser / net P&L (not just win rate)
+- [x] Bootstrap floor: no brief published below 10 closed trades
+- [x] 4-day Redis TTL (survives long weekends)
+- [x] Regime-conditional breakdown via GROUP BY
+- [x] Calendar-aware: skips non-market days
+- [x] Failure mode documented: DEL ai:feedback:brief resets to neutral
+- [x] synthesis_agent reads feedback brief, adds PERFORMANCE FEEDBACK section
+- [x] Insufficient_history → feedback section completely absent from prompt
+- [x] decision_context JSONB column on trading_positions (A/B audit trail)
+- [x] prediction_id FK on trading_positions (Loop 2 training prep)
+- [x] Per-day token counter: ai:tokens:in/out:YYYY-MM-DD (90-day TTL)
+- [x] get_feedback_trades() Postgres RPC function (lateral join)
+
+### Market Calendar Awareness
+- [x] backend/market_calendar.py: 2026 holiday list + early-close days
+- [x] is_market_open(), is_market_day(), get_time_stop_345pm(), get_time_stop_230pm()
+- [x] src/lib/market-calendar.ts: frontend mirror
+- [x] Feeds write idle (not degraded) outside market hours
+- [x] Time stops adjusted for early-close days (12:45 PM instead of 3:45 PM)
+- [x] Health page: critical banner suppressed outside market hours
+- [x] DB migration: idle added to trading_system_health status constraint
+
+### AI Provider Swappable
+- [x] AI_PROVIDER, AI_MODEL, OPENAI_API_KEY in config.py
+- [x] synthesis_agent dispatches to Anthropic or OpenAI via _call_ai_provider()
+- [x] Safety bounds enforced identically for both providers
+- [x] provider + model fields in synthesis output for auditability
+
+### Agent Health Monitoring
+- [x] All 6 agents write healthy/idle/error to trading_system_health
+- [x] EXPECTED_SERVICES: 19 services (9 engine + 7 agents + 3 circuit breakers)
+
+### HARD-A — Circuit Breakers & Emergency Recovery
+- [x] run_emergency_backstop() at 3:55 PM ET — closes stuck positions
+- [x] run_prediction_watchdog() every 5 min — closes positions if engine silent >12 min
+- [x] run_eod_position_reconciliation() at 4:15 PM ET — force-closes stale opens
+- [x] _validate_brief() in feedback_agent — prevents corrupt Redis writes
+- [x] _safe_redis() in prediction_engine — staleness-aware Redis reads
+- [x] prediction_watchdog, emergency_backstop, position_reconciliation in health monitoring
+
+---
+
+## SECTION 8 — ONGOING HARDENING (Any Sprint)
 
 ### Health Check Quality
 
@@ -238,7 +320,7 @@ print('Thresholds: 5=butterfly, 20=kelly+straddle+flow+sentiment, 40=ai_hint, 10
 
 ---
 
-## SECTION 8 — FUTURE ROADMAP ITEMS (Year 2+)
+## SECTION 9 — FUTURE ROADMAP ITEMS (Year 2+)
 
 Document and preserve. Do not build yet.
 
@@ -252,7 +334,7 @@ Document and preserve. Do not build yet.
 
 ---
 
-## SECTION 9 — CURRENT SYSTEM STATUS
+## SECTION 10 — CURRENT SYSTEM STATUS
 
 Last updated: April 19, 2026
 

@@ -260,8 +260,31 @@ Every profitable idea ever discussed. Status: ACTIVE / BACKLOG / REJECTED.
 
 ## 5-PHASE ROADMAP
 
-### PHASE 1 — Stabilize (COMPLETE pending Monday)
+### PHASE 1 — Stabilize (COMPLETE)
 **Exit gate:** Real SPXW symbols in Redis + predictions in DB + positions opening.
+
+### PHASE 2 — Multi-Strategy + AI Brain (COMPLETE)
+All sub-phases 2A, 2B, 2C complete. All strategies wired and feature-flagged.
+All AI agents built and deployed. See TASK_REGISTER.md Section 7 for details.
+
+### PHASE 3 — Meta-Label + Validation (IN PROGRESS)
+- 3A: Meta-label model — infrastructure built (dormant until 100 trades)
+- 3B: A/B shadow infrastructure — NOT YET BUILT
+- 3C: Calendar spread — COMPLETE
+
+### PHASE 4 — User Platform (IN PROGRESS)
+- 4C: Trading Console — COMPLETE (see Section 7)
+- 4A, 4B, 4D — NOT YET BUILT
+
+### NEXT BUILDS (in priority order):
+1. HARD-B: External alerting (Gmail)
+2. DASH-A: Phase Activation Dashboard
+3. Phase 3B: A/B shadow infrastructure
+4. Signal enhancements (VIX term structure, time-of-day, GEX directional bias)
+5. Phase 5A: Earnings volatility system
+
+See trading-docs/08-planning/MASTER_PLAN.md for full phase specifications.
+Full roadmap: Download MARKETMUSE_PHASE_PLAN_V2.md from project lead.
 
 **Monday 9:40 AM ET verification:**
 ```powershell
