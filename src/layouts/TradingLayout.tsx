@@ -57,7 +57,7 @@ export function TradingLayout() {
 
   return (
     <RequireAuth>
-      <DashboardLayout sections={tradingNavigation} title="Beyene Quant">
+      <DashboardLayout sections={tradingNavigation} title="BeyeneQuant">
         <RequirePermission
           permission="trading.view"
           fallback={
