@@ -159,6 +159,230 @@ def run_time_stop_345pm() -> dict:
         return {"closed": 0, "error": str(e)}
 
 
+def run_emergency_backstop() -> dict:
+    """
+    HARD-A: Emergency position backstop.
+
+    Runs at 3:55 PM ET — 10 minutes after the 3:45 PM time stop.
+    Closes ANY position still marked 'open' in the DB.
+
+    This catches:
+    - 3:45 PM time stop job crashed or hung
+    - Execution engine failed to write exit_at to DB
+    - Scheduler missed the 3:45 PM window (timezone issue, restart)
+
+    exit_reason = 'emergency_backstop' for audit trail.
+    Positions closed here indicate a prior failure — investigate logs.
+    """
+    try:
+        positions = get_open_positions()
+        if not positions:
+            logger.info("emergency_backstop_no_open_positions")
+            return {"closed": 0, "triggered": False}
+
+        engine = _get_engine()
+        closed = 0
+        for pos in positions:
+            ok = engine.close_virtual_position(
+                position_id=pos["id"],
+                exit_reason="emergency_backstop",
+            )
+            if ok:
+                closed += 1
+                logger.warning(
+                    "emergency_backstop_closed_position",
+                    position_id=pos["id"],
+                    strategy=pos.get("strategy_type"),
+                    entry_at=pos.get("entry_at"),
+                )
+
+        if closed > 0:
+            write_audit_log(
+                action="trading.emergency_backstop_triggered",
+                metadata={
+                    "positions_closed": closed,
+                    "reason": "positions_still_open_at_355pm",
+                },
+            )
+            logger.error(
+                "emergency_backstop_triggered",
+                positions_closed=closed,
+                message=(
+                    "Time stop failure detected — positions were open at 3:55 PM"
+                ),
+            )
+
+        return {"closed": closed, "triggered": closed > 0}
+
+    except Exception as exc:
+        logger.error("emergency_backstop_failed", error=str(exc))
+        return {"closed": 0, "triggered": False, "error": str(exc)}
+
+
+def run_prediction_watchdog() -> dict:
+    """
+    HARD-A: Dead man's switch for the prediction engine.
+
+    Runs every 5 minutes during market hours (9:35 AM - 3:45 PM ET).
+    If the prediction engine has not written a prediction in the last
+    12 minutes, something is wrong.
+
+    Response:
+    - Write critical health status for prediction_engine
+    - If open positions exist: close all immediately
+      (cannot safely manage positions without current predictions)
+    - Log trading.prediction_watchdog_triggered for audit
+
+    12-minute window rationale: prediction_engine writes every ~5 min
+    during market hours. 12 minutes = 2.4 missed cycles — enough to
+    distinguish a slow cycle from a genuine failure.
+    """
+    from datetime import timedelta
+
+    STALE_THRESHOLD_MINUTES = 12
+
+    try:
+        result = (
+            get_client()
+            .table("trading_prediction_outputs")
+            .select("predicted_at")
+            .order("predicted_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+
+        if not rows:
+            logger.debug("prediction_watchdog_no_predictions_yet")
+            return {"status": "no_predictions", "action": "none"}
+
+        last_predicted_at = datetime.fromisoformat(
+            rows[0]["predicted_at"].replace("Z", "+00:00")
+        )
+        age_minutes = (
+            datetime.now(timezone.utc) - last_predicted_at
+        ).total_seconds() / 60
+
+        if age_minutes <= STALE_THRESHOLD_MINUTES:
+            logger.debug(
+                "prediction_watchdog_ok", age_minutes=round(age_minutes, 1)
+            )
+            return {"status": "healthy", "age_minutes": round(age_minutes, 1)}
+
+        # Prediction engine is silent — take action
+        logger.error(
+            "prediction_engine_silent",
+            age_minutes=round(age_minutes, 1),
+            threshold=STALE_THRESHOLD_MINUTES,
+        )
+
+        open_positions = get_open_positions()
+        closed = 0
+        if open_positions:
+            engine = _get_engine()
+            for pos in open_positions:
+                ok = engine.close_virtual_position(
+                    position_id=pos["id"],
+                    exit_reason="watchdog_engine_silent",
+                )
+                if ok:
+                    closed += 1
+                    logger.warning(
+                        "watchdog_closed_position",
+                        position_id=pos["id"],
+                        strategy=pos.get("strategy_type"),
+                    )
+
+        write_audit_log(
+            action="trading.prediction_watchdog_triggered",
+            metadata={
+                "age_minutes": round(age_minutes, 1),
+                "positions_closed": closed,
+            },
+        )
+
+        return {
+            "status": "triggered",
+            "age_minutes": round(age_minutes, 1),
+            "positions_closed": closed,
+        }
+
+    except Exception as exc:
+        logger.error("prediction_watchdog_failed", error=str(exc))
+        return {"status": "error", "error": str(exc)}
+
+
+def run_eod_position_reconciliation() -> dict:
+    """
+    HARD-A: End-of-day position reconciliation.
+
+    Runs at 4:15 PM ET after market close.
+    Finds any positions in DB with status='open' that should be closed.
+
+    For paper trading, Tradier is the source of truth for fills.
+    A position marked 'open' at 4:15 PM is definitively stale:
+    - Either the time stop fired but DB write failed
+    - Or the position was never properly closed
+    Either way: force-close in DB and log for investigation.
+
+    This also catches positions from prior sessions that were somehow
+    not closed (e.g., server restart mid-session).
+    """
+    try:
+        positions = get_open_positions()
+
+        if not positions:
+            logger.info("eod_reconciliation_clean")
+            return {"mismatches": 0, "force_closed": 0}
+
+        engine = _get_engine()
+        force_closed = 0
+        mismatches = []
+
+        for pos in positions:
+            mismatches.append({
+                "position_id": pos["id"],
+                "strategy": pos.get("strategy_type"),
+                "entry_at": pos.get("entry_at"),
+                "session_id": pos.get("session_id"),
+            })
+            ok = engine.close_virtual_position(
+                position_id=pos["id"],
+                exit_reason="eod_reconciliation_stale_open",
+            )
+            if ok:
+                force_closed += 1
+                logger.warning(
+                    "eod_reconciliation_force_closed",
+                    position_id=pos["id"],
+                    strategy=pos.get("strategy_type"),
+                    entry_at=pos.get("entry_at"),
+                )
+
+        write_audit_log(
+            action="trading.eod_reconciliation_mismatch",
+            metadata={
+                "stale_positions_found": len(positions),
+                "force_closed": force_closed,
+                "positions": mismatches,
+            },
+        )
+        logger.error(
+            "eod_reconciliation_mismatch_detected",
+            stale_positions=len(positions),
+            force_closed=force_closed,
+        )
+
+        return {
+            "mismatches": len(positions),
+            "force_closed": force_closed,
+        }
+
+    except Exception as exc:
+        logger.error("eod_reconciliation_failed", error=str(exc))
+        return {"mismatches": 0, "force_closed": 0, "error": str(exc)}
+
+
 def run_position_monitor() -> dict:
     """
     Runs every minute during market hours.
