@@ -20,8 +20,17 @@ class PolygonFeed:
         self.history: List[float] = []
         self.spx_history: List[float] = []
         self.last_vix: Optional[float] = None
-        # B-1: rolling 20-day VIX history for z-score (Signals D + F).
+        # B-1: 5-min intraday rolling VIX window (~100 min when full).
+        # Used for the fast intraday z-score and realised-vol calc.
         self.vix_history: List[float] = []
+        # E-2: separate slow-regime VIX history — one sample per
+        # trading day, seeded from the daily-aggregates backfill on
+        # startup and appended once per session at/after 19:00 UTC
+        # (~3 PM ET). _vix_daily_date_written guarantees one append
+        # per UTC date so multiple polls in the same session can't
+        # over-saturate the rolling window.
+        self.vix_daily_history: List[float] = []
+        self._vix_daily_date_written: Optional[str] = None
         # B-2: latest VIX9D value (Signal A term ratio numerator).
         self.last_vix9d: Optional[float] = None
         self._stop_event = asyncio.Event()
@@ -91,9 +100,10 @@ class PolygonFeed:
                                 error=str(v9_exc),
                             )
 
-                        spx_close = await self._fetch_spx_close()
-                        if spx_close and spx_close > 0:
-                            self.spx_history.append(spx_close)
+                        # E-1: live intraday SPX price (was prev-day close).
+                        spx_price = await self._fetch_spx_price()
+                        if spx_price and spx_price > 0:
+                            self.spx_history.append(spx_price)
                             self.spx_history = self.spx_history[-20:]
 
                         if len(self.spx_history) >= 5:
@@ -178,36 +188,80 @@ class PolygonFeed:
 
     def _store_vix_baseline(self, current: float) -> None:
         """
-        B-1: Compute rolling 20-day VIX z-score and write to Redis.
+        Compute VIX z-scores — daily (slow regime) and intraday (fast).
 
-        Mirrors _store_baseline() for VVIX — identical rolling window
-        math, different Redis keys (polygon:vix:* NOT polygon:vvix:*).
-        These are separate signals consuming different data — never
-        overwrite VVIX keys here.
+        E-2 fix: separate daily vs intraday histories.
+          * vix_history          — 5-min rolling window, 20 samples (~100 min).
+                                   Used for the FAST intraday z-score
+                                   (polygon:vix:z_score_intraday).
+          * vix_daily_history    — one sample per trading day, seeded from
+                                   the daily-aggregates backfill and appended
+                                   once per session at/after 19:00 UTC.
+                                   Used for the SLOW regime z-score
+                                   (polygon:vix:z_score_daily).
 
-        Minimum 5 data points required before writing z-score (avoids
-        noisy early values). After 20 polling cycles the window is
-        full; subsequent calls slide.
-
-        Writes:
-          polygon:vix:20d_mean
-          polygon:vix:20d_std
-          polygon:vix:z_score
-
-        Called every polling cycle from _poll_loop alongside
-        polygon:vix:current. After Session 2 historical backfill (plan
-        addition A2), z-score will be meaningful from minute 1 of the
-        first session.
+        polygon:vix:z_score is also written for backward compatibility
+        with callers that still read the legacy key. It mirrors the
+        daily z-score whenever the daily window has at least 5 samples,
+        and falls back to the intraday window otherwise so the key is
+        never blank during cold-start.
         """
+        # --- Intraday: 5-min rolling window (unchanged from B-1) ---
         self.vix_history.append(current)
         self.vix_history = self.vix_history[-20:]
 
-        if len(self.vix_history) < 5:
-            return  # Not enough data — do not write partial z-score
+        if len(self.vix_history) >= 5:
+            n_i = len(self.vix_history)
+            avg_i = sum(self.vix_history) / n_i
+            var_i = sum((x - avg_i) ** 2 for x in self.vix_history) / n_i
+            std_i = var_i ** 0.5
+            if std_i > 0:
+                z_intraday = round((current - avg_i) / std_i, 4)
+                self.redis_client.set(
+                    "polygon:vix:z_score_intraday", z_intraday
+                )
 
-        n = len(self.vix_history)
-        avg = sum(self.vix_history) / n
-        variance = sum((x - avg) ** 2 for x in self.vix_history) / n
+        # --- Daily: one append per trading day, after 19:00 UTC (~3 PM ET) ---
+        # Backfill seeds 20 days at startup; the live append fires only
+        # once per session (guarded by _vix_daily_date_written) so the
+        # rolling 20-day window genuinely slides one sample per day,
+        # not one per 5-minute poll.
+        #
+        # Lazy-init the daily attributes so older callers / tests that
+        # construct PolygonFeed via __new__ and only populate vix_history
+        # keep working without modification.
+        if not hasattr(self, "vix_daily_history"):
+            self.vix_daily_history = []
+        if not hasattr(self, "_vix_daily_date_written"):
+            self._vix_daily_date_written = None
+
+        now = datetime.now(timezone.utc)
+        today_str = now.strftime("%Y-%m-%d")
+        if (
+            now.hour >= 19
+            and self._vix_daily_date_written != today_str
+        ):
+            self.vix_daily_history.append(current)
+            self.vix_daily_history = self.vix_daily_history[-20:]
+            self._vix_daily_date_written = today_str
+
+        # --- Compute the regime z-score (daily preferred, intraday fallback) ---
+        # Need at least 5 samples either way. If the daily window hasn't
+        # reached 5 entries yet (cold start before backfill landed) we
+        # transparently fall back to the intraday window so downstream
+        # consumers always have a value.
+        if len(self.vix_daily_history) >= 5:
+            hist = self.vix_daily_history
+            source = "daily"
+        elif len(self.vix_history) >= 5:
+            hist = self.vix_history
+            source = "intraday_fallback"
+        else:
+            return  # Not enough data anywhere yet
+
+        n = len(hist)
+        avg = sum(hist) / n
+        variance = sum((x - avg) ** 2 for x in hist) / n
         std = variance ** 0.5
 
         if std <= 0:
@@ -216,13 +270,18 @@ class PolygonFeed:
         z_score = round((current - avg) / std, 4)
         self.redis_client.set("polygon:vix:20d_mean", round(avg, 4))
         self.redis_client.set("polygon:vix:20d_std", round(std, 4))
+        # Legacy key — kept for backward compat during the rollout.
+        # New callers should read polygon:vix:z_score_daily instead.
         self.redis_client.set("polygon:vix:z_score", z_score)
+        self.redis_client.set("polygon:vix:z_score_daily", z_score)
         logger.debug(
             "polygon_vix_zscore_updated",
             vix=round(current, 2),
             mean=round(avg, 2),
             std=round(std, 2),
             z_score=z_score,
+            history_source=source,
+            daily_days=len(self.vix_daily_history),
             history_len=n,
         )
 
@@ -461,6 +520,15 @@ class PolygonFeed:
                 return
 
             self.vix_history = closes[-20:]
+            # E-2: seed the slow-regime daily history from the same
+            # daily-aggregates backfill so polygon:vix:z_score_daily
+            # is meaningful from minute 1 of the first session, instead
+            # of waiting ~20 trading days for the live EOD appends to
+            # accumulate. vix_history (intraday) and vix_daily_history
+            # are independent series with the same starting point; the
+            # intraday window is overwritten by 5-min samples while the
+            # daily window only advances once per session.
+            self.vix_daily_history = closes[-20:]
             logger.info(
                 "vix_history_backfilled",
                 days=len(self.vix_history),
@@ -473,10 +541,23 @@ class PolygonFeed:
                 error=type(exc).__name__,
             )
 
-    async def _fetch_spx_close(self) -> Optional[float]:
+    async def _fetch_spx_price(self) -> Optional[float]:
         """
-        Fetch latest SPX daily close from Polygon.
-        Uses I:SPX index. Returns None on failure.
+        E-1: Fetch live intraday SPX index price from the Polygon snapshot
+        endpoint, replacing the prior _fetch_spx_close() implementation
+        that hit /v2/aggs/ticker/I:SPX/prev.
+
+        The /prev endpoint returns yesterday's daily close — a value
+        that does not change throughout the trading day. Appending it
+        to spx_history every 5-minute poll meant every "intraday"
+        return feature fed to LightGBM (return_5m / 30m / 1h / 4h)
+        was either zero or a constant tiny number — the model was
+        effectively training and inferring on noise.
+
+        Now uses /v3/snapshot?ticker.any_of=I:SPX (same pattern as
+        _fetch_vix / _fetch_vvix) so spx_history actually contains
+        intraday prices and the multi-timeframe returns reflect real
+        intraday moves. Falls back to None on error.
         """
         try:
             import config
@@ -489,16 +570,36 @@ class PolygonFeed:
 
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
-                    "https://api.polygon.io/v2/aggs/ticker/I:SPX/prev",
+                    "https://api.polygon.io/v3/snapshot",
                     headers=headers,
+                    params={"ticker.any_of": "I:SPX"},
                 )
                 if resp.status_code == 200:
                     results = resp.json().get("results", [])
                     if results:
-                        return float(results[0].get("c", 0.0)) or None
+                        session_data = results[0].get("session", {})
+                        price = float(
+                            session_data.get("close")
+                            or session_data.get("last")
+                            or 0.0
+                        )
+                        if price > 0:
+                            return price
         except Exception as e:
-            logger.warning("polygon_spx_fetch_failed", error=type(e).__name__)
+            logger.warning(
+                "polygon_spx_price_fetch_failed",
+                error=type(e).__name__,
+            )
         return None
+
+    async def _fetch_spx_close(self) -> Optional[float]:
+        """Deprecated — use _fetch_spx_price().
+
+        Retained as a thin wrapper so existing tests that mock
+        _fetch_spx_close keep working. New callers should use
+        _fetch_spx_price directly.
+        """
+        return await self._fetch_spx_price()
 
     async def _compute_spx_features(self) -> None:
         """

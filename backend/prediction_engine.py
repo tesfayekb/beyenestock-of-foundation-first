@@ -313,8 +313,15 @@ class PredictionEngine:
                 rcs=round(rcs, 1),
             )
 
-        # Use the LightGBM (GEX-based) regime as primary when data is available
-        regime = regime_lgbm if gex_conf >= 0.3 and flip_zone else regime_hmm
+        # Use the LightGBM (GEX-based) regime as primary when data is available.
+        # P1-4: threshold raised from 0.3 → 0.4 to align with the
+        # strategy_selector pin-override gate (line ~574). 0.3 is still
+        # the minimum data-quality gate above (line ~257) — below 0.3
+        # the option flow is insufficient to consider GEX at all. 0.4
+        # is the higher bar required to actually drive regime selection
+        # (and, downstream, strategy pinning). Same threshold for both
+        # decisions keeps regime and strategy choice consistent.
+        regime = regime_lgbm if gex_conf >= 0.4 and flip_zone else regime_hmm
 
         if rcs >= 80:
             allocation_tier = "full"

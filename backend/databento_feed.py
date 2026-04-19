@@ -242,6 +242,25 @@ class DatabentoFeed:
 
         underlying_price = self._get_underlying_price()
 
+        # E-4: read live VIX (written by polygon_feed every 5 min) and
+        # convert to a decimal vol. The previous hard-coded 0.20 made
+        # GEX (bs_gamma) magnitudes and the nearest-wall calculation
+        # systematically wrong whenever realised IV was meaningfully
+        # different from 20% — i.e., on every interesting trading day.
+        # Sanity clamp [0.05, 2.0] guards against a malformed
+        # polygon:vix:current write or a freak VIX spike.
+        try:
+            vix_raw = (
+                self.redis_client.get("polygon:vix:current")
+                if self.redis_client else None
+            )
+            implied_vol = (
+                float(vix_raw) / 100.0 if vix_raw else 0.20
+            )
+            implied_vol = max(0.05, min(implied_vol, 2.0))
+        except Exception:
+            implied_vol = 0.20
+
         trade = {
             "symbol": sym_clean,
             "price": price,
@@ -251,7 +270,7 @@ class DatabentoFeed:
             "option_type": opt_type,
             "time_to_expiry_years": time_to_expiry,
             "expiry_date": expiry_date,
-            "implied_vol": 0.20,
+            "implied_vol": implied_vol,
             "risk_free_rate": 0.05,
             "timestamp": ts_dt,
         }

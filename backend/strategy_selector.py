@@ -876,9 +876,34 @@ class StrategySelector:
 
             # Signal-D + F: read VIX z-score ONCE and share between
             # both signals — one Redis round-trip, not two.
-            vix_z = self._read_redis_float(
-                "polygon:vix:z_score", 0.0
-            )
+            #
+            # E-2: prefer the slow-regime daily z-score
+            # (polygon:vix:z_score_daily, written by polygon_feed from
+            # vix_daily_history). The legacy polygon:vix:z_score key
+            # was previously a 100-min intraday rolling window mis-
+            # labelled "20d" — using it for regime-level signals D + F
+            # injected intraday noise into a slow variable. We fall
+            # back to the legacy key during rollout so this works even
+            # if polygon_feed hasn't written the new key yet.
+            #
+            # NOTE: VVIX (self.history in polygon_feed) has the same
+            # bug and is deferred to S7 — it requires the same
+            # backfill + daily-history split.
+            try:
+                raw_daily = (
+                    self.redis_client.get("polygon:vix:z_score_daily")
+                    if self.redis_client else None
+                )
+                if raw_daily is not None:
+                    vix_z = float(raw_daily)
+                else:
+                    vix_z = self._read_redis_float(
+                        "polygon:vix:z_score", 0.0
+                    )
+            except (TypeError, ValueError):
+                vix_z = self._read_redis_float(
+                    "polygon:vix:z_score", 0.0
+                )
 
             # Signal-D: Market breadth
             breadth_mult, breadth_status = (
