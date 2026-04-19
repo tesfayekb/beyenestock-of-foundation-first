@@ -513,6 +513,72 @@ def _run_sentiment_agent_job() -> None:
         logger.error("sentiment_agent_job_failed", error=str(exc))
 
 
+# ── Phase 5A: Earnings Volatility System jobs ────────────────────────────
+# All three follow the same sys.path.insert pattern as the agent jobs
+# above. backend_earnings/ is fully isolated from backend trading
+# modules — see the isolation guard test in tests/test_phase_5a_session1.
+# The single shared health service `earnings_scanner` reflects the
+# scan job (the most user-visible one); entry/monitor failures are
+# logged but do not flip the service red.
+
+
+def _run_earnings_scan_job() -> None:
+    """Phase 5A: 8:45 AM ET — refresh upcoming earnings calendar."""
+    try:
+        import sys
+        import os
+        sys.path.insert(
+            0,
+            os.path.join(os.path.dirname(__file__), "..", "backend_earnings"),
+        )
+        from main_earnings import run_earnings_scan
+        result = run_earnings_scan(redis_client)
+        write_health_status("earnings_scanner", "healthy")
+        logger.info(
+            "earnings_scan_job_complete",
+            event_count=result.get("count", 0),
+        )
+    except Exception as exc:
+        write_health_status("earnings_scanner", "error", error=str(exc))
+        logger.error("earnings_scan_job_failed", error=str(exc))
+
+
+def _run_earnings_entry_job() -> None:
+    """Phase 5A: 9:50 AM ET — open at most one new straddle."""
+    try:
+        if not is_market_day():
+            return
+        import sys
+        import os
+        sys.path.insert(
+            0,
+            os.path.join(os.path.dirname(__file__), "..", "backend_earnings"),
+        )
+        from main_earnings import run_earnings_entry
+        result = run_earnings_entry(redis_client)
+        logger.info("earnings_entry_job_complete", **result)
+    except Exception as exc:
+        logger.error("earnings_entry_job_failed", error=str(exc))
+
+
+def _run_earnings_monitor_job() -> None:
+    """Phase 5A: every 15 min during market hours — exit logic."""
+    try:
+        if not is_market_open():
+            return
+        import sys
+        import os
+        sys.path.insert(
+            0,
+            os.path.join(os.path.dirname(__file__), "..", "backend_earnings"),
+        )
+        from main_earnings import run_earnings_monitor
+        result = run_earnings_monitor(redis_client)
+        logger.debug("earnings_monitor_job_complete", **result)
+    except Exception as exc:
+        logger.error("earnings_monitor_job_failed", error=str(exc))
+
+
 def _run_feedback_agent_job() -> None:
     """
     Phase A (Loop 1): Closed-loop feedback brief.
@@ -975,6 +1041,32 @@ async def on_startup() -> None:
             hour=8, minute=30,
             id="trading_sentiment_agent",
             timezone="America/New_York",
+        )
+
+        # Phase 5A: Earnings Volatility System
+        scheduler.add_job(
+            _run_earnings_scan_job,
+            trigger="cron",
+            hour=8, minute=45,
+            id="trading_earnings_scan",
+            timezone="America/New_York",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            _run_earnings_entry_job,
+            trigger="cron",
+            hour=9, minute=50,
+            id="trading_earnings_entry",
+            timezone="America/New_York",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            _run_earnings_monitor_job,
+            trigger="cron",
+            hour="9-15", minute="*/15",
+            id="trading_earnings_monitor",
+            timezone="America/New_York",
+            replace_existing=True,
         )
 
         scheduler.start()

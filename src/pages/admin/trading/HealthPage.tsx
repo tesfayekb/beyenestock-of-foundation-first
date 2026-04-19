@@ -61,6 +61,8 @@ const EXPECTED_SERVICES = [
   'surprise_detector',
   'flow_agent',
   'sentiment_agent',
+  // Phase 5A: Earnings Volatility System (scan runs 8:45 AM ET)
+  'earnings_scanner',
   // Phase A (Loop 1): closed-loop feedback brief, runs 9:10 AM ET
   'feedback_agent',
   // HARD-A: Circuit breaker health services
