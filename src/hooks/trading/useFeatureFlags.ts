@@ -17,10 +17,16 @@ import { supabase } from '@/integrations/supabase/client';
 
 // Signal flags use REVERSE polarity (default ON). Keep this set in
 // sync with _SIGNAL_FLAGS in backend/main.py.
+// Source of truth: backend/main.py _SIGNAL_FLAGS — if you add a new
+// signal flag there, mirror it here AND in the backend
+// _SIGNAL_FLAG_DEFAULTS dict in strategy_selector.select().
 const SIGNAL_FLAG_KEYS: ReadonlySet<string> = new Set([
     'signal:vix_term_filter:enabled',
     'signal:entry_time_gate:enabled',
     'signal:gex_directional_bias:enabled',
+    'signal:market_breadth:enabled',
+    'signal:earnings_proximity:enabled',
+    'signal:iv_rank_filter:enabled',
 ]);
 
 export interface FlagDefinition {
