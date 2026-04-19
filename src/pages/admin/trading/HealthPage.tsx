@@ -61,6 +61,8 @@ const EXPECTED_SERVICES = [
   'surprise_detector',
   'flow_agent',
   'sentiment_agent',
+  // Phase A (Loop 1): closed-loop feedback brief, runs 9:10 AM ET
+  'feedback_agent',
 ] as const;
 // NOTE: learning_engine, sentinel, cboe_feed removed — these services
 // have not been built yet and never write health status. They were

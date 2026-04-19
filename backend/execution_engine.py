@@ -120,6 +120,45 @@ class ExecutionEngine:
                 "status": "open",
             }
 
+            # Phase A: decision_context snapshot for A/B analysis.
+            # Records which flags/models were active when this trade fired.
+            # Enables future analysis of "what changed between period A and B".
+            # ExecutionEngine has no Redis client, so flag fields default
+            # to False; static config + prediction metadata are always written.
+            try:
+                import config as _cfg
+                redis_client = getattr(self, "redis_client", None)
+
+                def _flag(key: str) -> bool:
+                    if not redis_client:
+                        return False
+                    try:
+                        raw = redis_client.get(key)
+                        return raw in ("true", b"true")
+                    except Exception:
+                        return False
+
+                position["decision_context"] = {
+                    "synthesis_enabled": _flag("agents:ai_synthesis:enabled"),
+                    "flow_enabled":      _flag("agents:flow_agent:enabled"),
+                    "sentiment_enabled": _flag("agents:sentiment_agent:enabled"),
+                    "ai_hint_override":  _flag("strategy:ai_hint_override:enabled"),
+                    "ai_provider":       getattr(_cfg, "AI_PROVIDER", "anthropic"),
+                    "ai_model":          getattr(_cfg, "AI_MODEL", "claude-sonnet-4-5"),
+                    "prediction_source": prediction.get("source", "rule_based"),
+                    "prediction_confidence": prediction.get("confidence"),
+                    "confluence_score":  prediction.get("confluence_score"),
+                }
+            except Exception:
+                position["decision_context"] = {}
+
+            # Phase A: record FK to the prediction that drove this trade
+            # (required for Loop 2 meta-label model). Optional — column
+            # tolerates NULL for legacy positions.
+            pred_id = prediction.get("id")
+            if pred_id:
+                position["prediction_id"] = pred_id
+
             result = (
                 get_client()
                 .table("trading_positions")
