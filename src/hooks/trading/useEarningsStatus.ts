@@ -1,20 +1,23 @@
 /**
  * useEarningsStatus — fetches Phase 5A earnings system snapshot.
  *
- * Backs the /trading/earnings page. Shape mirrors the
- * /admin/earnings/status response from backend/main.py exactly.
+ * Backs the /trading/earnings page. Direct Supabase queries (no
+ * Railway fetch) so this works under the Lovable-hosted CSP, which
+ * blocks direct browser calls to the Railway API.
  *
- * Polls every 5 minutes — earnings data changes rarely intraday
- * (the 8:45 AM scan is the main writer). BACKEND_URL fallback
- * mirrors useAbComparison.ts and useActivationStatus.ts so the
- * hook works identically when VITE_BACKEND_URL is unset (Lovable
- * preview).
+ * KNOWN GAP: the upcoming-events list is written to Redis by the
+ * 8:45 AM ET scan and is NOT mirrored into Supabase yet. Until
+ * Phase 5A-2 adds a persisted events table, the upcoming section
+ * stays empty in the UI and the existing empty-state copy carries
+ * the message ("Earnings scan runs at 8:45 AM ET …").
+ *
+ * The earnings_positions table is not in the generated Database
+ * types yet — we cast the from() argument with `as never` to
+ * satisfy the typed supabase-js client without disabling
+ * type-checking elsewhere. Same pattern as useAbComparison.
  */
 import { useQuery } from '@tanstack/react-query';
-
-const BACKEND_URL =
-    import.meta.env.VITE_BACKEND_URL ??
-    'https://diplomatic-mercy-production-7e61.up.railway.app';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface EarningsUpcomingEvent {
     ticker: string;
@@ -68,22 +71,46 @@ export interface EarningsStatusResponse {
     last_scan_at: string | null;
 }
 
-async function fetchEarningsStatus(): Promise<EarningsStatusResponse> {
-    const res = await fetch(`${BACKEND_URL}/admin/earnings/status`);
-    if (!res.ok) throw new Error('Failed to fetch earnings status');
-    const data = await res.json();
-    return {
-        upcoming: (data.upcoming ?? []) as EarningsUpcomingEvent[],
-        active: (data.active ?? null) as EarningsActivePosition | null,
-        recent_positions: (data.recent_positions ?? []) as EarningsRecentPosition[],
-        last_scan_at: (data.last_scan_at ?? null) as string | null,
-    };
-}
-
 export function useEarningsStatus() {
-    return useQuery({
+    return useQuery<EarningsStatusResponse>({
         queryKey: ['earnings-status'],
-        queryFn: fetchEarningsStatus,
+        queryFn: async () => {
+            const [recentResult, activeResult] = await Promise.all([
+                supabase
+                    .from('earnings_positions' as never)
+                    .select(
+                        'id, ticker, earnings_date, announce_time, ' +
+                            'entry_date, exit_date, status, exit_reason, ' +
+                            'contracts, total_debit, exit_value, ' +
+                            'net_pnl, net_pnl_pct, implied_move_pct, ' +
+                            'actual_move_pct, historical_edge_score',
+                    )
+                    .order('entry_date', { ascending: false })
+                    .limit(30),
+                supabase
+                    .from('earnings_positions' as never)
+                    .select('*')
+                    .eq('status', 'open')
+                    .eq('position_mode', 'virtual')
+                    .limit(1)
+                    .maybeSingle(),
+            ]);
+
+            const recent_positions = (recentResult.data ??
+                []) as EarningsRecentPosition[];
+            const active = (activeResult.data ??
+                null) as EarningsActivePosition | null;
+
+            return {
+                // Upcoming events live in Redis (written by the 8:45 AM
+                // scan). Until Phase 5A-2 mirrors them to Supabase, this
+                // stays empty and the page shows its empty-state copy.
+                upcoming: [],
+                active,
+                recent_positions,
+                last_scan_at: null,
+            };
+        },
         refetchInterval: 5 * 60_000,
         staleTime: 4 * 60_000,
         retry: 2,
