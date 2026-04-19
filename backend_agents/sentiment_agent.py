@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 import httpx
 
 import config
+from db import get_client
 from logger import get_logger
 
 logger = get_logger("sentiment_agent")
@@ -118,6 +119,15 @@ def run_sentiment_agent(redis_client) -> dict:
                         28800,  # 8 hours
                         json.dumps(brief),
                     )
+                    # CSP-fix mirror: dashboard reads via direct supabase-js.
+                    get_client().table("trading_ai_briefs").upsert(
+                        {
+                            "brief_kind": "sentiment",
+                            "payload": brief,
+                            "generated_at": datetime.now(timezone.utc).isoformat(),
+                        },
+                        on_conflict="brief_kind",
+                    ).execute()
                 except Exception:
                     pass  # Redis write failure must never block return
             else:

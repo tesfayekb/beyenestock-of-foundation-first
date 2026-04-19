@@ -1,13 +1,27 @@
 /**
- * useFeatureFlags — read and write Redis feature flags via the backend API.
+ * useFeatureFlags — read and write trading feature flags.
  *
- * Phase 4C — backs the Feature Flag toggle panel on the Trading Console
- * Config page. Polls every 30 seconds so the UI reflects out-of-band
- * changes (e.g. flags toggled via railway-cli).
+ * CSP-fix: the Lovable-hosted frontend cannot fetch the Railway API
+ * directly. Reads come from the trading_feature_flags Supabase table
+ * (mirrored on every backend write). Writes go through the
+ * `set-feature-flag` Supabase Edge Function, which forwards to
+ * Railway server-side.
+ *
+ * Polarity:
+ *   - Strategy/agent flags (default OFF): absent row = OFF, true = ON.
+ *   - Signal flags (default ON):          absent row = ON,  false = OFF.
+ * SIGNAL_FLAG_KEYS below MUST match _SIGNAL_FLAGS in backend/main.py.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'https://diplomatic-mercy-production-7e61.up.railway.app';
+// Signal flags use REVERSE polarity (default ON). Keep this set in
+// sync with _SIGNAL_FLAGS in backend/main.py.
+const SIGNAL_FLAG_KEYS: ReadonlySet<string> = new Set([
+    'signal:vix_term_filter:enabled',
+    'signal:entry_time_gate:enabled',
+    'signal:gex_directional_bias:enabled',
+]);
 
 export interface FlagDefinition {
     key: string;
@@ -77,22 +91,44 @@ export const FLAG_DEFINITIONS: FlagDefinition[] = [
     },
 ];
 
-async function fetchFlags(): Promise<Record<string, boolean>> {
-    if (!BACKEND_URL) return {};
-    const res = await fetch(`${BACKEND_URL}/admin/trading/feature-flags`);
-    if (!res.ok) throw new Error('Failed to fetch flags');
-    const data = await res.json();
-    return data.flags ?? {};
+interface FeatureFlagRow {
+    flag_key: string;
+    enabled: boolean;
 }
 
-async function postFlag(flagKey: string, enabled: boolean): Promise<void> {
-    if (!BACKEND_URL) throw new Error('VITE_BACKEND_URL not configured');
-    const res = await fetch(`${BACKEND_URL}/admin/trading/feature-flags`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flag_key: flagKey, enabled }),
-    });
-    if (!res.ok) throw new Error('Failed to update flag');
+async function fetchFlags(): Promise<Record<string, boolean>> {
+    // The trading_feature_flags table is not in the generated Database
+    // types yet — cast to `never` to satisfy supabase-js without
+    // disabling type-checking elsewhere. Same pattern as
+    // useAbComparison / useEarningsStatus.
+    const { data, error } = await supabase
+        .from('trading_feature_flags' as never)
+        .select('flag_key, enabled');
+    if (error) throw new Error(error.message);
+    const flags: Record<string, boolean> = {};
+    for (const row of (data ?? []) as FeatureFlagRow[]) {
+        flags[row.flag_key] = row.enabled;
+    }
+    return flags;
+}
+
+async function postFlag(
+    flagKey: string,
+    enabled: boolean,
+): Promise<void> {
+    // Edge Function forwards to Railway server-side (CSP-allowed).
+    const { data, error } = await supabase.functions.invoke(
+        'set-feature-flag',
+        {
+            method: 'POST',
+            body: { flag_key: flagKey, enabled },
+        },
+    );
+    if (error) throw new Error(error.message);
+    const payload = data as { ok?: boolean; error?: string } | null;
+    if (!payload?.ok) {
+        throw new Error(payload?.error ?? 'Failed to update flag');
+    }
 }
 
 export function useFeatureFlags() {
@@ -112,4 +148,19 @@ export function useSetFeatureFlag() {
             postFlag(flagKey, enabled),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['feature-flags'] }),
     });
+}
+
+/**
+ * Apply signal-flag default-ON polarity to a raw flag map.
+ *
+ * Strategy/agent flags: absent = OFF (use `flags[key] ?? false`).
+ * Signal flags:         absent = ON  (use `flags[key] ?? true`).
+ */
+export function isFlagEnabled(
+    flags: Record<string, boolean> | undefined,
+    key: string,
+): boolean {
+    const raw = flags?.[key];
+    if (raw !== undefined) return raw;
+    return SIGNAL_FLAG_KEYS.has(key);
 }

@@ -28,6 +28,7 @@ _BACKEND_DIR = os.path.join(os.path.dirname(__file__), "..", "backend")
 if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
+from db import get_client  # noqa: E402  (path insert above)
 from logger import get_logger  # noqa: E402  (path insert above)
 from edge_calculator import (  # noqa: E402  (sibling module)
     EARNINGS_HISTORY,
@@ -143,6 +144,16 @@ def scan_upcoming_earnings(redis_client) -> list[dict]:
                     SCAN_TTL,
                     datetime.now(timezone.utc).isoformat(),
                 )
+                # CSP-fix mirror: dashboard reads upcoming events via
+                # direct supabase-js queries (Lovable CSP blocks the
+                # Railway API). One INSERT per scan; the page reads
+                # the most recent row by scanned_at.
+                get_client().table("earnings_upcoming_scan").insert(
+                    {
+                        "scanned_at": datetime.now(timezone.utc).isoformat(),
+                        "payload": upcoming,
+                    }
+                ).execute()
             except Exception as e:
                 logger.warning(
                     "earnings_redis_write_failed", error=str(e)

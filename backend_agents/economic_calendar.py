@@ -15,11 +15,12 @@ Every function has try/except. Never blocks trading.
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
 
+from db import get_client
 from logger import get_logger
 
 logger = get_logger("economic_calendar")
@@ -325,5 +326,14 @@ def write_intel_to_redis(redis_client, intel: dict) -> None:
             86400,  # expires midnight
             json.dumps(intel),
         )
+        # CSP-fix mirror: dashboard reads via direct supabase-js.
+        get_client().table("trading_ai_briefs").upsert(
+            {
+                "brief_kind": "calendar",
+                "payload": intel,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="brief_kind",
+        ).execute()
     except Exception as exc:
         logger.warning("calendar_redis_write_failed", error=str(exc))

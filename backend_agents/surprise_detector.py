@@ -18,6 +18,7 @@ from typing import Optional
 
 import httpx
 
+from db import get_client
 from logger import get_logger
 
 logger = get_logger("surprise_detector")
@@ -204,6 +205,15 @@ def _update_synthesis(redis_client, overall: dict, surprises: list) -> None:
             1800,  # 30 min
             json.dumps(existing),
         )
+        # CSP-fix mirror: dashboard reads via direct supabase-js.
+        get_client().table("trading_ai_briefs").upsert(
+            {
+                "brief_kind": "synthesis",
+                "payload": existing,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            on_conflict="brief_kind",
+        ).execute()
         logger.info(
             "synthesis_updated_with_surprise",
             direction=overall["direction"],
