@@ -52,6 +52,22 @@ def run_trading_cycle(
             logger.warning("trading_cycle_skipped", reason="no_session")
             return result
 
+        # S4 / C-α: respect kill switch and session lifecycle.
+        # Allowed: 'active' (normal trading), 'pending' (created but
+        # market not yet open). Blocked: 'halted' (operator kill switch),
+        # 'closed' (EOD reached). Position monitor and mark-to-market
+        # remain unaffected so existing positions still get managed and
+        # exited under any session state — only NEW entries are gated.
+        session_status = session.get("session_status", "active")
+        if session_status not in ("active", "pending"):
+            result["skipped_reason"] = f"session_{session_status}"
+            logger.info(
+                "trading_cycle_skipped",
+                reason=result["skipped_reason"],
+                session_status=session_status,
+            )
+            return result
+
         # D-005: include unrealized MTM P&L from open positions
         realized_pnl = session.get("virtual_pnl", 0.0) or 0.0
         unrealized_pnl = 0.0

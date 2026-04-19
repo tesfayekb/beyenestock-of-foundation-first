@@ -598,6 +598,16 @@ def run_position_monitor() -> dict:
                         # D-018 fix: book partial P&L into session so drawdown check
                         # sees the gain immediately, not only at full close
                         try:
+                            # S4 / B-1: previously this block aliased the
+                            # session-level virtual_pnl onto the local
+                            # `current_pnl` variable, clobbering the
+                            # position's MTM P&L. The 40% take-profit
+                            # and 150% stop-loss checks below then ran
+                            # against a session-level total instead of
+                            # the per-position MTM, so partial-exited
+                            # winners would re-trigger immediate full
+                            # close and partial-exited losers would
+                            # never hit their stop. Use a distinct name.
                             from session_manager import update_session
                             if session_id := pos.get("session_id"):
                                 session = (
@@ -609,10 +619,14 @@ def run_position_monitor() -> dict:
                                     .execute()
                                 )
                                 if session.data:
-                                    current_pnl = session.data.get("virtual_pnl") or 0.0
+                                    session_virtual_pnl = (
+                                        session.data.get("virtual_pnl") or 0.0
+                                    )
                                     update_session(
                                         session_id,
-                                        virtual_pnl=round(current_pnl + partial_pnl, 2),
+                                        virtual_pnl=round(
+                                            session_virtual_pnl + partial_pnl, 2
+                                        ),
                                     )
                                     logger.info(
                                         "partial_exit_session_pnl_updated",

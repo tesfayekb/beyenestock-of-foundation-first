@@ -56,8 +56,19 @@ class ExecutionEngine:
             # Credit: premium received = credit - slippage (worse fill = less received)
             actual_fill = max(0.05, base_credit - actual_slippage)
 
+        # S4 / A-1: store SIGNED entry premium so downstream consumers
+        # (mark_to_market, position_monitor, close_virtual_position) can
+        # detect debit vs credit via `entry_credit < 0`. Prior to this
+        # fix `entry_credit` was always positive — `is_debit_pos` was
+        # silently False, so all long_* and debit_*_spread positions
+        # closed under the credit P&L formula and booked the wrong sign
+        # of gross_pnl. `fill_price` is preserved (positive magnitude)
+        # for the audit log and for the legacy commission ratio at
+        # line ~384.
+        signed_fill = -round(actual_fill, 4) if is_debit else round(actual_fill, 4)
         return {
             "fill_price": round(actual_fill, 4),
+            "signed_fill": signed_fill,
             "is_debit": is_debit,
             "predicted_slippage": predicted_slippage,
             "actual_slippage": actual_slippage,
@@ -75,6 +86,20 @@ class ExecutionEngine:
             session = get_today_session()
             if not session:
                 logger.warning("open_virtual_position_no_session")
+                return None
+
+            # S4 / C-α: defense-in-depth. trading_cycle already gates on
+            # session_status before reaching here, but other callers
+            # (earnings module, future strategy modules, manual API
+            # invocations) bypass that path. Refuse to open positions
+            # under halt/closed regardless of how we got here.
+            session_status = session.get("session_status")
+            if session_status not in ("active", "pending", None):
+                logger.info(
+                    "open_virtual_position_skipped_session_status",
+                    session_status=session_status,
+                    strategy=signal.get("strategy_type"),
+                )
                 return None
 
             contracts = signal.get("contracts", 0)
@@ -97,7 +122,12 @@ class ExecutionEngine:
                 "strategy_type": strategy_type,
                 "position_type": signal.get("position_type", "core"),
                 "entry_at": datetime.now(timezone.utc).isoformat(),
-                "entry_credit": fill["fill_price"],
+                # S4 / A-1: signed_fill is negative for debit strategies
+                # (long_*, debit_*_spread, long_straddle, calendar_spread)
+                # and positive for credit strategies. Required for
+                # is_debit_pos detection in close_virtual_position and
+                # in mark_to_market._price_position.
+                "entry_credit": fill["signed_fill"],
                 "entry_slippage": fill["actual_slippage"],
                 "entry_spx_price": prediction.get("spx_price", 5000.0),
                 "entry_regime": signal.get("regime_at_signal"),
@@ -206,7 +236,9 @@ class ExecutionEngine:
                 metadata={
                     "strategy_type": strategy_type,
                     "contracts": contracts,
-                    "entry_credit": fill["fill_price"],
+                    # S4 / A-1: log the signed entry premium so audit
+                    # rows match the value persisted to entry_credit.
+                    "entry_credit": fill["signed_fill"],
                     "session_id": signal.get("session_id"),
                 },
             )

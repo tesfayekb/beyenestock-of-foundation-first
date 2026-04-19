@@ -128,13 +128,18 @@ def _price_position(
     if not short_strike:
         return None
 
-    # Determine option type from strategy
+    # Determine option type from strategy. long_straddle and
+    # calendar_spread don't have a single "option type" (straddle is
+    # both C and P; calendar is a stub), so they bypass this block —
+    # see S4 / A-2 branches below.
     if strategy_type in ("put_credit_spread", "long_put", "debit_put_spread"):
         short_type = "P"
     elif strategy_type in ("call_credit_spread", "long_call", "debit_call_spread"):
         short_type = "C"
     elif strategy_type in ("iron_condor", "iron_butterfly"):
         short_type = "P"  # handle put leg; add call leg separately below
+    elif strategy_type in ("long_straddle", "calendar_spread"):
+        short_type = None  # not used by these branches
     else:
         return None
 
@@ -179,8 +184,15 @@ def _price_position(
         )
 
     elif strategy_type in ("long_put", "long_call"):
+        # S4 / A-3: positive value of the option we hold (NOT negative).
+        # Combined with A-1 storing entry_credit as negative for debits,
+        # the is_debit branch below correctly computes:
+        #   pnl = (current_value - paid_premium) * contracts * 100
+        # Prior bug: current_spread_value was -opt_price; the is_debit
+        # formula then evaluated to -(opt_price + abs_entry)*c*100 —
+        # always negative, so debit winners were booked as losses.
         opt_price = get_leg_price(short_strike, short_type)
-        current_spread_value = -opt_price  # debit paid
+        current_spread_value = opt_price
 
     elif strategy_type in ("debit_put_spread",):
         long_price = get_leg_price(short_strike, "P")
@@ -191,6 +203,28 @@ def _price_position(
         long_price = get_leg_price(short_strike, "C")
         short_price = get_leg_price(long_strike, "C") if long_strike else 0.0
         current_spread_value = long_price - short_price
+
+    elif strategy_type == "long_straddle":
+        # S4 / A-2: ATM straddle MTM. The selector stores the ATM
+        # strike in short_strike for straddles. Live quote is preferred,
+        # BS fallback uses default sigma=0.15 — adequate for 0DTE
+        # exit-trigger purposes; precision-sensitive paths should
+        # consume Tradier mid via get_leg_price.
+        call_price = get_leg_price(short_strike, "C")
+        put_price = get_leg_price(short_strike, "P")
+        # Same convention as debit spreads: positive value of the
+        # premium we hold; the is_debit branch below subtracts abs_entry.
+        current_spread_value = call_price + put_price
+
+    elif strategy_type == "calendar_spread":
+        # S4 / A-2: intentional stub. Real far/near differential pricing
+        # requires multi-expiry chain handling deferred to S6. Holding
+        # entry value forever pins current_pnl at zero, which means only
+        # time stops will close calendar_spread — the 40% take-profit
+        # and 150% stop-loss never fire on these positions until S6.
+        # This is preferable to returning None (skipped) which would
+        # leave current_pnl undefined.
+        current_spread_value = abs(entry_credit)
 
     if current_spread_value == 0.0:
         return None
