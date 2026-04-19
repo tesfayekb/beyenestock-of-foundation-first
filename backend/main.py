@@ -309,6 +309,46 @@ def run_eod_reconciliation_job() -> None:
         logger.error("eod_reconciliation_job_error", error=str(exc))
 
 
+def run_ab_eod_job() -> None:
+    """Phase 3B: EOD A/B comparison. Runs at 4:30 PM ET after market close."""
+    try:
+        if not is_market_day():
+            return
+        from datetime import date
+        from shadow_engine import compute_eod_comparison, get_ab_gate_status
+        result = compute_eod_comparison(
+            session_date=date.today().isoformat(),
+            redis_client=redis_client,
+        )
+        if result:
+            logger.info(
+                "ab_eod_job_done",
+                a_pnl=result.get("a_synthetic_pnl"),
+                b_pnl=result.get("b_session_pnl"),
+            )
+            # Check if A/B gate just passed — send alert
+            gate = get_ab_gate_status()
+            if gate.get("gate_passed"):
+                try:
+                    from alerting import send_alert, INFO
+                    send_alert(
+                        INFO,
+                        "ab_gate_passed",
+                        (
+                            f"Portfolio B leads Portfolio A by "
+                            f"{gate.get('portfolio_b_lead_pct', 0):.1f}% "
+                            f"annualized after "
+                            f"{gate.get('days_elapsed', 0)} days and "
+                            f"{gate.get('trades_count', 0)} trades. "
+                            f"System validated for real capital deployment."
+                        ),
+                    )
+                except Exception:
+                    pass  # alerting must never break EOD job
+    except Exception as exc:
+        logger.error("ab_eod_job_failed", error=str(exc))
+
+
 def run_market_open_job() -> None:
     """Transitions session to 'active' at 9:30 AM ET (13:30 UTC)."""
     try:
@@ -839,6 +879,15 @@ async def on_startup() -> None:
             trigger="cron",
             hour=16, minute=15,
             id="trading_eod_reconciliation",
+            timezone="America/New_York",
+            replace_existing=True,
+        )
+        # Phase 3B: A/B EOD comparison at 4:30 PM ET
+        scheduler.add_job(
+            run_ab_eod_job,
+            trigger="cron",
+            hour=16, minute=30,
+            id="trading_ab_eod",
             timezone="America/New_York",
             replace_existing=True,
         )

@@ -87,6 +87,19 @@ def run_trading_cycle(
             result["skipped_reason"] = "prediction_failed"
             return result
 
+        # Phase 3B: Run shadow cycle (Portfolio A) alongside real prediction.
+        # Silent — never interrupts or delays the real trading cycle.
+        try:
+            from shadow_engine import run_shadow_cycle
+            run_shadow_cycle(
+                redis_client=getattr(
+                    _prediction_engine, "redis_client", None
+                ),
+                session_id=session["id"],
+            )
+        except Exception:
+            pass  # Shadow failure must never affect real trading
+
         # Honour no-trade signal from prediction engine
         if prediction.get("no_trade_signal"):
             no_trade_reason = prediction.get("no_trade_reason", "unknown")
