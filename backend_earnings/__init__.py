@@ -14,7 +14,10 @@ Architecture:
   If backend_earnings/ crashes, backend/ continues trading SPX unaffected.
 
 Redis keys written by this system:
-  earnings:upcoming_events   — JSON list of upcoming events with edge scores
-  earnings:active_position   — JSON of current open straddle (if any)
-  earnings:last_scan_at      — ISO timestamp of last calendar scan
+  earnings:upcoming_events  — JSON list of upcoming events with edge scores
+                              (was previously documented as earnings:upcoming
+                              — the canonical name is earnings:upcoming_events,
+                              which is what the code actually writes)
+  earnings:active_position  — JSON of current open straddle (if any)
+  earnings:last_scan_at     — ISO timestamp of last calendar scan
 """

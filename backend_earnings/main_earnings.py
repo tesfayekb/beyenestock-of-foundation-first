@@ -74,10 +74,33 @@ def run_earnings_entry(redis_client) -> dict:
     earnings event and we have no open position, open at most ONE
     new straddle.
 
+    Gated by strategy:earnings_straddle:enabled (default OFF). The flag
+    must be explicitly enabled from /trading/flags before any entry
+    fires — earnings straddles are a separate capital allocation from
+    the core SPX engine and are off by design until validated.
+
     Per spec rule: ONE position at a time. We early-return when
     get_open_earnings_positions() is non-empty, regardless of the
     candidate's edge score.
     """
+    # Safety gate (B-6): flag must be explicitly enabled. This check
+    # runs FIRST — before any Redis reads or DB calls for upcoming
+    # events — so an unset flag costs only one Redis GET.
+    try:
+        if redis_client:
+            flag_val = redis_client.get(
+                "strategy:earnings_straddle:enabled"
+            )
+            if flag_val not in ("true", b"true"):
+                logger.debug("earnings_entry_skipped_flag_off")
+                return {"skipped": "earnings_straddle_flag_off"}
+        else:
+            logger.debug("earnings_entry_skipped_no_redis")
+            return {"skipped": "earnings_straddle_flag_off"}
+    except Exception as exc:
+        logger.warning("earnings_flag_check_failed", error=str(exc))
+        return {"skipped": "earnings_flag_check_error"}
+
     try:
         if get_open_earnings_positions():
             logger.info("earnings_entry_skipped_position_open")

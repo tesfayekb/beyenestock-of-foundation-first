@@ -341,6 +341,24 @@ class PredictionEngine:
                 ai_synthesis = reader("ai:synthesis:latest", None)
         except Exception:
             ai_synthesis = None
+
+        # B-8: respect the agents:ai_synthesis:enabled flag. The comment
+        # above says the path "only activates when flag = true" but the
+        # code never actually checked. Without this gate, stale synthesis
+        # JSON in Redis can drive predictions even after the operator
+        # has disabled the agent from the trading console.
+        synthesis_flag_on = False
+        try:
+            flag_raw = self._read_redis(
+                "agents:ai_synthesis:enabled", None
+            )
+            synthesis_flag_on = flag_raw in ("true", b"true")
+        except Exception:
+            synthesis_flag_on = False
+
+        if not synthesis_flag_on:
+            ai_synthesis = None  # Flag OFF → skip synthesis path entirely
+
         if ai_synthesis:
             try:
                 import json, time

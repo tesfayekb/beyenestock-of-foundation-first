@@ -109,13 +109,16 @@ def has_sufficient_edge(
     current_implied_move_pct: float = None,
 ) -> bool:
     """
-    Returns True if there is sufficient historical edge to enter
-    a straddle.
+    Returns True if there is sufficient historical edge to enter a straddle.
 
-    Optionally compares against current_implied_move_pct from live
-    option pricing — only enters if the historical avg actual move
-    exceeds 110% of the current implied move (otherwise the market
-    has already priced in the move and there is no edge).
+    UNIT CONTRACT (critical — do not change without updating both sides):
+      EARNINGS_HISTORY.avg_actual_move_pct  — stored in PERCENT (8.6 = 8.6%)
+      current_implied_move_pct              — passed in as FRACTION (0.062 = 6.2%)
+
+    Comparison converts historical percent → fraction before comparing.
+    Pre-fix bug: the raw percent (8.6) was compared against fraction
+    (0.068), which is always False — the "market priced it in" guard
+    never fired and every ticker passed through.
     """
     edge = compute_edge_score(ticker)
     if edge < EDGE_THRESHOLD:
@@ -123,8 +126,11 @@ def has_sufficient_edge(
 
     if current_implied_move_pct is not None and current_implied_move_pct > 0:
         data = EARNINGS_HISTORY.get(ticker.upper(), {})
-        avg_actual = data.get("avg_actual_move_pct", 0.0)
-        if avg_actual < current_implied_move_pct * 1.10:
+        avg_actual_pct = data.get("avg_actual_move_pct", 0.0)
+        # Convert stored percent to fraction for comparison with live data
+        avg_actual_fraction = avg_actual_pct / 100.0
+        # Only enter if historical avg actual > 110% of current implied move
+        if avg_actual_fraction < current_implied_move_pct * 1.10:
             return False
 
     return True

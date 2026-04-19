@@ -1157,6 +1157,10 @@ _TRADING_FLAG_KEYS = [
     "signal:market_breadth:enabled",
     "signal:earnings_proximity:enabled",
     "signal:iv_rank_filter:enabled",
+    # Earnings straddle — default OFF (must be manually enabled)
+    # Controls backend_earnings/main_earnings.py run_earnings_entry().
+    # Standard polarity (NOT in _SIGNAL_FLAGS): absent key = OFF.
+    "strategy:earnings_straddle:enabled",
 ]
 
 # Signal flags follow REVERSE polarity (default ON). Set membership for

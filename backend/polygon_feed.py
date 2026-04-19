@@ -27,6 +27,17 @@ class PolygonFeed:
         self._stop_event = asyncio.Event()
 
     async def start(self) -> None:
+        # A-startup: seed vix_history from Polygon daily aggregates so
+        # the rolling z-score is meaningful from minute 1. Without this,
+        # the first 5 polling cycles (~25 min) return z_score=0.0 and
+        # Signals D/F see has_vix_z_data=False during that window.
+        # Failure here is non-fatal — we log and continue with an empty
+        # history (the original cold-start behaviour).
+        try:
+            await self._backfill_vix_history()
+        except Exception as exc:
+            logger.warning("vix_history_backfill_skipped", error=str(exc))
+
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         poll_task = asyncio.create_task(self._poll_loop())
         await asyncio.gather(heartbeat_task, poll_task)
@@ -370,6 +381,80 @@ class PolygonFeed:
                 error=type(e).__name__,
             )
         return None
+
+    async def _backfill_vix_history(self) -> None:
+        """
+        A-startup: backfill vix_history with up to 20 trading days of
+        historical VIX closes from Polygon, called once at startup.
+
+        Without this, the first 5 polling cycles return z_score=0.0
+        and Signal-D/F log has_vix_z_data=False until vix_history
+        organically reaches 5 entries (~25 min after first poll).
+
+        Uses the Polygon daily aggregates endpoint for I:VIX. Requests
+        a 35-calendar-day window so we end up with ~22-25 trading-day
+        closes after weekends/holidays drop out, then we keep the last
+        20 (matching _store_vix_baseline's window).
+
+        Fails silently — never blocks startup if Polygon is down or the
+        API key is missing.
+        """
+        try:
+            import config
+            if not getattr(config, "POLYGON_API_KEY", ""):
+                logger.debug("vix_history_backfill_no_api_key")
+                return
+
+            from datetime import date, timedelta
+            import httpx
+
+            end_date = date.today()
+            # 35 calendar days ≈ 25 trading days after weekends/holidays
+            start_date = end_date - timedelta(days=35)
+
+            url = (
+                f"https://api.polygon.io/v2/aggs/ticker/I:VIX/range/1/day"
+                f"/{start_date.isoformat()}/{end_date.isoformat()}"
+            )
+            params = {
+                "adjusted": "true",
+                "sort": "asc",
+                "limit": "30",
+                "apiKey": config.POLYGON_API_KEY,
+            }
+
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(url, params=params)
+
+            if resp.status_code != 200:
+                logger.warning(
+                    "vix_history_backfill_failed",
+                    status=resp.status_code,
+                )
+                return
+
+            results = resp.json().get("results", []) or []
+            closes = [float(r["c"]) for r in results if "c" in r]
+
+            if len(closes) < 5:
+                logger.warning(
+                    "vix_history_backfill_insufficient",
+                    days_returned=len(closes),
+                )
+                return
+
+            self.vix_history = closes[-20:]
+            logger.info(
+                "vix_history_backfilled",
+                days=len(self.vix_history),
+                latest_vix=round(self.vix_history[-1], 2),
+            )
+
+        except Exception as exc:
+            logger.warning(
+                "vix_history_backfill_error",
+                error=type(exc).__name__,
+            )
 
     async def _fetch_spx_close(self) -> Optional[float]:
         """

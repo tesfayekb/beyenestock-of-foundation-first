@@ -26,15 +26,22 @@ export function KillSwitchButton({ sessionId, sessionStatus }: KillSwitchButtonP
     if (!sessionId) return;
     setIsSubmitting(true);
     try {
-      const { error } = await supabase
-        .from('trading_sessions')
-        .update({
-          session_status: 'halted',
-          halt_reason: 'operator_kill_switch',
-        })
-        .eq('id', sessionId);
+      // C-1 fix: route through the kill-switch Edge Function. Direct
+      // UPDATE on trading_sessions is denied by RLS for authenticated
+      // users (only service_role can write); the Edge Function uses
+      // the service role server-side after verifying trading.configure.
+      const { data, error } = await supabase.functions.invoke(
+        'kill-switch',
+        {
+          body: { session_id: sessionId, action: 'halt' },
+        },
+      );
 
       if (error) throw error;
+      const payload = data as { ok?: boolean; error?: string } | null;
+      if (!payload?.ok) {
+        throw new Error(payload?.error ?? 'Kill switch failed');
+      }
 
       toast({
         title: 'Session halted',
