@@ -390,6 +390,54 @@ def _run_sentiment_agent_job() -> None:
         logger.error("sentiment_agent_job_failed", error=str(exc))
 
 
+def _run_feedback_agent_job() -> None:
+    """
+    Phase A (Loop 1): Closed-loop feedback brief.
+    Scheduled at 9:10 AM ET — must run BEFORE synthesis (9:15 AM ET) so
+    the brief is in Redis when synthesis builds Claude's prompt.
+    Calendar-aware: emits 'idle' on weekends/holidays instead of 'error'.
+    """
+    try:
+        from market_calendar import is_market_day
+        if not is_market_day():
+            write_health_status("feedback_agent", "idle")
+            logger.info("feedback_agent_skipped", reason="non_market_day")
+            return
+
+        import sys
+        import os
+        sys.path.insert(
+            0,
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        )
+        from feedback_agent import run_feedback_agent
+        result = run_feedback_agent(redis_client) or {}
+        status = result.get("status", "error")
+
+        if status == "ready":
+            write_health_status("feedback_agent", "healthy")
+        elif status == "insufficient_history":
+            write_health_status(
+                "feedback_agent",
+                "idle",
+                last_error_message=(
+                    f"Need {result.get('minimum_required', 10)} trades, "
+                    f"have {result.get('trade_count', 0)}"
+                ),
+            )
+        else:
+            write_health_status("feedback_agent", "degraded")
+
+        logger.info(
+            "feedback_agent_job_complete",
+            status=status,
+            trade_count=result.get("trade_count"),
+        )
+    except Exception as exc:
+        write_health_status("feedback_agent", "error", error=str(exc))
+        logger.error("feedback_agent_job_failed", error=str(exc))
+
+
 def pre_market_scan() -> None:
     """
     Pre-market regime and day_type classification. Runs at 9:00 AM ET (14:00 UTC).
@@ -686,6 +734,15 @@ async def on_startup() -> None:
             trigger="cron",
             hour=8, minute=30,
             id="trading_macro_agent",
+            timezone="America/New_York",
+        )
+        # Phase A (Loop 1): feedback brief — must run BEFORE synthesis (9:15)
+        # so Claude's prompt can include the latest performance feedback.
+        scheduler.add_job(
+            _run_feedback_agent_job,
+            trigger="cron",
+            hour=9, minute=10,
+            id="trading_feedback_agent",
             timezone="America/New_York",
         )
         scheduler.add_job(
