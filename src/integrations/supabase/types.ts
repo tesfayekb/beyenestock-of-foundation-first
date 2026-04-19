@@ -416,6 +416,57 @@ export type Database = {
         }
         Relationships: []
       }
+      paper_phase_criteria: {
+        Row: {
+          created_at: string
+          criterion_id: string
+          criterion_name: string
+          current_value_numeric: number | null
+          current_value_text: string | null
+          id: string
+          is_manual: boolean | null
+          last_evaluated_at: string | null
+          notes: string | null
+          observations_count: number | null
+          status: string
+          target_description: string
+          target_numeric: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criterion_id: string
+          criterion_name: string
+          current_value_numeric?: number | null
+          current_value_text?: string | null
+          id?: string
+          is_manual?: boolean | null
+          last_evaluated_at?: string | null
+          notes?: string | null
+          observations_count?: number | null
+          status?: string
+          target_description: string
+          target_numeric?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criterion_id?: string
+          criterion_name?: string
+          current_value_numeric?: number | null
+          current_value_text?: string | null
+          id?: string
+          is_manual?: boolean | null
+          last_evaluated_at?: string | null
+          notes?: string | null
+          observations_count?: number | null
+          status?: string
+          target_description?: string
+          target_numeric?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       permissions: {
         Row: {
           created_at: string
@@ -930,6 +981,7 @@ export type Database = {
           exit_slippage: number | null
           exit_spx_price: number | null
           expiry_date: string | null
+          far_expiry_date: string | null
           gross_pnl: number | null
           id: string
           instrument: string
@@ -977,6 +1029,7 @@ export type Database = {
           exit_slippage?: number | null
           exit_spx_price?: number | null
           expiry_date?: string | null
+          far_expiry_date?: string | null
           gross_pnl?: number | null
           id?: string
           instrument: string
@@ -1024,6 +1077,7 @@ export type Database = {
           exit_slippage?: number | null
           exit_spx_price?: number | null
           expiry_date?: string | null
+          far_expiry_date?: string | null
           gross_pnl?: number | null
           id?: string
           instrument?: string
@@ -1180,57 +1234,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      paper_phase_criteria: {
-        Row: {
-          id: string
-          criterion_id: string
-          criterion_name: string
-          target_description: string
-          current_value_text: string | null
-          current_value_numeric: number | null
-          status: string
-          observations_count: number | null
-          target_numeric: number | null
-          is_manual: boolean | null
-          last_evaluated_at: string | null
-          notes: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          criterion_id: string
-          criterion_name: string
-          target_description: string
-          current_value_text?: string | null
-          current_value_numeric?: number | null
-          status?: string
-          observations_count?: number | null
-          target_numeric?: number | null
-          is_manual?: boolean | null
-          last_evaluated_at?: string | null
-          notes?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          criterion_id?: string
-          criterion_name?: string
-          target_description?: string
-          current_value_text?: string | null
-          current_value_numeric?: number | null
-          status?: string
-          observations_count?: number | null
-          target_numeric?: number | null
-          is_manual?: boolean | null
-          last_evaluated_at?: string | null
-          notes?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: []
       }
       trading_sessions: {
         Row: {
@@ -1462,6 +1465,7 @@ export type Database = {
           last_data_at: string | null
           last_error_message: string | null
           last_heartbeat_at: string
+          last_valid_trade_at: string | null
           latency_ms: number | null
           service_name: string
           slippage_model_age_hours: number | null
@@ -1485,6 +1489,7 @@ export type Database = {
           last_data_at?: string | null
           last_error_message?: string | null
           last_heartbeat_at?: string
+          last_valid_trade_at?: string | null
           latency_ms?: number | null
           service_name: string
           slippage_model_age_hours?: number | null
@@ -1508,6 +1513,7 @@ export type Database = {
           last_data_at?: string | null
           last_error_message?: string | null
           last_heartbeat_at?: string
+          last_valid_trade_at?: string | null
           latency_ms?: number | null
           service_name?: string
           slippage_model_age_hours?: number | null
