@@ -260,6 +260,21 @@ def run_market_close_job() -> None:
         logger.error("market_close_job_error", error=str(exc))
 
 
+def _agent_flag_enabled(flag_key: str) -> bool:
+    """
+    Returns True iff Redis has the given feature-flag key set to 'true'.
+    Defaults to False on any error (Redis down, key missing, etc.) so
+    flag-gated agents stay OFF unless explicitly enabled.
+    """
+    if not redis_client:
+        return False
+    try:
+        raw = redis_client.get(flag_key)
+        return raw in ("true", b"true")
+    except Exception:
+        return False
+
+
 def _run_economic_calendar_job() -> None:
     try:
         import sys
@@ -274,9 +289,11 @@ def _run_economic_calendar_job() -> None:
         intel = get_todays_market_intelligence()
         if redis_client:
             write_intel_to_redis(redis_client, intel)
+        write_health_status("economic_calendar", "healthy")
         logger.info("economic_calendar_job_complete",
                     classification=intel.get("day_classification"))
     except Exception as exc:
+        write_health_status("economic_calendar", "error", error=str(exc))
         logger.error("economic_calendar_job_failed", error=str(exc))
 
 
@@ -288,11 +305,19 @@ def _run_macro_agent_job() -> None:
         from macro_agent import run_macro_agent
         if redis_client:
             run_macro_agent(redis_client)
+        write_health_status("macro_agent", "healthy")
     except Exception as exc:
+        write_health_status("macro_agent", "error", error=str(exc))
         logger.error("macro_agent_job_failed", error=str(exc))
 
 
 def _run_synthesis_agent_job() -> None:
+    # Flag-gated: report 'idle' (not 'healthy') when the feature flag is OFF
+    # so the Health page does not falsely claim the agent ran.
+    if not _agent_flag_enabled("agents:ai_synthesis:enabled"):
+        write_health_status("synthesis_agent", "idle")
+        logger.info("synthesis_agent_skipped", reason="flag_off")
+        return
     try:
         import sys
         import os
@@ -300,7 +325,9 @@ def _run_synthesis_agent_job() -> None:
         from synthesis_agent import run_synthesis_agent
         if redis_client:
             run_synthesis_agent(redis_client)
+        write_health_status("synthesis_agent", "healthy")
     except Exception as exc:
+        write_health_status("synthesis_agent", "error", error=str(exc))
         logger.error("synthesis_agent_job_failed", error=str(exc))
 
 
@@ -312,13 +339,19 @@ def _run_surprise_detector_job() -> None:
         from surprise_detector import run_surprise_detector
         if redis_client:
             run_surprise_detector(redis_client)
+        write_health_status("surprise_detector", "healthy")
     except Exception as exc:
+        write_health_status("surprise_detector", "error", error=str(exc))
         logger.error("surprise_detector_job_failed", error=str(exc))
 
 
 def _run_flow_agent_job() -> None:
     """Phase 2C: options flow agent.
     Runs at 8:45 AM ET and on a 30-min interval during market hours."""
+    if not _agent_flag_enabled("agents:flow_agent:enabled"):
+        write_health_status("flow_agent", "idle")
+        logger.info("flow_agent_skipped", reason="flag_off")
+        return
     try:
         import sys
         import os
@@ -329,12 +362,18 @@ def _run_flow_agent_job() -> None:
         from flow_agent import run_flow_agent
         if redis_client:
             run_flow_agent(redis_client)
+        write_health_status("flow_agent", "healthy")
     except Exception as exc:
+        write_health_status("flow_agent", "error", error=str(exc))
         logger.error("flow_agent_job_failed", error=str(exc))
 
 
 def _run_sentiment_agent_job() -> None:
     """Phase 2C: news sentiment agent. Runs at 8:30 AM ET."""
+    if not _agent_flag_enabled("agents:sentiment_agent:enabled"):
+        write_health_status("sentiment_agent", "idle")
+        logger.info("sentiment_agent_skipped", reason="flag_off")
+        return
     try:
         import sys
         import os
@@ -345,7 +384,9 @@ def _run_sentiment_agent_job() -> None:
         from sentiment_agent import run_sentiment_agent
         if redis_client:
             run_sentiment_agent(redis_client)
+        write_health_status("sentiment_agent", "healthy")
     except Exception as exc:
+        write_health_status("sentiment_agent", "error", error=str(exc))
         logger.error("sentiment_agent_job_failed", error=str(exc))
 
 

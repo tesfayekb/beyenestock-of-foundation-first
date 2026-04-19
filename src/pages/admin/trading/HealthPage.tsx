@@ -44,6 +44,7 @@ interface TradingAlertRow {
 }
 
 const EXPECTED_SERVICES = [
+  // Trading engine (continuous heartbeat)
   'prediction_engine',
   'gex_engine',
   'strategy_selector',
@@ -53,6 +54,13 @@ const EXPECTED_SERVICES = [
   'tradier_websocket',
   'databento_feed',
   'polygon_feed',
+  // Morning AI agents (once-per-day health writes)
+  'economic_calendar',
+  'macro_agent',
+  'synthesis_agent',
+  'surprise_detector',
+  'flow_agent',
+  'sentiment_agent',
 ] as const;
 // NOTE: learning_engine, sentinel, cboe_feed removed — these services
 // have not been built yet and never write health status. They were
