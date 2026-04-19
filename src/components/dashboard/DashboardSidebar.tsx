@@ -42,7 +42,7 @@ interface DashboardSidebarProps {
   title?: string;
 }
 
-export const DashboardSidebar = React.memo(function DashboardSidebar({ sections, title = "Beyene Quant" }: DashboardSidebarProps) {
+export const DashboardSidebar = React.memo(function DashboardSidebar({ sections, title = "BeyeneQuant" }: DashboardSidebarProps) {
   const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === 'collapsed' && !isMobile;
   const location = useLocation();

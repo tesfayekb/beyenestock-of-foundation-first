@@ -8,7 +8,7 @@ interface AppBrandProps {
 }
 
 export function AppBrand({
-  appName = "Beyene Quant",
+  appName = "BeyeneQuant",
   showName = true,
   className,
 }: AppBrandProps) {

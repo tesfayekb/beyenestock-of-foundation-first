@@ -1,7 +1,7 @@
 {
-  "name": "Beyene Quant",
-  "short_name": "Beyene Quant",
-  "description": "Beyene Quant — institutional-grade market intelligence, predictions, and trading analytics.",
+  "name": "BeyeneQuant",
+  "short_name": "BeyeneQuant",
+  "description": "BeyeneQuant — institutional-grade market intelligence, predictions, and trading analytics.",
   "start_url": "/",
   "display": "standalone",
   "theme_color": "#0F172A",
