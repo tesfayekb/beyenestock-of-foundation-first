@@ -100,16 +100,48 @@ def run_synthesis_agent(redis_client) -> dict:
         # Phase 2C: confluence across macro + flow + sentiment directions
         confluence_score = _compute_confluence(macro, flow, sentiment)
 
+        # Phase A (Loop 1): read closed-loop feedback brief.
+        # Best-effort — synthesis runs without it if missing/malformed.
+        feedback = {}
+        try:
+            feedback_raw = (
+                redis_client.get("ai:feedback:brief") if redis_client else None
+            )
+            if feedback_raw:
+                feedback = json.loads(feedback_raw)
+        except Exception as exc:
+            logger.warning("feedback_brief_read_failed", error=str(exc))
+            feedback = {}
+
+        # Stale-brief detection: warn but do NOT suppress the brief.
+        # 4-day TTL handles full removal; the warning surfaces unusually
+        # long gaps between writes (e.g. agent crashed yesterday).
+        generated_at = feedback.get("generated_at", "")
+        if generated_at and feedback.get("status") == "ready":
+            try:
+                age_hours = (
+                    datetime.now(timezone.utc)
+                    - datetime.fromisoformat(generated_at)
+                ).total_seconds() / 3600
+                if age_hours > 26:
+                    logger.warning(
+                        "feedback_brief_stale",
+                        age_hours=round(age_hours, 1),
+                    )
+            except Exception:
+                pass
+
         # Read GEX signals
         gex_context = _read_gex_context(redis_client)
 
-        # Build prompt with all 4 signal sources
+        # Build prompt with all 4 signal sources + feedback brief
         user_message = _build_prompt(
-            macro, gex_context, flow, sentiment, confluence_score
+            macro, gex_context, flow, sentiment, confluence_score, feedback
         )
 
-        # Call configured AI provider (Anthropic or OpenAI)
-        synthesis = _call_ai_provider(user_message)
+        # Call configured AI provider (Anthropic or OpenAI).
+        # Pass redis_client through so per-day token counters can be written.
+        synthesis = _call_ai_provider(user_message, redis_client)
         if not synthesis:
             return {}
 
@@ -219,12 +251,106 @@ def _compute_confluence(macro: dict, flow: dict, sentiment: dict) -> float:
         return round(max(bull_count, bear_count) / total / 2, 2)
 
 
+def _format_feedback_section(feedback: dict) -> str:
+    """
+    Render the PERFORMANCE FEEDBACK section for Claude's prompt.
+
+    Returns an empty string in either of these cases:
+      1. feedback is missing or malformed
+      2. feedback["status"] != "ready" (e.g. "insufficient_history")
+    Per Phase A spec, when below MIN_TRADES_FOR_BRIEF the section is
+    completely absent — not stubbed, not headed, not even mentioned.
+
+    When the brief is ready, every direction/confidence/regime cell is
+    individually checked for cell["sufficient"]. Cells with sufficient=False
+    render only as "INSUFFICIENT DATA (n=X)" — no win-rate, no P&L —
+    so Claude does not over-rotate on small samples.
+    """
+    if not feedback or feedback.get("status") != "ready":
+        return ""
+
+    n = feedback.get("trade_count", 0)
+    by_dir = feedback.get("by_direction", {}) or {}
+    by_conf = feedback.get("by_confidence", {}) or {}
+    by_regime = feedback.get("by_regime", {}) or {}
+    streak = feedback.get("recent_streak", {}) or {}
+
+    def fmt_cell(cell: dict, label: str) -> str:
+        if not cell or not cell.get("sufficient", False):
+            return f"  {label}: INSUFFICIENT DATA (n={cell.get('n', 0) if cell else 0})"
+        wr = cell.get("win_rate", 0)
+        ci = cell.get("win_rate_ci", [0, 1]) or [0, 1]
+        aw = cell.get("avg_winner", 0)
+        al = cell.get("avg_loser", 0)
+        np_ = cell.get("net_pnl", 0)
+        flag = "profitable" if cell.get("profitable") else "losing money"
+        return (
+            f"  {label}: {wr:.0%} win rate "
+            f"[CI: {ci[0]:.0%}-{ci[1]:.0%}] "
+            f"avg winner +${aw:.0f} / avg loser ${al:.0f} "
+            f"-> net ${np_:+.0f} {flag}"
+        )
+
+    dir_lines = "\n".join(
+        fmt_cell(by_dir.get(d, {"n": 0}), d.capitalize())
+        for d in ("bull", "bear", "neutral")
+    )
+
+    conf_labels = {
+        "high":   "High (>70%)",
+        "medium": "Medium (55-70%)",
+        "low":    "Low (<55%)",
+    }
+    conf_lines = "\n".join(
+        fmt_cell(by_conf.get(b, {"n": 0}), conf_labels[b])
+        for b in ("high", "medium", "low")
+    )
+
+    if by_regime:
+        regime_lines = "\n".join(
+            fmt_cell(cell, regime.replace("_", " ").title())
+            for regime, cell in by_regime.items()
+        )
+    else:
+        regime_lines = "  (no regime data yet)"
+
+    last_10 = streak.get("last_10", []) or []
+    streak_str = " ".join("W" if x else "L" for x in last_10) or "n/a"
+    consec = int(streak.get("consecutive_losses", 0) or 0)
+    streak_note = (
+        f"WARNING: {consec} consecutive losses"
+        if consec >= 3 else "No losing-streak concern"
+    )
+
+    return f"""
+PERFORMANCE FEEDBACK (last {n} closed trades):
+Cells marked INSUFFICIENT DATA have n<5 — do not change strategy based on these.
+Win rate alone is misleading. Always check net P&L — a 65% win rate can still lose money.
+
+DIRECTION ACCURACY:
+{dir_lines}
+
+CONFIDENCE CALIBRATION:
+{conf_lines}
+
+REGIME PERFORMANCE:
+{regime_lines}
+
+RECENT TREND: {streak_str} — {streak_note}
+
+INSTRUCTIONS: Do not over-rotate on any bucket. Confidence intervals show true uncertainty.
+If net P&L for a direction is negative despite positive win rate, weight that direction down.
+If any signal source has been below 50% accuracy across 10+ trades, reduce its weight in reasoning.
+"""
+
+
 def _build_prompt(
     macro: dict,
     gex: dict,
     flow: dict = None,
     sentiment: dict = None,
     confluence_score: float = 0.0,
+    feedback: dict = None,
 ) -> str:
     """Build the enriched user message for Claude with all 4 signal sources."""
     flow = flow or {}
@@ -260,13 +386,18 @@ def _build_prompt(
 
     conf_pct = int(confluence_score * 100)
 
+    # Phase A: PERFORMANCE FEEDBACK appears between SIGNAL CONFLUENCE and
+    # ECONOMIC SIGNALS so Claude reads its own track record before the
+    # incoming signals. Empty string when status != "ready".
+    feedback_section = _format_feedback_section(feedback or {})
+
     return f"""Today's complete market context:
 Date: {macro.get("date", "unknown")}
 Day classification: {macro.get("day_classification", "normal")}
 
 SIGNAL CONFLUENCE: {conf_pct}% of directional signals agree
 (Higher confluence = higher conviction sizing recommended)
-
+{feedback_section}
 ECONOMIC SIGNALS:
   Events today: {events_str}
   Major earnings: {earnings_str}
@@ -329,7 +460,34 @@ def _validate_and_clamp(result: dict) -> Optional[dict]:
     return result
 
 
-def _call_ai_provider(user_message: str) -> Optional[dict]:
+def _write_token_counters(
+    redis_client, tokens_in: int, tokens_out: int
+) -> None:
+    """
+    Per-day token counter for cost tracking.
+    Keys: ai:tokens:in:YYYY-MM-DD, ai:tokens:out:YYYY-MM-DD (90-day TTL).
+    Soft failure — never raises.
+    """
+    if not redis_client or (not tokens_in and not tokens_out):
+        return
+    try:
+        from datetime import date
+        day = date.today().isoformat()
+        in_key = f"ai:tokens:in:{day}"
+        out_key = f"ai:tokens:out:{day}"
+        if tokens_in:
+            redis_client.incrby(in_key, int(tokens_in))
+            redis_client.expire(in_key, 90 * 86400)
+        if tokens_out:
+            redis_client.incrby(out_key, int(tokens_out))
+            redis_client.expire(out_key, 90 * 86400)
+    except Exception as exc:
+        logger.warning("token_counter_write_failed", error=str(exc))
+
+
+def _call_ai_provider(
+    user_message: str, redis_client=None
+) -> Optional[dict]:
     """
     Dispatch to the configured AI provider and return a validated
     synthesis dict, or None on any failure.
@@ -338,18 +496,38 @@ def _call_ai_provider(user_message: str) -> Optional[dict]:
     and the model via config.AI_MODEL. Both providers receive the
     identical SYSTEM_PROMPT and are expected to return JSON matching
     the same schema. All safety bounds are applied centrally.
+
+    Phase A: when redis_client is provided, per-day token usage counters
+    are written to Redis (ai:tokens:in/out:YYYY-MM-DD, 90-day TTL).
+
+    Provider functions return either a dict {text, tokens_in, tokens_out}
+    in production, or a bare string in legacy/test paths. Both shapes
+    are handled here to preserve backward compatibility with existing
+    mocks in test_phase_2a_agents.py.
     """
     provider = (getattr(config, "AI_PROVIDER", "anthropic") or "").lower()
     model = getattr(config, "AI_MODEL", "claude-sonnet-4-5")
     try:
         if provider == "openai":
-            response_text = _call_openai(
+            raw = _call_openai(
                 config.OPENAI_API_KEY, model, user_message,
             )
         else:
-            response_text = _call_claude(
+            raw = _call_claude(
                 config.ANTHROPIC_API_KEY, model, user_message,
             )
+        if not raw:
+            return None
+
+        # Normalize: tolerate both dict (new contract) and str (legacy/test).
+        if isinstance(raw, dict):
+            response_text = raw.get("text") or ""
+            tokens_in = int(raw.get("tokens_in", 0) or 0)
+            tokens_out = int(raw.get("tokens_out", 0) or 0)
+            _write_token_counters(redis_client, tokens_in, tokens_out)
+        else:
+            response_text = str(raw)
+
         if not response_text:
             return None
 
@@ -365,8 +543,13 @@ def _call_ai_provider(user_message: str) -> Optional[dict]:
         return None
 
 
-def _call_claude(api_key: str, model: str, user_message: str) -> Optional[str]:
-    """Anthropic backend — returns the raw assistant text or None."""
+def _call_claude(
+    api_key: str, model: str, user_message: str
+) -> Optional[dict]:
+    """
+    Anthropic backend — returns {"text": ..., "tokens_in": int,
+    "tokens_out": int} or None on failure.
+    """
     try:
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
@@ -376,16 +559,23 @@ def _call_claude(api_key: str, model: str, user_message: str) -> Optional[str]:
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
         )
-        return message.content[0].text
+        usage = getattr(message, "usage", None)
+        return {
+            "text": message.content[0].text,
+            "tokens_in": getattr(usage, "input_tokens", 0) if usage else 0,
+            "tokens_out": getattr(usage, "output_tokens", 0) if usage else 0,
+        }
     except Exception as exc:
         logger.warning("claude_api_failed", error=str(exc), model=model)
         return None
 
 
-def _call_openai(api_key: str, model: str, user_message: str) -> Optional[str]:
+def _call_openai(
+    api_key: str, model: str, user_message: str
+) -> Optional[dict]:
     """
-    OpenAI backend — returns the raw assistant text or None.
-    Requires openai>=1.0.0.
+    OpenAI backend — returns {"text": ..., "tokens_in": int,
+    "tokens_out": int} or None on failure. Requires openai>=1.0.0.
     """
     try:
         from openai import OpenAI
@@ -398,7 +588,14 @@ def _call_openai(api_key: str, model: str, user_message: str) -> Optional[str]:
                 {"role": "user", "content": user_message},
             ],
         )
-        return completion.choices[0].message.content
+        usage = getattr(completion, "usage", None)
+        return {
+            "text": completion.choices[0].message.content,
+            "tokens_in": getattr(usage, "prompt_tokens", 0) if usage else 0,
+            "tokens_out": (
+                getattr(usage, "completion_tokens", 0) if usage else 0
+            ),
+        }
     except Exception as exc:
         logger.warning("openai_api_failed", error=str(exc), model=model)
         return None
