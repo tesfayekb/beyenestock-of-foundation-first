@@ -19,11 +19,76 @@
  * SECRET MIRRORING: every secret listed below must be set as a
  * Supabase Edge function secret with the SAME name used on Railway.
  * Configure with `supabase secrets set` after deploying this function.
+ *
+ * NOTE: This file is intentionally self-contained (no _shared/ imports)
+ * so it can deploy without dragging in transitive dependencies.
  */
-import { createHandler, apiSuccess } from '../_shared/handler.ts'
-import { authenticateRequest } from '../_shared/authenticate-request.ts'
-import { checkPermissionOrThrow } from '../_shared/authorization.ts'
-import { apiError } from '../_shared/api-error.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
+
+const corsHeaders: Record<string, string> = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers':
+        'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Vary': 'Origin',
+}
+
+function jsonResponse(
+    body: Record<string, unknown>,
+    status: number,
+): Response {
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+}
+
+interface AuthCtx {
+    userId: string
+    serviceClient: ReturnType<typeof createClient>
+}
+
+async function authenticate(req: Request): Promise<AuthCtx> {
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+        throw new Error('UNAUTHORIZED')
+    }
+    const token = authHeader.replace('Bearer ', '')
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const serviceRoleKey =
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+
+    if (!supabaseUrl || !serviceRoleKey) {
+        throw new Error('SERVER_MISCONFIGURED')
+    }
+
+    const serviceClient = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false },
+    })
+
+    const {
+        data: { user },
+        error,
+    } = await serviceClient.auth.getUser(token)
+
+    if (error || !user) throw new Error('UNAUTHORIZED')
+
+    return { userId: user.id, serviceClient }
+}
+
+async function checkPermission(
+    ctx: AuthCtx,
+    permissionKey: string,
+): Promise<void> {
+    const { data, error } = await ctx.serviceClient.rpc('has_permission', {
+        _user_id: ctx.userId,
+        _permission_key: permissionKey,
+    })
+    if (error || data !== true) {
+        throw new Error('FORBIDDEN')
+    }
+}
 
 interface KeyStatus {
     configured: boolean
@@ -48,15 +113,36 @@ function readSecret(name: string): string {
     return Deno.env.get(name) ?? ''
 }
 
-Deno.serve(createHandler(async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
+    if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders })
+    }
     if (req.method !== 'GET') {
-        return apiError(405, 'Method not allowed', {
-            correlationId: crypto.randomUUID(),
-        })
+        return jsonResponse({ error: 'Method not allowed' }, 405)
     }
 
-    const ctx = await authenticateRequest(req)
-    await checkPermissionOrThrow(ctx.user.id, 'trading.view')
+    let ctx: AuthCtx
+    try {
+        ctx = await authenticate(req)
+    } catch (err) {
+        const msg = String((err as Error).message)
+        if (msg === 'SERVER_MISCONFIGURED') {
+            return jsonResponse(
+                { error: 'Server misconfigured' },
+                500,
+            )
+        }
+        return jsonResponse({ error: 'Unauthorized' }, 401)
+    }
+
+    try {
+        await checkPermission(ctx, 'trading.view')
+    } catch {
+        return jsonResponse(
+            { error: 'Forbidden: requires trading.view' },
+            403,
+        )
+    }
 
     // Token counters live in Redis on Railway and are NOT mirrored
     // into Edge secrets — they would be stale and noisy. The dashboard
@@ -137,5 +223,5 @@ Deno.serve(createHandler(async (req: Request): Promise<Response> => {
         },
     }
 
-    return apiSuccess({ keys })
-}))
+    return jsonResponse({ keys }, 200)
+})
