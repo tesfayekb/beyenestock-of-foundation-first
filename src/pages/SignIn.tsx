@@ -137,9 +137,9 @@ export default function SignIn() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2">
-            <AppBrand size="lg" showName={false} />
+            <AppBrand />
           </div>
-          <CardTitle className="text-2xl">Beyene'sMarketMuse</CardTitle>
+          <CardTitle className="text-2xl">Welcome back</CardTitle>
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

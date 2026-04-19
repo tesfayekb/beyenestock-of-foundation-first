@@ -144,10 +144,10 @@ export default function SignUp() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-2">
-            <AppBrand size="lg" showName={false} />
+            <AppBrand />
           </div>
-          <CardTitle className="text-2xl">Beyene'sMarketMuse</CardTitle>
-          <CardDescription>Create your account to get started</CardDescription>
+          <CardTitle className="text-2xl">Create an account</CardTitle>
+          <CardDescription>Get started with your account</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
