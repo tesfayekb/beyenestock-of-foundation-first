@@ -21,7 +21,9 @@ export function StatCard({ title, value, icon: Icon, trend, className }: StatCar
             <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-muted-foreground truncate">
               {title}
             </p>
-            <p className="font-display text-xl sm:text-2xl font-bold truncate">{value}</p>
+            <p className="font-display text-base sm:text-lg font-bold leading-tight break-all">
+              {value}
+            </p>
           </div>
           <div className="shrink-0 rounded-lg bg-muted p-2 sm:p-3">
             <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />

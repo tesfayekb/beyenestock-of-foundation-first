@@ -223,6 +223,7 @@ export default function TradingPerformancePage() {
         .select(
           'session_date, virtual_pnl, virtual_wins, virtual_losses, virtual_trades_count, regime, session_status'
         )
+        .gt('virtual_trades_count', 0)
         .order('session_date', { ascending: false })
         .limit(30);
       if (err) throw err;

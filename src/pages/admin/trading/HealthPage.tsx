@@ -48,13 +48,15 @@ const EXPECTED_SERVICES = [
   'strategy_selector',
   'risk_engine',
   'execution_engine',
-  'learning_engine',
   'data_ingestor',
-  'sentinel',
   'tradier_websocket',
   'databento_feed',
-  'cboe_feed',
+  'polygon_feed',
 ] as const;
+// NOTE: learning_engine, sentinel, cboe_feed removed — these services
+// have not been built yet and never write health status. They were
+// permanently showing as "offline" giving a false picture.
+// Add them back when actually implemented.
 
 const STATUS_CONFIG: Record<ServiceStatus, { Icon: typeof CheckCircle; badgeClass: string; iconClass: string }> = {
   healthy: {
@@ -256,8 +258,16 @@ export default function TradingHealthPage() {
             <StatCard title="Expected Services" value={EXPECTED_SERVICES.length} icon={Activity} />
             <StatCard title="Healthy" value={healthyCount} icon={CheckCircle} />
             <StatCard title="Offline" value={offlineCount} icon={CircleSlash} />
-            <StatCard title="Market Hours (ET)" value={marketHours ? 'Open' : 'Closed'} icon={HeartPulse} />
+            <StatCard title="Market Status" value={marketHours ? 'Open' : 'Closed'} icon={HeartPulse} />
           </div>
+
+          {!marketHours && (
+            <p className="text-xs text-muted-foreground">
+              Outside market hours (Mon–Fri 9:30–16:00 ET). Data feeds
+              show <span className="font-medium">degraded</span> when
+              markets are closed — this is expected behavior, not an error.
+            </p>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {EXPECTED_SERVICES.map((name) => (
