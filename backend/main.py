@@ -122,8 +122,19 @@ def run_prediction_cycle() -> None:
         )
         return
 
+    # 12N: sizing phase is auto-advanced by the Sunday calibration
+    # job (calibration_engine.evaluate_sizing_phase) which writes
+    # the current phase to Redis under capital:sizing_phase. The
+    # read lives in calibration_engine so it shares the same
+    # SIZING_PHASE_REDIS_KEY constant and is trivially testable
+    # without importing this module's heavy scheduler/FastAPI
+    # deps. Fail-open to phase 1 is ROI-safe — a Redis outage
+    # picks the advance back up on the next cycle.
+    from calibration_engine import read_sizing_phase
+    sizing_phase = read_sizing_phase(redis_client)
+
     result = run_trading_cycle(
-        account_value=deployed_capital, sizing_phase=1
+        account_value=deployed_capital, sizing_phase=sizing_phase
     )
     if result.get("skipped_reason"):
         logger.info("cycle_skipped", reason=result["skipped_reason"])
@@ -421,6 +432,20 @@ def run_weekly_calibration_job() -> None:
         logger.info("weekly_champion_challenger_complete", **cc_result)
     except Exception as exc:
         logger.error("weekly_champion_challenger_failed", error=str(exc))
+
+    # 12N: Sizing phase auto-advance (Phase E1/E2). Runs at the end
+    # of the weekly calibration so every upstream block has had a
+    # chance to update the data the phase gate reads from
+    # (trading_sessions.virtual_pnl). Isolated try/except — a
+    # failure here never aborts the job, and evaluate_sizing_phase
+    # itself fails open so the Redis key is never demoted on a
+    # Supabase or Redis error (a previous advance is preserved).
+    try:
+        from calibration_engine import evaluate_sizing_phase
+        phase_result = evaluate_sizing_phase(redis_client)
+        logger.info("weekly_sizing_phase_complete", **phase_result)
+    except Exception as exc:
+        logger.error("weekly_sizing_phase_failed", error=str(exc))
 
 
 def run_weekly_model_performance_job() -> None:

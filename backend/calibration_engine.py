@@ -612,3 +612,244 @@ def calibrate_butterfly_thresholds(redis_client) -> dict:
     except Exception as exc:
         logger.error("butterfly_calibration_failed", error=str(exc))
         return {"calibrated": False, "error": str(exc)}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 12N — Sizing phase auto-advance (Phase E1/E2)
+# ─────────────────────────────────────────────────────────────────────
+#
+# Weekly job that writes `capital:sizing_phase` to Redis. The trading
+# cycle reads this key in main._read_sizing_phase_from_redis() and
+# passes it to run_trading_cycle → strategy_selector →
+# risk_engine.compute_position_size, where _RISK_PCT maps phase →
+# risk percentage.
+#
+# ROI invariant: this function NEVER retreats the phase. It only
+# advances when conservative Sharpe gates pass, and on any error it
+# returns a fail-open dict with phase=1 (pure observability in the
+# return payload — the actual Redis key is left untouched so a
+# previous advance is preserved across transient errors).
+#
+# Note to future reader: `_RISK_PCT` in risk_engine.py currently
+# assigns the SAME risk percentages to phases 1 and 2, and the same
+# to phases 3 and 4. So in today's codebase the E1 advance (1→2) is
+# effectively a no-op on position size, while only E2 (2→3) actually
+# doubles it. This scaffold writes the key correctly either way; if
+# the operator wants E1 to deliver its designed 2× P&L, the fix
+# lives in risk_engine's _RISK_PCT table, not here.
+
+SIZING_PHASE_REDIS_KEY = "capital:sizing_phase"
+SIZING_PHASE_TTL_SECONDS = 86400 * 365  # 1 year
+
+
+def read_sizing_phase(client) -> int:
+    """
+    12N: read the auto-advanced sizing phase from Redis for
+    consumption by run_trading_cycle → risk_engine.
+
+    Contract: always return an int in [1, 3].
+      * present, parseable string → int(value)
+      * key absent               → 1
+      * client is None           → 1
+      * Redis raises             → 1 (warn-logged, fail-open)
+
+    Centralised here (rather than in main.py) so the helper
+    shares SIZING_PHASE_REDIS_KEY with evaluate_sizing_phase —
+    one source of truth for the key name — and so tests can
+    exercise it without importing main and its scheduler /
+    FastAPI dependencies.
+    """
+    try:
+        if client is None:
+            return 1
+        raw = client.get(SIZING_PHASE_REDIS_KEY)
+        return int(raw) if raw else 1
+    except Exception as exc:
+        logger.warning(
+            "sizing_phase_read_failed_fail_open",
+            error=str(exc),
+        )
+        return 1
+
+
+E1_MIN_LIVE_DAYS = 45
+E1_SHARPE_GATE = 1.2
+E1_SHARPE_WINDOW_DAYS = 45
+E2_MIN_LIVE_DAYS = 90
+E2_SHARPE_GATE = 1.5
+E2_SHARPE_WINDOW_DAYS = 60
+MAX_PHASE = 3
+
+
+def _annualised_sharpe(pnls: list) -> Optional[float]:
+    """
+    Annualised Sharpe from a list of per-session P&Ls, assuming
+    ~252 trading sessions per year. Returns None when the cohort
+    is too small to compute a stable ratio (< 10 samples), 0.0
+    when the mean is non-positive (a losing cohort can never
+    justify advancing the sizing phase, regardless of volatility).
+    Using population variance (divide by N) rather than sample
+    variance (N-1) — the difference is negligible at N >= 45 and
+    the gate thresholds are already approximate.
+    """
+    import math
+
+    if len(pnls) < 10:
+        return None
+    mean_pnl = sum(pnls) / len(pnls)
+    if mean_pnl <= 0:
+        return 0.0
+    variance = sum((x - mean_pnl) ** 2 for x in pnls) / len(pnls)
+    stddev = math.sqrt(variance) if variance > 0 else 1e-9
+    return round((mean_pnl / stddev) * math.sqrt(252), 3)
+
+
+def evaluate_sizing_phase(redis_client) -> dict:
+    """
+    12N (Phase E1/E2): auto-advance the sizing phase when
+    conservative performance gates pass.
+
+    Gates:
+      * E1: current_phase == 1 AND live_days >= 45 AND rolling
+        45-day annualised Sharpe >= 1.2 → write "2" to Redis.
+      * E2: current_phase == 2 AND live_days >= 90 AND rolling
+        60-day annualised Sharpe >= 1.5 → write "3" to Redis.
+      * At current_phase >= 3 the function is a no-op — the
+        scaffold defines no higher phase.
+
+    ROI invariant: phase only advances. On any error the return
+    dict reports phase=1 for observability, but the Redis key is
+    never demoted — a previous successful advance survives across
+    Supabase outages, Redis hiccups, etc. Never raises.
+
+    Live-days counter == number of `trading_sessions` rows with
+    a non-null `virtual_pnl`. A session that never closed a
+    position (no P&L written) does not count toward the gate.
+    """
+    try:
+        current_raw = redis_client.get(SIZING_PHASE_REDIS_KEY)
+        current_phase = int(current_raw) if current_raw else 1
+
+        if current_phase >= MAX_PHASE:
+            return {
+                "phase": current_phase,
+                "advanced": False,
+                "reason": "already_at_max_phase",
+            }
+
+        # Fetch chronologically-ordered sessions with realised P&L.
+        # `.order("session_date")` is load-bearing: the gate reads
+        # `sessions[-window_days:]` for the most-recent cohort —
+        # without ordering, PostgREST's arbitrary row order would
+        # produce a random sample rather than a rolling window.
+        sessions_result = (
+            get_client()
+            .table("trading_sessions")
+            .select("session_date, virtual_pnl")
+            .not_.is_("virtual_pnl", "null")
+            .order("session_date")
+            .execute()
+        )
+        sessions = sessions_result.data or []
+        live_days = len(sessions)
+
+        if live_days == 0:
+            return {
+                "phase": current_phase,
+                "advanced": False,
+                "reason": "no_sessions",
+                "live_days": 0,
+            }
+
+        def _recent_pnls(window_days: int) -> list:
+            recent = (
+                sessions[-window_days:]
+                if len(sessions) >= window_days
+                else sessions
+            )
+            return [
+                float(s["virtual_pnl"])
+                for s in recent
+                if s.get("virtual_pnl") is not None
+            ]
+
+        if (
+            current_phase == 1
+            and live_days >= E1_MIN_LIVE_DAYS
+        ):
+            sharpe = _annualised_sharpe(
+                _recent_pnls(E1_SHARPE_WINDOW_DAYS)
+            )
+            if sharpe is not None and sharpe >= E1_SHARPE_GATE:
+                redis_client.setex(
+                    SIZING_PHASE_REDIS_KEY,
+                    SIZING_PHASE_TTL_SECONDS,
+                    "2",
+                )
+                logger.info(
+                    "sizing_phase_advanced",
+                    phase=2,
+                    sharpe_45d=sharpe,
+                    live_days=live_days,
+                    gate="E1",
+                )
+                return {
+                    "phase": 2,
+                    "advanced": True,
+                    "live_days": live_days,
+                    "sharpe": sharpe,
+                    "reason": "E1_gate_passed",
+                }
+            return {
+                "phase": current_phase,
+                "advanced": False,
+                "live_days": live_days,
+                "sharpe": sharpe,
+                "reason": "E1_sharpe_below_gate",
+            }
+
+        if (
+            current_phase == 2
+            and live_days >= E2_MIN_LIVE_DAYS
+        ):
+            sharpe = _annualised_sharpe(
+                _recent_pnls(E2_SHARPE_WINDOW_DAYS)
+            )
+            if sharpe is not None and sharpe >= E2_SHARPE_GATE:
+                redis_client.setex(
+                    SIZING_PHASE_REDIS_KEY,
+                    SIZING_PHASE_TTL_SECONDS,
+                    "3",
+                )
+                logger.info(
+                    "sizing_phase_advanced",
+                    phase=3,
+                    sharpe_60d=sharpe,
+                    live_days=live_days,
+                    gate="E2",
+                )
+                return {
+                    "phase": 3,
+                    "advanced": True,
+                    "live_days": live_days,
+                    "sharpe": sharpe,
+                    "reason": "E2_gate_passed",
+                }
+            return {
+                "phase": current_phase,
+                "advanced": False,
+                "live_days": live_days,
+                "sharpe": sharpe,
+                "reason": "E2_sharpe_below_gate",
+            }
+
+        return {
+            "phase": current_phase,
+            "advanced": False,
+            "live_days": live_days,
+            "reason": "live_days_below_gate",
+        }
+
+    except Exception as exc:
+        logger.error("sizing_phase_evaluation_failed", error=str(exc))
+        return {"phase": 1, "advanced": False, "error": str(exc)}
