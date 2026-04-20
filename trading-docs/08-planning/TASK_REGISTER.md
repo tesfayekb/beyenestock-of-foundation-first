@@ -687,14 +687,16 @@ Returns 1.05-1.29% instead of true ~15-20% annualized. Every downstream consumer
 **Priority: IMMEDIATE — needed before tuning any thresholds**
 **Auto-activates:** immediately, counters always increment
 
-- [ ] In `backend/strategy_selector.py`, add Redis counter for each butterfly gate:
-      `redis.incr(f"butterfly:blocked:reason={reason}:date={today}")` with 7-day TTL
+- [x] In `backend/strategy_selector.py`, add Redis counter for each butterfly gate:
+      `redis.incr(f"butterfly:blocked:{reason}:{today}")` with 7-day TTL
       Reasons: `regime_mismatch`, `time_gate`, `failed_today`, `low_concentration`,
-      `drawdown_block`, `wall_unstable`, `allowed`
-- [ ] In EOD job, log `butterfly_gate_stats` with all counters as structured log
+      `drawdown_block` (placeholder, 0 until execution_engine writer ships),
+      `wall_unstable` (placeholder, 0 until 12C ships), `allowed`
+- [x] In EOD job, log `butterfly_gate_daily_stats` with all counters as structured log
 - [ ] After 2 weeks: query counters to tune thresholds (feeds 12G)
 
 **Cursor sessions: 0.5 | Commit tag: feat(instrumentation): butterfly gate counters**
+**Status: Built 2026-04-16 | Commit: `7983d6c` — counters live, 2-week analysis window opens**
 
 ---
 
