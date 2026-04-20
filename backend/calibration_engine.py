@@ -394,3 +394,221 @@ def calibrate_halt_threshold(redis_client) -> dict:
     except Exception as exc:
         logger.error("halt_threshold_calibration_failed", error=str(exc))
         return {"calibrated": False, "error": str(exc)}
+
+
+# 12G: butterfly threshold auto-tuning
+#
+# Calibrates three butterfly safety-gate thresholds against real closed
+# trade outcomes: gex_conf_min, wall_distance_max, concentration_min.
+# The strategy_selector reads these from Redis (8-day TTL so they
+# survive a weekend) and falls back to hardcoded defaults when absent.
+#
+# Auto-gates on closed butterfly trades >= 20 AND decision_context
+# rows with gate metrics >= 10 (strategy_selector writes these at
+# selection time as of 12G). Below either gate the Redis keys are NOT
+# written and defaults stay in force.
+_MIN_BUTTERFLY_TRADES_FOR_CALIBRATION = 20
+_MIN_PARSED_CONTEXT_ROWS = 10
+
+# Candidate grids. Kept conservative — narrow enough to avoid
+# pathological all-block / all-allow settings, wide enough to let
+# calibration actually shift the defaults when the data demands it.
+_BUTTERFLY_GEX_CONF_CANDIDATES = [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60]
+_BUTTERFLY_WALL_DIST_CANDIDATES = [0.001, 0.002, 0.003, 0.004, 0.005]
+_BUTTERFLY_CONC_CANDIDATES = [0.15, 0.20, 0.25, 0.30, 0.35]
+
+
+def _find_best_threshold(
+    trades,
+    field: str,
+    candidates,
+    direction: str = "above",
+):
+    """
+    Pick the threshold value from `candidates` that maximises the
+    dollar P&L improvement vs. not blocking anything:
+
+        score = -sum(net_pnl for trades that WOULD have been blocked)
+
+    Equivalently: for each blocked trade, +abs(pnl) if it lost and
+    -abs(pnl) if it won. Not blocking anything gives score == 0, which
+    is always beatable by at least one candidate when there are net-
+    negative trades in the blockable zone. Returns None if no trade in
+    the sample carries the field.
+
+    direction == "above" → gate ALLOWS when `field >= threshold`,
+                           hence BLOCKS when `field < threshold`.
+    direction == "below" → gate ALLOWS when `field <= threshold`,
+                           hence BLOCKS when `field > threshold`.
+    """
+    valid = [t for t in trades if t.get(field) is not None]
+    if not valid:
+        return None
+
+    best_score = float("-inf")
+    best_threshold = None
+
+    for candidate in candidates:
+        score = 0.0
+        for t in valid:
+            val = t[field]
+            if direction == "above":
+                would_block = val < candidate
+            else:
+                would_block = val > candidate
+
+            if would_block:
+                # +abs(pnl) for blocking a loss, -abs(pnl) for blocking
+                # a win. Equivalent to -net_pnl but preserves the spec's
+                # original formulation for auditability.
+                score += abs(t["net_pnl"]) * (-1 if t["won"] else 1)
+
+        if score > best_score:
+            best_score = score
+            best_threshold = candidate
+
+    return best_threshold
+
+
+def calibrate_butterfly_thresholds(redis_client) -> dict:
+    """
+    Weekly job. Compute the best gex_conf / wall_distance /
+    concentration thresholds from the last 90 days of closed butterfly
+    trades and write them to Redis. Auto-gated — never writes without
+    enough data. Never raises.
+    """
+    try:
+        count_result = (
+            get_client()
+            .table("trading_positions")
+            .select("id", count="exact")
+            .eq("status", "closed")
+            .eq("strategy_type", "iron_butterfly")
+            .eq("position_mode", "virtual")
+            .execute()
+        )
+        butterfly_trades = count_result.count or 0
+
+        if butterfly_trades < _MIN_BUTTERFLY_TRADES_FOR_CALIBRATION:
+            logger.info(
+                "butterfly_calibration_skipped",
+                butterfly_trades=butterfly_trades,
+                required=_MIN_BUTTERFLY_TRADES_FOR_CALIBRATION,
+            )
+            return {
+                "calibrated": False,
+                "butterfly_trades": butterfly_trades,
+            }
+
+        cutoff = (date.today() - timedelta(days=90)).isoformat()
+        result = (
+            get_client()
+            .table("trading_positions")
+            .select("net_pnl, decision_context")
+            .eq("status", "closed")
+            .eq("strategy_type", "iron_butterfly")
+            .eq("position_mode", "virtual")
+            .gte("entry_at", cutoff)
+            .execute()
+        )
+        trades = result.data or []
+
+        import json as _json
+
+        parsed = []
+        for t in trades:
+            try:
+                ctx = t.get("decision_context") or {}
+                if isinstance(ctx, str):
+                    ctx = _json.loads(ctx)
+                if not isinstance(ctx, dict):
+                    continue
+                gex_conf = ctx.get("gex_conf") or ctx.get("gex_confidence")
+                dist_pct = ctx.get("dist_pct") or ctx.get("dist_to_wall")
+                concentration = ctx.get("wall_concentration")
+                if gex_conf is None:
+                    # Without gex_conf we can't tune anything meaningfully —
+                    # skip the row to keep the parsed sample clean.
+                    continue
+                net_pnl = float(t.get("net_pnl") or 0)
+                parsed.append({
+                    "gex_conf": float(gex_conf),
+                    "dist_pct": (
+                        float(dist_pct) if dist_pct is not None else None
+                    ),
+                    "concentration": (
+                        float(concentration)
+                        if concentration is not None else None
+                    ),
+                    "won": net_pnl > 0,
+                    "net_pnl": net_pnl,
+                })
+            except Exception:
+                continue
+
+        if len(parsed) < _MIN_PARSED_CONTEXT_ROWS:
+            logger.info(
+                "butterfly_calibration_skipped_insufficient_context",
+                parsed=len(parsed),
+                total=len(trades),
+                required=_MIN_PARSED_CONTEXT_ROWS,
+            )
+            return {
+                "calibrated": False,
+                "reason": "insufficient_decision_context",
+                "parsed": len(parsed),
+            }
+
+        best_gex_conf = _find_best_threshold(
+            parsed, "gex_conf",
+            _BUTTERFLY_GEX_CONF_CANDIDATES, direction="above",
+        )
+        best_dist = _find_best_threshold(
+            parsed, "dist_pct",
+            _BUTTERFLY_WALL_DIST_CANDIDATES, direction="below",
+        )
+        best_conc = _find_best_threshold(
+            parsed, "concentration",
+            _BUTTERFLY_CONC_CANDIDATES, direction="above",
+        )
+
+        results: dict = {}
+        if redis_client:
+            if best_gex_conf is not None:
+                redis_client.setex(
+                    "butterfly:threshold:gex_conf",
+                    86400 * 8,
+                    str(best_gex_conf),
+                )
+                results["gex_conf"] = best_gex_conf
+            if best_dist is not None:
+                redis_client.setex(
+                    "butterfly:threshold:wall_distance",
+                    86400 * 8,
+                    str(best_dist),
+                )
+                results["wall_distance"] = best_dist
+            if best_conc is not None:
+                redis_client.setex(
+                    "butterfly:threshold:concentration",
+                    86400 * 8,
+                    str(best_conc),
+                )
+                results["concentration"] = best_conc
+
+        logger.info(
+            "butterfly_thresholds_calibrated",
+            butterfly_trades=butterfly_trades,
+            parsed_trades=len(parsed),
+            **results,
+        )
+        return {
+            "calibrated": True,
+            "butterfly_trades": butterfly_trades,
+            "parsed_trades": len(parsed),
+            **results,
+        }
+
+    except Exception as exc:
+        logger.error("butterfly_calibration_failed", error=str(exc))
+        return {"calibrated": False, "error": str(exc)}

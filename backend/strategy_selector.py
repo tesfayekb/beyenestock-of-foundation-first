@@ -535,6 +535,114 @@ class StrategySelector:
             pass
         return 5200.0
 
+    # 12G: butterfly threshold auto-tuning. Two helpers — one to
+    # capture the gate metrics at selection time (so the weekly
+    # tuner has per-trade outcome data), one to read the calibrated
+    # threshold values with safe fallbacks.
+    def _capture_butterfly_metrics(self) -> None:
+        """
+        Snapshot gex_conf, dist_pct, and wall_concentration once per
+        stage-1 invocation. Persisted into signal["decision_context"]
+        when a butterfly trade fires. Never raises — on any error
+        the stash is left empty and decision_context simply omits the
+        key, which the calibrator's parser already tolerates.
+        """
+        metrics: dict = {}
+        try:
+            if not self.redis_client:
+                self._last_butterfly_metrics = metrics
+                return
+
+            conf_raw = self.redis_client.get("gex:confidence")
+            if conf_raw is not None:
+                try:
+                    metrics["gex_conf"] = float(conf_raw)
+                except (TypeError, ValueError):
+                    pass
+
+            nw_raw = self.redis_client.get("gex:nearest_wall")
+            if nw_raw is not None:
+                try:
+                    nw = float(nw_raw)
+                    spx = self._get_spx_price()
+                    if nw > 0 and spx > 0:
+                        metrics["dist_pct"] = abs(spx - nw) / spx
+                except (TypeError, ValueError):
+                    pass
+
+            by_strike_raw = self.redis_client.get("gex:by_strike")
+            if by_strike_raw:
+                try:
+                    import json as _json_m
+                    by_strike = _json_m.loads(by_strike_raw)
+                    positives = [
+                        float(v) for v in by_strike.values()
+                        if float(v) > 0
+                    ]
+                    if positives:
+                        total_pos = sum(positives)
+                        top = max(positives)
+                        if total_pos > 0:
+                            metrics["wall_concentration"] = top / total_pos
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        self._last_butterfly_metrics = metrics
+
+    def _read_butterfly_thresholds(
+        self,
+    ) -> Tuple[float, float, float, str]:
+        """
+        Return (gex_conf_min, wall_dist_max, conc_min, source). The
+        weekly calibration writes `butterfly:threshold:*` keys once
+        closed_butterfly_trades >= 20. Missing key / parse error /
+        out-of-band value all fall back to the hardcoded default for
+        that single threshold — a partial calibration never regresses
+        any other threshold. Bounds are wide enough to let calibration
+        tune meaningfully but narrow enough to reject garbage data.
+        """
+        gex_conf_min = 0.4
+        wall_dist_max = 0.003
+        conc_min = 0.25
+        source = "default"
+
+        if not self.redis_client:
+            return gex_conf_min, wall_dist_max, conc_min, source
+
+        def _parse_clamped(
+            key: str, lo: float, hi: float,
+        ) -> Optional[float]:
+            try:
+                raw = self.redis_client.get(key)
+                if raw is None:
+                    return None
+                val = float(raw)
+                if lo <= val <= hi:
+                    return val
+            except Exception:
+                return None
+            return None
+
+        v = _parse_clamped("butterfly:threshold:gex_conf", 0.1, 0.9)
+        if v is not None:
+            gex_conf_min = v
+            source = "calibrated"
+
+        v = _parse_clamped(
+            "butterfly:threshold:wall_distance", 0.0005, 0.01
+        )
+        if v is not None:
+            wall_dist_max = v
+            source = "calibrated"
+
+        v = _parse_clamped("butterfly:threshold:concentration", 0.05, 0.6)
+        if v is not None:
+            conc_min = v
+            source = "calibrated"
+
+        return gex_conf_min, wall_dist_max, conc_min, source
+
     def _stage1_regime_gate(
         self,
         regime: str,
@@ -571,6 +679,34 @@ class StrategySelector:
             # empirical data needed by 12G threshold tuning (~2 weeks of
             # daily increments). Pure observability, no gate logic change.
             butterfly_block_reason: Optional[str] = None
+
+            # 12G: capture butterfly selection-time metrics (gex_conf,
+            # dist_pct, wall_concentration) once per cycle and stash on
+            # self. Persisted into decision_context by select() when a
+            # butterfly trade actually fires so calibrate_butterfly_
+            # thresholds has real per-trade outcome data to learn from.
+            # Separate from the gate-local reads below — we want one
+            # consistent snapshot even if a gate short-circuits early.
+            self._capture_butterfly_metrics()
+
+            # 12G: read calibrated butterfly thresholds with hardcoded
+            # fallbacks. Defensive clamps guard against a bad value
+            # leaking into Redis (manual edit, partial write). Never
+            # loosens the default by more than 2x, never tightens past
+            # what the historical data would support.
+            (
+                _BFLY_GEX_CONF_MIN,
+                _BFLY_WALL_DIST_MAX,
+                _BFLY_CONC_MIN,
+                _bfly_threshold_source,
+            ) = self._read_butterfly_thresholds()
+            logger.debug(
+                "butterfly_thresholds_applied",
+                gex_conf_min=_BFLY_GEX_CONF_MIN,
+                wall_dist_max=_BFLY_WALL_DIST_MAX,
+                conc_min=_BFLY_CONC_MIN,
+                source=_bfly_threshold_source,
+            )
 
             # CHANGE 5: time-of-day gate — butterfly only safe 12:00-15:40 ET.
             # Morning (pre-12:00) is too volatile for short-gamma — the
@@ -635,7 +771,7 @@ class StrategySelector:
                                 top_gex / total_positive_gex
                                 if total_positive_gex > 0 else 0.0
                             )
-                            if wall_concentration < 0.25:
+                            if wall_concentration < _BFLY_CONC_MIN:
                                 butterfly_forbidden = True
                                 butterfly_block_reason = "low_concentration"  # 12B
                                 forbidden_reason = (
@@ -758,12 +894,12 @@ class StrategySelector:
                         if (
                             nearest_wall > 0
                             and spx_price > 0
-                            and gex_conf >= 0.4
+                            and gex_conf >= _BFLY_GEX_CONF_MIN
                         ):
                             dist_to_wall = (
                                 abs(spx_price - nearest_wall) / spx_price
                             )
-                            if dist_to_wall < 0.003:  # within 0.3%
+                            if dist_to_wall < _BFLY_WALL_DIST_MAX:
                                 logger.info(
                                     "gamma_pin_detected",
                                     nearest_wall=nearest_wall,
@@ -1314,6 +1450,24 @@ class StrategySelector:
                 },
                 "selected_at": datetime.now(timezone.utc).isoformat(),
             }
+
+            # 12G: persist butterfly gate metrics at selection time so
+            # calibrate_butterfly_thresholds can learn from real outcomes.
+            # Only written when the fired trade is iron_butterfly — other
+            # strategies don't need these fields and including them would
+            # bloat the JSONB column across all trades. The calibrator's
+            # parser already tolerates rows where the fields are absent,
+            # so pre-existing butterfly trades (no metrics recorded) are
+            # skipped cleanly.
+            if strategy_type == "iron_butterfly":
+                _bfly_metrics = getattr(
+                    self, "_last_butterfly_metrics", {}
+                ) or {}
+                for _k in ("gex_conf", "dist_pct", "wall_concentration"):
+                    if _k in _bfly_metrics:
+                        _decision_context[_k] = round(
+                            float(_bfly_metrics[_k]), 6
+                        )
 
             signal = {
                 "session_id": session_id,

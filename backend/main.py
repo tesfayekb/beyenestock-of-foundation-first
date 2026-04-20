@@ -315,6 +315,20 @@ def run_weekly_calibration_job() -> None:
     except Exception as exc:
         logger.error("weekly_halt_calibration_failed", error=str(exc))
 
+    # 12G: butterfly threshold auto-tuning. Self-gates on
+    # closed_butterfly_trades >= 20 AND parsed_decision_context >= 10.
+    # Below either threshold, nothing is written and strategy_selector
+    # keeps using the hardcoded defaults.
+    try:
+        from calibration_engine import calibrate_butterfly_thresholds
+        butterfly_result = calibrate_butterfly_thresholds(redis_client)
+        logger.info(
+            "weekly_butterfly_calibration_complete",
+            **butterfly_result,
+        )
+    except Exception as exc:
+        logger.error("weekly_butterfly_calibration_failed", error=str(exc))
+
 
 def run_weekly_model_performance_job() -> None:
     """Runs every Sunday at 6:30 PM ET (23:30 UTC) — after calibration."""

@@ -254,13 +254,24 @@ def test_regime_selection_uses_04_threshold():
 
 
 def test_strategy_selector_pin_still_uses_04_threshold():
-    """strategy_selector pin override must still use gex_conf >= 0.4
-    (this is the gate prediction_engine is now aligned to)."""
+    """strategy_selector pin override must still default to gex_conf >= 0.4
+    (this is the gate prediction_engine is now aligned to).
+
+    12G: the literal threshold is now held in the _read_butterfly_thresholds
+    helper and injected as _BFLY_GEX_CONF_MIN so the weekly calibration can
+    override it. Guard on BOTH — the default value stays at 0.4, and the
+    pin override consumes the variable. Either drift breaks the test.
+    """
     path = os.path.join(_BACKEND_DIR, "strategy_selector.py")
     with open(path, encoding="utf-8") as f:
         src = f.read()
-    assert "gex_conf >= 0.4" in src, (
-        "strategy_selector pin override must use gex_conf >= 0.4"
+    assert "gex_conf_min = 0.4" in src, (
+        "default for butterfly gex_conf threshold must remain 0.4 "
+        "(used as fallback when weekly calibration is absent)"
+    )
+    assert "gex_conf >= _BFLY_GEX_CONF_MIN" in src, (
+        "pin override must consume the calibrated-or-default threshold "
+        "via _BFLY_GEX_CONF_MIN"
     )
 
 
