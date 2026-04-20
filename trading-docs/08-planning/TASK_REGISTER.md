@@ -423,6 +423,32 @@ false-positive "degraded" entries on the Health page for the 11
 cron-scheduled services. Continuous services keep the original
 90 s gate. See `backend/tests/test_heartbeat_policy.py`.
 
+**2026-04-20 infra audit (commit: 3cd1c8c):** two unrelated
+production-hygiene fixes bundled together — no ROI impact.
+
+- **Agent module paths.** e417113 fixed the Railway-cwd `sys.path`
+  bug for 5 earnings jobs + the `economic_calendar` job. The
+  2026-04-22 audit of `backend/main.py` found 6 agent jobs still
+  using the raw-relative pattern that caused the original bug:
+  `_run_macro_agent_job`, `_run_synthesis_agent_job`,
+  `_run_surprise_detector_job`, `_run_flow_agent_job`,
+  `_run_sentiment_agent_job`, `_run_feedback_agent_job`. All six
+  now use the canonical
+  `os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend_agents"))`
+  pattern with the `if _AGENTS_PATH not in sys.path:` guard.
+  Pinned by `backend/tests/test_agent_paths.py` (3 AST/regex
+  guards on `main.py`).
+- **Prediction outcome columns re-apply.** Added migration
+  `20260422_ensure_prediction_outcome_columns.sql` — fully
+  idempotent (`IF NOT EXISTS` on every statement). Re-asserts
+  `outcome_direction`, `outcome_correct`, `spx_return_30min`, and
+  the `idx_prediction_outcome` index originally added by
+  `20260417130000_add_prediction_outcome_labels.sql`. Safe to run
+  in any environment. Deliberately skipped `outcome_labeled_at`
+  and `spx_price_at_outcome` from an earlier draft — ripgrep
+  confirmed zero code consumers, so adding them would be dead
+  schema (documented inline in the migration).
+
 ### Health Check Quality
 
 - [ ] gex_engine: healthy only if gex:by_strike has > 5 entries
