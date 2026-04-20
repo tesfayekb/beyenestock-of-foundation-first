@@ -640,6 +640,11 @@ def calibrate_butterfly_thresholds(redis_client) -> dict:
 
 SIZING_PHASE_REDIS_KEY = "capital:sizing_phase"
 SIZING_PHASE_TTL_SECONDS = 86400 * 365  # 1 year
+# Section 13 Batch 2: audit trail that survives even if the primary
+# Redis key is evicted. Writes the ISO-8601 advance timestamp prefixed
+# with the new phase, e.g. "2|2026-04-20T21:30:15+00:00". TTL matches
+# the primary key so both live or die together.
+SIZING_PHASE_AUDIT_REDIS_KEY = "capital:sizing_phase_advanced_at"
 
 
 def read_sizing_phase(client) -> int:
@@ -672,6 +677,64 @@ def read_sizing_phase(client) -> int:
         return 1
 
 
+def _sync_sizing_phase(redis_client, new_phase: int) -> None:
+    """
+    Section 13 Batch 2: durable audit record for a sizing-phase
+    advance outside the primary `capital:sizing_phase` Redis key.
+
+    Two parallel writes, both fail-open (never raise):
+
+      1. Redis audit key `capital:sizing_phase_advanced_at` ←
+         "<phase>|<iso_timestamp>". Survives Redis eviction only to
+         the same degree as the primary key, but gives us a
+         self-describing human-readable audit row independent of
+         the numeric phase value.
+
+      2. Supabase `trading_operator_config.sizing_phase` ← new_phase.
+         Single-tenant deployment: the table has `UNIQUE(user_id)`
+         with exactly one row in practice, so a bulk `.update()`
+         filtered by `sizing_phase >= 0` (always true) is safe and
+         user_id-agnostic. If the table is empty or the write fails,
+         Redis remains the authoritative source.
+    """
+    advance_ts = datetime.now(timezone.utc).isoformat()
+
+    try:
+        if redis_client is not None:
+            redis_client.setex(
+                SIZING_PHASE_AUDIT_REDIS_KEY,
+                SIZING_PHASE_TTL_SECONDS,
+                f"{new_phase}|{advance_ts}",
+            )
+    except Exception as exc:
+        logger.warning(
+            "sizing_phase_audit_redis_write_failed",
+            error=str(exc),
+        )
+
+    try:
+        result = (
+            get_client()
+            .table("trading_operator_config")
+            .update({"sizing_phase": new_phase})
+            .gte("sizing_phase", 0)
+            .execute()
+        )
+        rows_updated = len(result.data or [])
+        logger.info(
+            "sizing_phase_synced",
+            phase=new_phase,
+            rows_updated=rows_updated,
+            advanced_at=advance_ts,
+        )
+    except Exception as exc:
+        logger.warning(
+            "sizing_phase_supabase_sync_failed",
+            phase=new_phase,
+            error=str(exc),
+        )
+
+
 E1_MIN_LIVE_DAYS = 45
 E1_SHARPE_GATE = 1.2
 E1_SHARPE_WINDOW_DAYS = 45
@@ -684,10 +747,18 @@ MAX_PHASE = 3
 def _annualised_sharpe(pnls: list) -> Optional[float]:
     """
     Annualised Sharpe from a list of per-session P&Ls, assuming
-    ~252 trading sessions per year. Returns None when the cohort
-    is too small to compute a stable ratio (< 10 samples), 0.0
-    when the mean is non-positive (a losing cohort can never
-    justify advancing the sizing phase, regardless of volatility).
+    ~252 trading sessions per year.
+
+    Returns None in two cases:
+      * cohort too small to compute a stable ratio (< 10 samples);
+      * mean P&L is non-positive — a losing cohort cannot justify
+        advancing the sizing phase regardless of volatility. Section 13
+        Batch 2 changed this from 0.0 to None so the observability
+        payload distinguishes "negative mean, gate cannot pass" from
+        "genuinely computed very-bad Sharpe of 0.0". The gate check
+        `sharpe is not None and sharpe >= E1_SHARPE_GATE` already
+        short-circuits cleanly on None — no downstream change required.
+
     Using population variance (divide by N) rather than sample
     variance (N-1) — the difference is negligible at N >= 45 and
     the gate thresholds are already approximate.
@@ -698,7 +769,7 @@ def _annualised_sharpe(pnls: list) -> Optional[float]:
         return None
     mean_pnl = sum(pnls) / len(pnls)
     if mean_pnl <= 0:
-        return 0.0
+        return None
     variance = sum((x - mean_pnl) ** 2 for x in pnls) / len(pnls)
     stddev = math.sqrt(variance) if variance > 0 else 1e-9
     return round((mean_pnl / stddev) * math.sqrt(252), 3)
@@ -786,6 +857,7 @@ def evaluate_sizing_phase(redis_client) -> dict:
                     SIZING_PHASE_TTL_SECONDS,
                     "2",
                 )
+                _sync_sizing_phase(redis_client, 2)
                 logger.info(
                     "sizing_phase_advanced",
                     phase=2,
@@ -805,7 +877,10 @@ def evaluate_sizing_phase(redis_client) -> dict:
                 "advanced": False,
                 "live_days": live_days,
                 "sharpe": sharpe,
-                "reason": "E1_sharpe_below_gate",
+                "reason": (
+                    "E1_negative_mean_pnl" if sharpe is None
+                    else "E1_sharpe_below_gate"
+                ),
             }
 
         if (
@@ -821,6 +896,7 @@ def evaluate_sizing_phase(redis_client) -> dict:
                     SIZING_PHASE_TTL_SECONDS,
                     "3",
                 )
+                _sync_sizing_phase(redis_client, 3)
                 logger.info(
                     "sizing_phase_advanced",
                     phase=3,
@@ -840,7 +916,10 @@ def evaluate_sizing_phase(redis_client) -> dict:
                 "advanced": False,
                 "live_days": live_days,
                 "sharpe": sharpe,
-                "reason": "E2_sharpe_below_gate",
+                "reason": (
+                    "E2_negative_mean_pnl" if sharpe is None
+                    else "E2_sharpe_below_gate"
+                ),
             }
 
         return {

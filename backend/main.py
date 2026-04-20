@@ -328,6 +328,9 @@ def run_eod_criteria_evaluation() -> None:
             "failed_today",
             "time_gate",
             "low_concentration",
+            # TODO (Section 13 Batch 2): wire writer in execution_engine
+            # when same-strategy drawdown gate fires. Kept in the list so
+            # it surfaces in EOD stats (as 0) until the writer ships.
             "drawdown_block",
             "wall_unstable",
         ]

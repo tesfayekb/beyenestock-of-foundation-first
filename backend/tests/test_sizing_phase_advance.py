@@ -63,6 +63,16 @@ class _FluentTable:
     def order(self, *args, **kwargs):
         return self
 
+    def update(self, *args, **kwargs):
+        # Section 13 Batch 2: accept update(...) used by
+        # _sync_sizing_phase. The sync is fail-open anyway so the
+        # tests don't *need* this, but tolerating it keeps log output
+        # clean when running the suite locally.
+        return self
+
+    def gte(self, *args, **kwargs):
+        return self
+
     def execute(self):
         result = MagicMock()
         result.data = self._rows
@@ -159,7 +169,7 @@ def test_sizing_advances_to_phase2():
     assert result["live_days"] == 50
     assert result["sharpe"] >= 1.2
 
-    redis_mock.setex.assert_called_once_with(
+    redis_mock.setex.assert_any_call(
         SIZING_PHASE_REDIS_KEY,
         SIZING_PHASE_TTL_SECONDS,
         "2",
@@ -229,7 +239,7 @@ def test_sizing_advances_to_phase3():
     assert result["live_days"] == 96
     assert result["sharpe"] >= 1.5
 
-    redis_mock.setex.assert_called_once_with(
+    redis_mock.setex.assert_any_call(
         SIZING_PHASE_REDIS_KEY,
         SIZING_PHASE_TTL_SECONDS,
         "3",

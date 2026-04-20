@@ -96,25 +96,35 @@ interface OperatorConfigRow {
   account_type: string | null;
 }
 
+// Section 13 Batch 2: phases 1-3 are reached automatically by the
+// sizing-phase auto-advance job (backend/calibration_engine.py ::
+// evaluate_sizing_phase). Phase 4 is never reached by auto-advance
+// — MAX_PHASE is capped at 3 in the backend. Activating phase 4
+// requires a manual Supabase update to trading_operator_config.
+// Descriptions below reflect backend/risk_engine.py _RISK_PCT after
+// Section 13 Batch 1.
 const SIZING_PHASES: Record<
   number,
-  { label: string; description: string }
+  { label: string; description: string; manualOnly?: boolean }
 > = {
   1: {
     label: 'Phase 1 — Paper',
     description: 'Core 0.5%, satellite 0.25%',
   },
   2: {
-    label: 'Phase 2 — Conservative',
-    description: 'Core 0.5%, satellite 0.25%',
+    label: 'Phase 2 — E1 gate',
+    description: 'Core 0.75%, satellite 0.375% (+50% vs phase 1)',
   },
   3: {
-    label: 'Phase 3 — Standard',
-    description: 'Core 1.0%, satellite 0.5%',
+    label: 'Phase 3 — E2 gate',
+    description: 'Core 1.0%, satellite 0.5% (2× phase 1)',
   },
   4: {
-    label: 'Phase 4 — Margin',
-    description: 'Core 1.0%, satellite 0.5% + 2:1 margin',
+    label: 'Phase 4 — Manual only',
+    description:
+      'Core 1.0%, satellite 0.5%. Never reached by auto-advance — ' +
+      'requires operator action in trading_operator_config.',
+    manualOnly: true,
   },
 };
 
@@ -137,6 +147,14 @@ function SizingPhaseIndicator({ current }: { current: number | null }) {
             }`}
           >
             {SIZING_PHASES[n]?.label}
+            {SIZING_PHASES[n]?.manualOnly ? (
+              <span
+                className="ml-1 text-[10px] font-normal uppercase tracking-wide text-amber-600"
+                title="Never reached by auto-advance; requires manual operator action."
+              >
+                manual
+              </span>
+            ) : null}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {SIZING_PHASES[n]?.description}

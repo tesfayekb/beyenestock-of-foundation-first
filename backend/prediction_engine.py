@@ -870,16 +870,23 @@ class PredictionEngine:
                 gex_conf=regime_data.get("gex_conf_at_regime", 0.0),
             )
 
-            def _safe_float(key, default=0.0):
+            # Section 13 Batch 2: renamed from inline `_safe_float` to
+            # `_read_float_key` to eliminate a name collision with the
+            # module-level `_safe_float(value, default)` helper at the
+            # top of this file. Both signatures survived side-by-side
+            # only because Python scope rules kept them separate — but
+            # any refactor that inlined phase_a_features into run_cycle
+            # would have silently broken.
+            def _read_float_key(key, default=0.0):
                 try:
                     return float(self._read_redis(key, str(default)))
                 except (ValueError, TypeError):
                     return default
 
-            gex_net = _safe_float("gex:net")
-            gex_nearest_wall = _safe_float("gex:nearest_wall") or None
-            gex_flip_zone = _safe_float("gex:flip_zone") or None
-            gex_confidence = _safe_float("gex:confidence")
+            gex_net = _read_float_key("gex:net")
+            gex_nearest_wall = _read_float_key("gex:nearest_wall") or None
+            gex_flip_zone = _read_float_key("gex:flip_zone") or None
+            gex_confidence = _read_float_key("gex:confidence")
 
             # D-022: capital preservation mode flag
             consecutive = session.get("consecutive_losses_today", 0)
@@ -906,12 +913,12 @@ class PredictionEngine:
             # _compute_phase_a_features() to keep run_cycle() readable
             # and the new feature surface independently unit-testable.
             #
-            # NOTE: `_safe_float` below is the INLINE helper defined at
-            # the top of this try-block (signature: key, default). The
-            # module-level `_safe_float` at the top of the file has a
-            # different signature (value, default) and is shadowed here.
+            # NOTE: `_read_float_key` is the INLINE helper defined at
+            # the top of this try-block (signature: key, default).
+            # Section 13 Batch 2 renamed it from `_safe_float` to stop
+            # shadowing the module-level `_safe_float(value, default)`.
             spx_price = self._get_spx_price()
-            vix_live = _safe_float("polygon:vix:current", 18.0)
+            vix_live = _read_float_key("polygon:vix:current", 18.0)
             phase_a_features = self._compute_phase_a_features(
                 spx_price=spx_price,
                 gex_flip_zone=gex_flip_zone,
