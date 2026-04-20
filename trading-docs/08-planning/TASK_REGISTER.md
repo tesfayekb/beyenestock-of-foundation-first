@@ -707,18 +707,26 @@ Returns 1.05-1.29% instead of true ~15-20% annualized. Every downstream consumer
 Today's failure: GEX wall moved 7115→7195 (80 points) while system opened 3 butterflies.
 A rolling range check over 30 minutes would have blocked all 3 trades.
 
-- [ ] In `backend/gex_engine.py`, after computing `nearest_wall`, append to Redis list:
+- [x] In `backend/gex_engine.py`, after computing `nearest_wall`, append to Redis list:
       `gex:wall_history` → JSON `{"ts": time.time(), "wall": nearest_wall}`
       Prune entries older than 1800s (30 min). TTL 3600s on key.
-- [ ] In `backend/strategy_selector.py` butterfly gate block, add:
+      (Implemented as `GexEngine._append_wall_history()` helper — testable
+      in isolation, guards against None/0/non-positive wall values.)
+- [x] In `backend/strategy_selector.py` butterfly gate block, add:
       Read `gex:wall_history`, require `len >= 4` before applying check.
       Compute `wall_range_pct = (max(walls) - min(walls)) / spx_price`
       If `wall_range_pct > 0.005` (0.5% ≈ 35 SPX points): set `butterfly_forbidden = True`
       Log `butterfly_blocked_wall_unstable` with range_pct and wall min/max
-- [ ] Use RANGE not stddev. Do NOT stack with a separate point-to-point check.
-- [ ] Test: wall moved 40pts in 30 min → blocked; wall stable → allowed
+      (Integrates with 12B counter via `butterfly_block_reason = "wall_unstable"` —
+      no separate `redis.incr` to avoid double-counting.)
+- [x] Use RANGE not stddev. Do NOT stack with a separate point-to-point check.
+- [x] Test: wall moved 40pts in 30 min → blocked; wall stable → allowed
+      (8 tests in `backend/tests/test_gex_wall_stability.py` covering
+      writer pruning/TTL, gate blocking/allowing, self-gating below 4
+      samples, fail-open on Redis error, and 12B counter integration.)
 
 **Cursor sessions: 1 | Commit tag: feat(butterfly): GEX wall stability 30-min rolling gate**
+**Status: SHIPPED `acccfd7` — 2026-04-16 | 8 new tests, suite 598 passed.**
 
 ---
 
