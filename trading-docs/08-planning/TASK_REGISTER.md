@@ -1120,24 +1120,43 @@ the learned weights.
 
 ---
 
-### 12K — Loop 2 Meta-Label Model Scaffold
+### 12K — Loop 2 Meta-Label Model Scaffold ✅ COMPLETE (2026-04-20, `bf41175`)
 **Priority: LOW-MEDIUM — scaffold now, activates at 100 closed trades**
 **Auto-activates when:** `closed_trades >= 100`
 
-- [ ] In `backend/model_retraining.py`, add `train_meta_label_model()`:
+- [x] In `backend/model_retraining.py`, add `train_meta_label_model()`:
       Features: iv_rank, VIX, gex_confidence, dist_pct, strategy_type,
       spread_width, entry_regime, ai_confidence, signal_mult, time_of_day
       Target: `outcome_correct` (already labeled by label_prediction_outcomes)
       Output: `backend/models/meta_label_v1.pkl`
       Auto-gate: only trains when `closed_trades >= 100`
-- [ ] In `backend/execution_engine.py`, if meta-label model file exists:
+- [x] In `backend/execution_engine.py`, if meta-label model file exists:
       Score trade before opening.
       score < 0.55 → skip (0 contracts)
       0.55-0.65 → normal sizing
       >= 0.75 → allow 1.5× sizing (capped by existing risk gates)
-- [ ] Test: model absent → normal sizing; model present score=0.45 → trade skipped
+- [x] Test: model absent → normal sizing; model present score=0.45 → trade skipped
 
 **Cursor sessions: 2 | Commit tag: feat(ml): Loop 2 meta-label scaffold 12K**
+
+**Shipped deviations (discussed + approved before coding):**
+1. Training query adds `.order("predicted_at")` so the 80/20 split is
+   genuinely walk-forward. Without this, PostgREST row order is not
+   guaranteed chronological and future information leaks into training.
+2. High-score sizing boost carries an explicit 2× hard ceiling on top
+   of the 1.5× multiplier: `min(_orig * 2, max(_orig, int(_orig * 1.5)))`.
+   Bounds the upstream Kelly/RCS sizing contract to a known multiple.
+3. `val_auc` logged alongside `val_accuracy` (accuracy collapses the
+   calibration info that the 0.55/0.75 thresholds are sensitive to).
+   Gracefully skipped on single-class validation folds.
+
+**Feature set actually used** (kept in lockstep on both training and
+inference sides): `confidence`, `vvix_z_score`, `gex_confidence`,
+`cv_stress_score`, `vix`, `signal_weak`, `prior_session_return`,
+`vix_term_ratio`, `spx_momentum_4h`, `gex_flip_proximity`. Diverges
+from the spec-listed features above because those (iv_rank, dist_pct,
+strategy_type one-hot, etc.) are not persisted today — the 12H Phase A
+columns ARE, and line up with what `prediction_engine` actually emits.
 
 ---
 
