@@ -281,8 +281,11 @@ def test_vix_daily_date_redis_guard_prevents_double_append():
     today_str = "2026-04-20"
     feed.redis_client.get.return_value = today_str  # decode_responses=True
 
+    # Section 13 Batch 1: EOD gate moved 19:00 → 21:00 UTC so the
+    # VIX/SPX daily samples are taken after the 16:00 ET cash close
+    # and the IV/RV comparison is like-for-like close-to-close.
     fixed_now = pf_mod.datetime(
-        2026, 4, 20, 19, 30, tzinfo=pf_mod.timezone.utc
+        2026, 4, 20, 21, 30, tzinfo=pf_mod.timezone.utc
     )
 
     class _DT:

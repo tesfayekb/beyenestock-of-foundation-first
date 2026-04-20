@@ -44,12 +44,20 @@ def _get_redis():
         return None
 
 
-# D-014: risk percentages by sizing phase and position type
+# D-014: risk percentages by sizing phase and position type.
+# Phase 1 values (0.005 / 0.0025) are the current paper-trading baseline
+# and MUST remain unchanged. Phases 2 and 3 are reached only by the
+# automated E1/E2 gates in calibration_engine.evaluate_sizing_phase
+# (45+ live days with rolling 45d Sharpe >= 1.2 for phase 2; 90+ live
+# days with rolling 60d Sharpe >= 1.5 for phase 3). Phase 4 is
+# manual-only — never reached by auto-advance — and carries the same
+# ceiling as phase 3 so a stray manual flip cannot lift risk above
+# the system's learned tolerance.
 _RISK_PCT = {
-    1: {"core": 0.005, "satellite": 0.0025},
-    2: {"core": 0.005, "satellite": 0.0025},
-    3: {"core": 0.010, "satellite": 0.005},
-    4: {"core": 0.010, "satellite": 0.005},
+    1: {"core": 0.005,  "satellite": 0.0025},    # Phase 1: unchanged — current paper trading
+    2: {"core": 0.0075, "satellite": 0.00375},   # Phase 2: E1 gate passed — +50% sizing
+    3: {"core": 0.010,  "satellite": 0.0050},    # Phase 3: E2 gate passed — 2× phase 1
+    4: {"core": 0.010,  "satellite": 0.0050},    # Phase 4: manual only — same as phase 3
 }
 
 # Phase 2B: Strategy-specific risk overrides

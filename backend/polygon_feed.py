@@ -31,10 +31,13 @@ class PolygonFeed:
         self.vix_history: List[float] = []
         # E-2: separate slow-regime VIX history — one sample per
         # trading day, seeded from the daily-aggregates backfill on
-        # startup and appended once per session at/after 19:00 UTC
-        # (~3 PM ET). _vix_daily_date_written guarantees one append
-        # per UTC date so multiple polls in the same session can't
-        # over-saturate the rolling window.
+        # startup and appended once per session at/after 21:00 UTC
+        # (~5 PM ET, after NYSE close at 16:00 ET). The close-to-close
+        # timing matters: VIX and SPX daily samples must both be taken
+        # after the cash close so the IV/RV comparison in the regime
+        # engine compares like-for-like sessions. _vix_daily_date_written
+        # guarantees one append per UTC date so multiple polls in the
+        # same session can't over-saturate the rolling window.
         self.vix_daily_history: List[float] = []
         self._vix_daily_date_written: Optional[str] = None
         # 12A: True 20-day SPX daily realized vol. The prior
@@ -298,7 +301,7 @@ class PolygonFeed:
         now = datetime.now(timezone.utc)
         today_str = now.strftime("%Y-%m-%d")
         if (
-            now.hour >= 19
+            now.hour >= 21
             and self._vix_daily_date_written != today_str
         ):
             # T1-7: cross-check Redis so a process restart near EOD
@@ -347,13 +350,13 @@ class PolygonFeed:
                 self.vix_daily_history = self.vix_daily_history[-20:]
                 self._vix_daily_date_written = today_str
 
-        # 12A: SPX daily realized vol — share the same 19:00 UTC EOD
+        # 12A: SPX daily realized vol — share the same 21:00 UTC EOD
         # gate as VIX (but with an INDEPENDENT date-written guard so a
         # VIX-only skip in the block above doesn't block SPX, and vice
         # versa). Co-locating both daily updates here means a single
-        # code path runs after market close; _poll_loop no longer
-        # touches polygon:spx:realized_vol_20d.
-        if now.hour >= 19:
+        # code path runs after the 16:00 ET cash close; _poll_loop no
+        # longer touches polygon:spx:realized_vol_20d.
+        if now.hour >= 21:
             self._append_spx_daily_return_if_due(today_str)
 
         # --- Compute the regime z-score (daily preferred, intraday fallback) ---

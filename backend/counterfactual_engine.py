@@ -148,11 +148,30 @@ def label_counterfactual_outcomes(
 ) -> Dict[str, Any]:
     """Label today's unlabeled no-trade rows with counterfactual P&L.
 
-    `redis_client` is reserved for future rate-limiting / caching of
-    the Polygon fetch and is intentionally unused today. Keeping the
-    parameter stable matches the D3 pattern so the scheduler wrapper
-    signature in main.py doesn't churn.
+    `redis_client` now also carries the operator kill-switch for this
+    whole labeling loop via the `feedback:counterfactual:enabled`
+    Redis key (matches the pattern in strategy_selector._check_feature_flag
+    and main.set_feature_flag, which write Redis-first and mirror to
+    Supabase best-effort).
+
+    Semantics (deliberately fail-open so today's behaviour is preserved
+    if the operator has never touched the flag):
+      * flag key missing                → ENABLED
+      * flag value in {"true"}          → ENABLED
+      * flag value in {"false"}         → DISABLED
+      * Redis client absent or raises   → ENABLED
     """
+    # Feature flag gate — fail-open, Redis-authoritative. Checked
+    # before any Supabase query so a DISABLED flag costs nothing.
+    if redis_client is not None:
+        try:
+            raw = redis_client.get("feedback:counterfactual:enabled")
+            if raw in ("false", b"false"):
+                logger.info("counterfactual_labeling_disabled_by_flag")
+                return {"labeled": 0, "skipped": 0, "disabled": True}
+        except Exception:
+            pass  # fail-open — read error → proceed normally
+
     summary: Dict[str, Any] = {"labeled": 0, "skipped": 0}
     try:
         from db import get_client

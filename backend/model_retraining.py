@@ -724,10 +724,19 @@ def train_meta_label_model(redis_client=None) -> dict:
     Loop 2: train a meta-label model to predict whether a specific
     trade setup will win — not just which regime wins.
 
-    Features (must stay in lockstep with execution_engine.open_virtual_position):
+    Features (9, must stay in lockstep with
+    execution_engine.open_virtual_position and
+    run_meta_label_champion_challenger._row_to_features):
       confidence, vvix_z_score, gex_confidence, cv_stress_score, vix,
-      signal_weak, prior_session_return, vix_term_ratio,
-      spx_momentum_4h, gex_flip_proximity.
+      prior_session_return, vix_term_ratio, spx_momentum_4h,
+      gex_flip_proximity.
+
+    `signal_weak` was dropped in Section 13 Batch 1 because its
+    training distribution is a constant 0 (no_trade_signal=True when
+    signal_weak=True, and the training set filters to
+    no_trade_signal=False), so LightGBM learned nothing from it and
+    the column inflated the feature count without contributing
+    information.
 
     Target: outcome_correct (labeled by label_prediction_outcomes).
 
@@ -775,7 +784,7 @@ def train_meta_label_model(redis_client=None) -> dict:
             .table("trading_prediction_outputs")
             .select(
                 "outcome_correct, confidence, vvix_z_score, gex_confidence, "
-                "cv_stress_score, vix, signal_weak, prior_session_return, "
+                "cv_stress_score, vix, prior_session_return, "
                 "vix_term_ratio, spx_momentum_4h, gex_flip_proximity, "
                 "predicted_at"
             )
@@ -807,7 +816,6 @@ def train_meta_label_model(redis_client=None) -> dict:
                     float(r.get("gex_confidence") or 0),
                     float(r.get("cv_stress_score") or 0),
                     float(r.get("vix") or 18.0),
-                    1.0 if r.get("signal_weak") else 0.0,
                     float(r.get("prior_session_return") or 0),
                     float(r.get("vix_term_ratio") or 1.0),
                     float(r.get("spx_momentum_4h") or 0),
@@ -908,15 +916,15 @@ def train_meta_label_model(redis_client=None) -> dict:
 #
 # DEVIATION FROM THE ORIGINAL 12M SPEC (documented in TASK_REGISTER):
 # the spec framed this as a champion/challenger for the directional
-# LightGBM model `lgbm_direction_v1.pkl` with the 10-feature Phase-A
-# live-inference set and an `outcome_correct` target. Reading the
-# actual code surfaces three blockers against that literal framing:
+# LightGBM model `lgbm_direction_v1.pkl` with the Phase-A live-
+# inference set and an `outcome_correct` target. Reading the actual
+# code surfaces three blockers against that literal framing:
 #   1) the real directional file is `direction_lgbm_v1.pkl`
 #      (token order) — the spec would gate on a path that can never
 #      exist in production;
 #   2) the directional model's feature space is the 25-column
 #      bar-engineered FEATURE_COLS list in
-#      backend/scripts/train_direction_model.py, not the 10 live
+#      backend/scripts/train_direction_model.py, not the live
 #      features from trading_prediction_outputs — calling
 #      .predict() on the mismatched shape crashes, and if it silently
 #      padded would produce meaningless accuracy numbers;
@@ -927,8 +935,9 @@ def train_meta_label_model(redis_client=None) -> dict:
 #
 # Option A (confirmed by operator 2026-04-20): target the 12K
 # meta-label model instead, which DOES live in the
-# trading_prediction_outputs / 10-feature / {0,1} space this
-# scaffold's code is actually correct for. Pre-requisite
+# trading_prediction_outputs / 9-feature / {0,1} space this
+# scaffold's code is actually correct for (9 features as of
+# Section 13 Batch 1 — signal_weak dropped as always-zero). Pre-requisite
 # `meta_label_v1.pkl` is produced by train_meta_label_model()
 # (self-gated on 100 closed trades + 100 labeled rows), so until
 # that file exists this function is a complete pass-through — the
@@ -1014,7 +1023,7 @@ def run_meta_label_champion_challenger(redis_client=None) -> dict:
             .table("trading_prediction_outputs")
             .select(
                 "outcome_correct, confidence, vvix_z_score, "
-                "gex_confidence, cv_stress_score, vix, signal_weak, "
+                "gex_confidence, cv_stress_score, vix, "
                 "prior_session_return, vix_term_ratio, "
                 "spx_momentum_4h, gex_flip_proximity, predicted_at"
             )
@@ -1039,17 +1048,18 @@ def run_meta_label_champion_challenger(redis_client=None) -> dict:
             }
 
         def _row_to_features(r: dict) -> list:
-            # Defaults mirror train_meta_label_model's fallbacks so
-            # the two code paths materialise the same feature vector
-            # for the same row. ANY divergence here silently
-            # corrupts every comparison this scaffold ever produces.
+            # 9-feature vector. Defaults mirror train_meta_label_model's
+            # fallbacks so the two code paths materialise the same
+            # feature vector for the same row. ANY divergence here
+            # silently corrupts every comparison this scaffold ever
+            # produces — and the execution_engine inference side must
+            # match, or .predict_proba() raises on a shape mismatch.
             return [
                 float(r.get("confidence") or 0),
                 float(r.get("vvix_z_score") or 0),
                 float(r.get("gex_confidence") or 0),
                 float(r.get("cv_stress_score") or 0),
                 float(r.get("vix") or 18.0),
-                1.0 if r.get("signal_weak") else 0.0,
                 float(r.get("prior_session_return") or 0),
                 float(r.get("vix_term_ratio") or 1.0),
                 float(r.get("spx_momentum_4h") or 0),

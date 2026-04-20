@@ -346,25 +346,47 @@ class ExecutionEngine:
             #     2×) but documents intent if the boost factor is ever
             #     raised, and keeps the upstream Kelly/RCS sizing
             #     contract bounded to a known multiple.
+            # Section 13 Batch 1: Redis-authoritative feature flag
+            # kill-switch. Fail-open so today's behaviour is
+            # preserved when the flag has never been set:
+            #   missing / client-None / read error → ENABLED
+            #   value == "false"                   → DISABLED
+            _meta_label_enabled = True
+            try:
+                _redis_client = getattr(self, "redis_client", None)
+                if _redis_client is not None:
+                    _raw = _redis_client.get("model:meta_label:enabled")
+                    if _raw in ("false", b"false"):
+                        _meta_label_enabled = False
+            except Exception:
+                pass  # fail-open
+
             try:
                 from pathlib import Path
                 _model_path = (
                     Path(__file__).parent / "models" / "meta_label_v1.pkl"
                 )
-                if _model_path.exists():
+                if _meta_label_enabled and _model_path.exists():
                     import pickle
                     import numpy as np
                     with open(_model_path, "rb") as _f:
                         _meta_model = pickle.load(_f)
 
                     _pred = prediction or {}
+                    # 9-feature vector — MUST match
+                    # model_retraining.train_meta_label_model() and
+                    # run_meta_label_champion_challenger._row_to_features
+                    # in order and content. Section 13 Batch 1 dropped
+                    # `signal_weak` across all three sites because its
+                    # training distribution was a constant 0 (the
+                    # training filter is no_trade_signal=False and
+                    # signal_weak=True forces no_trade_signal=True).
                     _feat = np.array([[
                         float(_pred.get("confidence") or 0),
                         float(_pred.get("vvix_z_score") or 0),
                         float(_pred.get("gex_confidence") or 0),
                         float(_pred.get("cv_stress_score") or 0),
                         float(_pred.get("vix") or 18.0),
-                        1.0 if _pred.get("signal_weak") else 0.0,
                         float(_pred.get("prior_session_return") or 0),
                         float(_pred.get("vix_term_ratio") or 1.0),
                         float(_pred.get("spx_momentum_4h") or 0),

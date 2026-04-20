@@ -90,7 +90,14 @@ def get_todays_market_intelligence(
 
     try:
         events = _fetch_finnhub_calendar(target)
-        earnings = _fetch_major_earnings(target)
+        # upcoming_earnings spans the next 5 trading days (per
+        # _fetch_major_earnings). `earnings` is the legacy today-only
+        # slice preserved for the dashboard brief consumer and for
+        # day_classification, which has always been a same-day signal.
+        upcoming_earnings = _fetch_major_earnings(target)
+        earnings = [
+            e for e in upcoming_earnings if e.get("days_until") == 0
+        ]
 
         major_events = [e for e in events if e.get("is_major")]
         minor_events = [e for e in events if not e.get("is_major")]
@@ -120,6 +127,7 @@ def get_todays_market_intelligence(
             "has_major_earnings": has_major_earnings,
             "events": events,
             "earnings": earnings,
+            "upcoming_earnings": upcoming_earnings,
             "day_classification": day_classification,
             "recommended_posture": recommended_posture,
             "consensus_data": _extract_consensus_data(events),
@@ -252,18 +260,38 @@ def _fetch_fred_fallback(target: date) -> list[dict]:
         return []
 
 
+# Look-ahead horizon for the earnings proximity score. Kept as a
+# module-level constant because it's shared by _fetch_major_earnings
+# (window bound) and write_intel_to_redis (gradient denominator).
+EARNINGS_PROXIMITY_HORIZON_DAYS = 5
+
+
 def _fetch_major_earnings(target: date) -> list[dict]:
-    """Fetch earnings for major SPX-moving tickers via Finnhub."""
+    """
+    Fetch earnings for major SPX-moving tickers via Finnhub across a
+    5-trading-day window (today → today+5) so the prediction engine
+    can score "days until next major earnings" as a gradient feature
+    instead of the binary "is today an earnings day?".
+
+    Each returned dict includes:
+      ticker, name, eps_estimate, eps_actual, hour, is_major,
+      date (ISO "YYYY-MM-DD"), days_until (int, 0 = today).
+
+    Events are sorted by date ascending so `upcoming[0]` is always
+    the nearest event — callers that only want today's earnings can
+    filter on `days_until == 0`.
+    """
     try:
         import config
         if not config.FINNHUB_API_KEY:
             return []
 
+        window_end = target + timedelta(days=EARNINGS_PROXIMITY_HORIZON_DAYS)
         # S7-6: token in X-Finnhub-Token header (same fix as the
         # economic calendar above — keeps the key out of every log path).
         url = (
             f"https://finnhub.io/api/v1/calendar/earnings"
-            f"?from={target.isoformat()}&to={target.isoformat()}"
+            f"?from={target.isoformat()}&to={window_end.isoformat()}"
         )
         headers = {"X-Finnhub-Token": config.FINNHUB_API_KEY}
         with httpx.Client(timeout=REQUEST_TIMEOUT) as client:
@@ -275,18 +303,37 @@ def _fetch_major_earnings(target: date) -> list[dict]:
         data = resp.json()
         all_earnings = data.get("earningsCalendar", [])
 
-        return [
-            {
-                "ticker": e.get("symbol"),
-                "name": e.get("symbol"),
+        out: list[dict] = []
+        for e in all_earnings:
+            symbol = e.get("symbol")
+            if symbol not in MAJOR_EARNINGS_TICKERS:
+                continue
+            event_date_str = e.get("date") or target.isoformat()
+            try:
+                event_date = date.fromisoformat(event_date_str)
+            except Exception:
+                # Malformed date from upstream — skip rather than
+                # poison downstream proximity math with a bogus event.
+                continue
+            days_until = (event_date - target).days
+            # Clamp into the requested window; Finnhub has occasionally
+            # returned dates one day outside the asked range on
+            # timezone boundaries.
+            if days_until < 0 or days_until > EARNINGS_PROXIMITY_HORIZON_DAYS:
+                continue
+            out.append({
+                "ticker": symbol,
+                "name": symbol,
                 "eps_estimate": e.get("epsEstimate"),
                 "eps_actual": e.get("epsActual"),
                 "hour": e.get("hour", "amc"),  # bmo/amc/dmh
-                "is_major": e.get("symbol") in MAJOR_EARNINGS_TICKERS,
-            }
-            for e in all_earnings
-            if e.get("symbol") in MAJOR_EARNINGS_TICKERS
-        ]
+                "is_major": True,
+                "date": event_date.isoformat(),
+                "days_until": days_until,
+            })
+
+        out.sort(key=lambda x: x["days_until"])
+        return out
 
     except Exception as exc:
         logger.warning("earnings_calendar_failed", error=str(exc))
@@ -318,10 +365,35 @@ def _empty_intel(target: date) -> dict:
         "has_major_earnings": False,
         "events": [],
         "earnings": [],
+        "upcoming_earnings": [],
         "day_classification": "normal",
         "recommended_posture": "normal",
         "consensus_data": {},
     }
+
+
+def _compute_earnings_proximity_score(intel: dict) -> float:
+    """
+    Compute the earnings proximity score consumed by
+    prediction_engine._compute_phase_a_features().
+
+    Score is a linear decay from 1.0 (earnings today) to 0.0 (5+ days
+    away or no earnings). Using the nearest event (min days_until) is
+    deliberate: the model cares about the closest known catalyst, not
+    the density of events in the window.
+
+    Separated from the writer so it is independently unit-testable
+    and can be reused by other consumers without an I/O dependency.
+    """
+    upcoming = intel.get("upcoming_earnings") or []
+    if not upcoming:
+        return 0.0
+    min_days = min(
+        (e.get("days_until", EARNINGS_PROXIMITY_HORIZON_DAYS + 1) for e in upcoming),
+        default=EARNINGS_PROXIMITY_HORIZON_DAYS + 1,
+    )
+    score = 1.0 - (min_days / EARNINGS_PROXIMITY_HORIZON_DAYS)
+    return round(max(0.0, min(1.0, score)), 4)
 
 
 def write_intel_to_redis(redis_client, intel: dict) -> None:
@@ -343,3 +415,23 @@ def write_intel_to_redis(redis_client, intel: dict) -> None:
         ).execute()
     except Exception as exc:
         logger.warning("calendar_redis_write_failed", error=str(exc))
+
+    # 12H follow-up: write earnings_proximity_score for the
+    # prediction engine's Phase-A feature vector. Independent
+    # try/except so a Supabase or intel-write failure can't leave
+    # LightGBM reading a stale score, and vice versa. Fail-open:
+    # any error is logged and the Redis key is left at whatever the
+    # previous run wrote (TTL 24h) — never blocks trading.
+    try:
+        score = _compute_earnings_proximity_score(intel)
+        redis_client.setex(
+            "calendar:earnings_proximity_score",
+            86400,
+            str(score),
+        )
+        logger.info("earnings_proximity_score_written", score=score)
+    except Exception as exc:
+        logger.warning(
+            "earnings_proximity_score_write_failed",
+            error=str(exc),
+        )

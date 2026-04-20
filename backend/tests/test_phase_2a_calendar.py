@@ -64,8 +64,17 @@ def test_minor_event_classification():
 
 
 def test_earnings_major_classification():
-    """Major earnings sets earnings_major classification."""
+    """Major earnings sets earnings_major classification.
+
+    Section 13 Batch 1: _fetch_major_earnings now returns the 5-day
+    window with `date` + `days_until` fields. The classification
+    still fires when there's a major-earnings event TODAY
+    (days_until == 0); future events populate upcoming_earnings but
+    don't change same-day classification.
+    """
     from economic_calendar import get_todays_market_intelligence
+    from datetime import date
+    today = date.today()
     with patch("economic_calendar._fetch_finnhub_calendar") as mock_cal:
         with patch("economic_calendar._fetch_major_earnings") as mock_earn:
             mock_cal.return_value = []
@@ -73,6 +82,8 @@ def test_earnings_major_classification():
                 "ticker": "NVDA", "name": "NVDA",
                 "eps_estimate": 5.5, "eps_actual": None,
                 "hour": "amc", "is_major": True,
+                "date": today.isoformat(),
+                "days_until": 0,
             }]
             result = get_todays_market_intelligence()
     assert result["day_classification"] == "earnings_major"
@@ -92,15 +103,30 @@ def test_normal_day_no_events():
 
 
 def test_write_intel_to_redis():
-    """Intel dict written to Redis with correct TTL."""
+    """Intel dict written to Redis with correct TTL.
+
+    Section 13 Batch 1 added a second Redis setex for
+    `calendar:earnings_proximity_score`; assert both are written and
+    locate the intel payload by key rather than by call count so a
+    future third write doesn't silently break this contract.
+    """
     from economic_calendar import write_intel_to_redis, _empty_intel
     from datetime import date
     mock_redis = MagicMock()
     intel = _empty_intel(date.today())
     write_intel_to_redis(mock_redis, intel)
-    mock_redis.setex.assert_called_once()
-    args = mock_redis.setex.call_args[0]
-    assert args[0] == "calendar:today:intel"
-    assert args[1] == 86400
-    parsed = json.loads(args[2])
+
+    calls_by_key = {
+        c.args[0]: c.args for c in mock_redis.setex.call_args_list
+    }
+    assert "calendar:today:intel" in calls_by_key
+    assert "calendar:earnings_proximity_score" in calls_by_key
+
+    intel_args = calls_by_key["calendar:today:intel"]
+    assert intel_args[1] == 86400
+    parsed = json.loads(intel_args[2])
     assert "day_classification" in parsed
+
+    score_args = calls_by_key["calendar:earnings_proximity_score"]
+    assert score_args[1] == 86400
+    assert float(score_args[2]) == 0.0  # empty intel → no earnings
