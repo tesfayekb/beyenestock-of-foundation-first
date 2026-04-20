@@ -124,16 +124,43 @@ class DatabentoFeed:
             )
             logger.info("databento_subscribed")
 
-            for record in client:
-                if self._stop_event.is_set():
-                    break
+            # Outer try/except over the blocking for-record loop.
+            # Pre-0.39 databento had a C-extension segfault in
+            # protocol.py::_process_dbn that hard-killed the Railway
+            # worker. The library pin at >=0.39.3,<0.50.0 contains
+            # the upstream fix, but we also keep this defensive
+            # boundary so any non-fatal stream error (RuntimeError /
+            # SystemError / connection reset) surfaces as a normal
+            # exception instead of bringing the supervisor down —
+            # the outer reconnect loop in start() then handles it.
+            # The per-record try/except is preserved so a single
+            # malformed record still can't take out the loop.
+            try:
+                for record in client:
+                    if self._stop_event.is_set():
+                        break
+                    try:
+                        self._dispatch_record(record)
+                    except Exception as exc:
+                        logger.warning(
+                            "databento_record_parse_failed",
+                            error=str(exc),
+                        )
+            except Exception as exc:
+                logger.error(
+                    "databento_stream_loop_error",
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+                raise  # re-raise so _run_stream_loop reconnect fires
+            finally:
+                # Best-effort client teardown on any exit path. Swallow
+                # errors here — we cannot let a cleanup failure mask
+                # the original stream exception the caller needs.
                 try:
-                    self._dispatch_record(record)
-                except Exception as exc:
-                    logger.warning(
-                        "databento_record_parse_failed",
-                        error=str(exc),
-                    )
+                    client.stop()
+                except Exception:
+                    pass
 
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         try:
