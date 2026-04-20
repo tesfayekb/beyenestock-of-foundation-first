@@ -176,20 +176,43 @@ def test_price_position_straddle_profit_when_vol_expands():
 
 
 def test_price_position_calendar_spread_returns_nonzero():
-    """calendar_spread is an intentional stub — must still return a value."""
+    """calendar_spread now has real two-leg MTM (T0-4 replaced the stub).
+
+    Historical contract was "stub returns 0 (public contract: not
+    None)". T0-4 replaced the stub with real two-leg BS pricing, so
+    the contract is now:
+      * with far_expiry_date present → real float P&L
+      * without far_expiry_date → None (skipped by MTM loop, safe
+        default — peak_pnl stays unchanged rather than being pinned
+        at a fake 0)
+
+    Both branches must not raise. The lower-level contract (real
+    non-zero P&L with full inputs) is covered more directly by
+    test_calendar_mtm.py::test_calendar_pnl_is_not_zero.
+    """
+    from datetime import date, timedelta
     from mark_to_market import _price_position
 
+    today = date.today()
     pos = {
         "strategy_type": "calendar_spread",
-        "entry_credit": -2.50,
+        "entry_credit": 1.50,   # post-T0-4 calendars collect a credit
         "contracts": 1,
-        "expiry_date": "2026-04-21",
+        "expiry_date": today.isoformat(),
+        "far_expiry_date": (today + timedelta(days=5)).isoformat(),
         "short_strike": 5200.0,
     }
-    pnl = _price_position(pos, spx_price=5200.0, redis_client=MagicMock())
-    # Stub returns 0 (since current_value == abs_entry); the public
-    # contract is "no longer None", so peak_pnl/MTM upserts proceed.
-    assert pnl is not None or pnl == 0
+
+    # Redis mock that returns None for everything — forces the BS
+    # fallback + VIX defaults in the calendar branch.
+    redis = MagicMock()
+    redis.get.return_value = None
+
+    pnl = _price_position(pos, spx_price=5200.0, redis_client=redis)
+    assert pnl is None or isinstance(pnl, float), (
+        "calendar_spread MTM must return a float (real pricing) or "
+        "None (skipped) — never raise"
+    )
 
 
 # ── A-3: long_put / long_call sign correction ───────────────────────

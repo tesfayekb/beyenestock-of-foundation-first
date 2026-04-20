@@ -97,6 +97,63 @@ def _build_option_symbol(
         return ""
 
 
+def _price_leg_bs_or_live(
+    redis_client,
+    strike: float,
+    opt_type: str,
+    expiry_str: str,
+    spx_price: float,
+    sigma: float,
+) -> float:
+    """
+    T0-4: price ONE option leg — live Tradier quote preferred,
+    Black-Scholes fallback with caller-supplied T (derived from
+    expiry_str) and sigma.
+
+    Why a second pricing helper? The inner get_leg_price() inside
+    _price_position() is closed over the outer T (computed from the
+    position's near `expiry_date`). That is correct for every single-
+    expiry strategy but wrong for a calendar spread, where the two
+    legs live at DIFFERENT expiries and — more importantly —
+    DIFFERENT implied volatilities (0DTE IV is well above 5DTE IV,
+    especially post-catalyst). This helper lets the calendar branch
+    price each leg with its own T and sigma cleanly.
+
+    Args:
+        redis_client: Redis handle for live quote lookup
+        strike: option strike
+        opt_type: "C" or "P"
+        expiry_str: ISO date for this leg's expiry, e.g. "2026-04-25"
+        spx_price: current SPX (underlying)
+        sigma: annualized IV for THIS leg (decimal, e.g. 0.18)
+
+    Returns:
+        Non-negative option mid-price. 0.0 when strike or expiry are
+        missing, or when BS rejects the inputs.
+    """
+    if not strike or not expiry_str:
+        return 0.0
+
+    symbol = _build_option_symbol("SPXW", str(expiry_str), strike, opt_type)
+    live = _get_option_quote(redis_client, symbol)
+    if live is not None:
+        return live
+
+    # BS fallback — T uses +0.5 days so expiry day itself does not
+    # collapse the price to zero (0DTE options still have intraday
+    # value until the close).
+    try:
+        exp_date = date.fromisoformat(str(expiry_str))
+        days = max(0, (exp_date - date.today()).days)
+        T_leg = max(0.0005, (days + 0.5) / 365.0)
+    except Exception:
+        T_leg = 0.002
+
+    return _bs_option_price(
+        spx_price, strike, T_leg, sigma=sigma, option_type=opt_type,
+    )
+
+
 def _price_position(
     pos: dict,
     spx_price: float,
@@ -217,14 +274,93 @@ def _price_position(
         current_spread_value = call_price + put_price
 
     elif strategy_type == "calendar_spread":
-        # S4 / A-2: intentional stub. Real far/near differential pricing
-        # requires multi-expiry chain handling deferred to S6. Holding
-        # entry value forever pins current_pnl at zero, which means only
-        # time stops will close calendar_spread — the 40% take-profit
-        # and 150% stop-loss never fire on these positions until S6.
-        # This is preferable to returning None (skipped) which would
-        # leave current_pnl undefined.
-        current_spread_value = abs(entry_credit)
+        # T0-4: real two-leg MTM replaces the S4 / A-2 stub.
+        #
+        # Structure (from strike_selector.calendar_spread):
+        #   * short_strike — ATM strike (SAME for both legs; this is
+        #     a calendar, not a diagonal / strike spread)
+        #   * expiry_date — near leg expiry (0DTE, the straddle we
+        #     SOLD for premium at entry)
+        #   * far_expiry_date — far leg expiry (next Friday, the
+        #     straddle we BOUGHT as the hedge)
+        #   * entry_credit — positive net credit received at entry
+        #
+        # Net value = far_straddle_value - near_straddle_value. Fed
+        # into the existing credit P&L formula at the bottom of this
+        # function (the same formula iron_condor / put_credit_spread
+        # already use).
+        #
+        # IV sourcing (Redis, annualized decimals):
+        #   near (0DTE, sold):  VIX9D × 1.20  — post-catalyst IV spike
+        #                       premium over the 9-day term VIX,
+        #                       capped at 150%.
+        #   far  (5DTE, bought): spot VIX     — 5-day term structure
+        #                                       is close to index vol,
+        #                                       floored at 10%.
+        # Both fall back to 0.18 (18%) if Redis is down — adequate
+        # for exit-trigger purposes; Tradier live quotes are
+        # preferred and override BS entirely when present.
+        far_expiry = pos.get("far_expiry_date")
+        near_expiry = expiry  # raw ISO string already extracted above
+
+        try:
+            vix_raw = redis_client.get("polygon:vix:current") \
+                if redis_client else None
+            spot_vix = float(vix_raw) / 100.0 if vix_raw else 0.18
+        except Exception:
+            spot_vix = 0.18
+
+        try:
+            vix9d_raw = redis_client.get("polygon:vix9d:current") \
+                if redis_client else None
+            vix9d = float(vix9d_raw) / 100.0 if vix9d_raw else spot_vix
+        except Exception:
+            vix9d = spot_vix
+
+        # Near leg IV: VIX9D + 20% post-catalyst spike premium, cap 150%
+        near_sigma = min(vix9d * 1.20, 1.50)
+        # Far leg IV: spot VIX, floor 10% (avoids BS blowing up if
+        # Redis returns a bogus near-zero reading)
+        far_sigma = max(spot_vix, 0.10)
+
+        # Near leg (sold): ATM straddle — call + put at short_strike
+        near_call = _price_leg_bs_or_live(
+            redis_client, short_strike, "C",
+            near_expiry or "", spx_price, near_sigma,
+        )
+        near_put = _price_leg_bs_or_live(
+            redis_client, short_strike, "P",
+            near_expiry or "", spx_price, near_sigma,
+        )
+        near_value = near_call + near_put
+
+        # Far leg (bought): ATM straddle — same strike, far expiry
+        far_call = _price_leg_bs_or_live(
+            redis_client, short_strike, "C",
+            far_expiry or "", spx_price, far_sigma,
+        )
+        far_put = _price_leg_bs_or_live(
+            redis_client, short_strike, "P",
+            far_expiry or "", spx_price, far_sigma,
+        )
+        far_value = far_call + far_put
+
+        # Net value we'd pay to close. Clamp at 0 — if the far leg is
+        # worth less than the near leg (which happens at entry on a
+        # post-catalyst spike), the position is immediately at max
+        # profit-to-date from the engine's perspective and further
+        # crush of the near leg cannot help.
+        current_spread_value = max(0.0, far_value - near_value)
+
+        logger.debug(
+            "calendar_mtm_priced",
+            near_value=round(near_value, 4),
+            far_value=round(far_value, 4),
+            net_value=round(current_spread_value, 4),
+            entry_credit=entry_credit,
+            near_sigma=round(near_sigma, 4),
+            far_sigma=round(far_sigma, 4),
+        )
 
     if current_spread_value == 0.0:
         return None
@@ -255,6 +391,7 @@ def run_mark_to_market(redis_client) -> dict:
             .select(
                 "id, strategy_type, entry_credit, contracts, expiry_date, "
                 "short_strike, long_strike, short_strike_2, long_strike_2, "
+                "far_expiry_date, "  # T0-4: required for calendar spread MTM
                 "current_pnl, peak_pnl"
             )
             .eq("status", "open")
