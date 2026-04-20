@@ -1335,4 +1335,109 @@ went missing):**
 
 ---
 
+## SECTION 13 — POST-SECTION-12 DIAGNOSTIC FIXES (2026-04-20)
+
+Following a comprehensive end-to-end audit of Section 12 (12A–12N), 12 issues were
+identified. Fixes are grouped into two batches by priority.
+
+Full diagnostic report: produced by Cursor agent on 2026-04-20.
+
+---
+
+### Batch 1 — ROI-Positive Fixes (ship together)
+
+- [ ] **B1-1 — Fix `_RISK_PCT` phase ladder** (`backend/risk_engine.py`)
+      Phase 1 and 2 have identical values — E1 auto-advance (12N) is a no-op on sizing.
+      Fix: `2: {"core": 0.0075, "satellite": 0.00375}` — +50% at E1, 2× at E2.
+      Phase 1 UNCHANGED (0.005/0.0025). Test: assert phase1 ≠ phase2 ≠ phase3.
+
+- [ ] **B1-2 — Fix 12A EOD gate from 19 → 21 UTC** (`backend/polygon_feed.py`)
+      Both VIX daily history AND SPX daily return gates use `now.hour >= 19` (= 3 PM ET).
+      True NYSE close is 4 PM ET = 20:00 UTC (EDT) / 21:00 UTC (EST).
+      Fix: change BOTH `now.hour >= 19` occurrences to `now.hour >= 21`.
+      Ensures close-to-close daily returns, not mid-afternoon samples.
+      VIX and SPX must stay in sync — both change together.
+
+- [ ] **B1-3 — Add `earnings_proximity_score` writer** (`backend_agents/economic_calendar.py`)
+      `calendar:earnings_proximity_score` Redis key is READ by prediction_engine but
+      NEVER WRITTEN anywhere. Every prediction row has 0.0 permanently — phantom feature.
+      Fix: in `write_intel_to_redis()`, compute and write score = min(1.0, max(0, 1 - days_to_next_earnings/5))
+      based on upcoming earnings in the calendar intel. TTL 86400. Fail-open.
+
+- [ ] **B1-4 — Drop `signal_weak` from 12K/12M feature vectors** (`backend/model_retraining.py`)
+      `signal_weak` is always False in training (filter: no_trade_signal=False) and
+      always False at inference (only reached when no_trade_signal=False).
+      Constant column wastes a degree of freedom and adds noise to walk-forward comparison.
+      Fix: remove from SELECT query, feature list, and _row_to_features() in both
+      train_meta_label_model() and run_meta_label_champion_challenger(). 4 lines total.
+      Update feature count comments from "10 features" to "9 features".
+
+- [ ] **B1-5 — Wire feature flags for counterfactual and meta-label** (`backend/counterfactual_engine.py`, `backend/execution_engine.py`)
+      `feedback:counterfactual:enabled` and `model:meta_label:enabled` flags exist in
+      the UI but are never read by backend code. Operator has no kill-switch if either
+      misbehaves in production without a code deploy.
+      Fix: wrap label_counterfactual_outcomes() top with flag check (fail-open: missing
+      row / read error / exception → feature ENABLED, today's behaviour preserved).
+      Wrap meta-label inference block in execution_engine.py with same flag check.
+      Semantics: flag=false → disabled; flag missing/error → enabled (fail-open).
+
+**Batch 1 commit tag:** `feat(section-13): ROI fixes — risk ladder, EOD gates, earnings score, feature flags, feature hygiene`
+
+---
+
+### Batch 2 — Cleanup and Observability (ship together, after Batch 1)
+
+- [ ] **B2-1 — Sync sizing phase to Supabase** (`backend/calibration_engine.py`)
+      When evaluate_sizing_phase() advances the phase, it writes Redis only.
+      ConfigPage.tsx reads sizing_phase from trading_operator_config (Supabase) — never updated.
+      Operator UI shows stale phase indefinitely after auto-advance.
+      Fix: also upsert trading_operator_config.sizing_phase on every advance.
+
+- [ ] **B2-2 — Rename inline `_safe_float` → `_read_float_key`** (`backend/prediction_engine.py`)
+      Module-level _safe_float(value, default) and an inline _safe_float(key, default)
+      with a different signature coexist in the same function — name collision risk.
+      Fix: rename inline helper. Purely defensive, zero behaviour change.
+
+- [ ] **B2-3 — Add TODO to `drawdown_block` counter** (`backend/main.py`)
+      `drawdown_block` is in butterfly_gate_daily_stats reasons list but has no writer
+      anywhere in the codebase — reads 0 forever. Keep as placeholder, add comment.
+      Fix: add `# TODO: wire drawdown_block counter in execution_engine` comment.
+
+- [ ] **B2-4 — Document phase 4 as manual-only** (`src/pages/admin/trading/ConfigPage.tsx`)
+      Phase 4 exists in _RISK_PCT and the UI but is never reached by auto-advance (max=3).
+      Operator reading only the UI would expect auto-advance to handle it.
+      Fix: add comment in ConfigPage.tsx that phase 4 requires manual activation.
+
+- [ ] **B2-5 — Return None from _annualised_sharpe on negative mean** (`backend/calibration_engine.py`)
+      Currently returns 0.0 when mean_pnl <= 0. This is correct for the gate logic
+      (0 < 1.2 → no advance) but the payload shows "sharpe": 0.0 which is
+      indistinguishable from a genuinely computed very-bad Sharpe.
+      Fix: return None and add "reason": "negative_mean_pnl" to the payload. 2 lines.
+
+**Batch 2 commit tag:** `chore(section-13): observability + cleanup fixes`
+
+---
+
+### Deferred (conscious decision, not forgotten)
+
+- **Item 8** — Counterfactual spread width hardcoded to 5pt iron_condor win band.
+  Real 0DTE condors wing 20-50pts. Simulated P&L skews negative.
+  Defer: needs real strategy_hint data per no-trade cycle before fixing is meaningful.
+  Revisit after 30+ sessions of counterfactual data exists.
+
+- **Item 11** — No UI surfaces for 12A–12L observability data (realized vol, butterfly
+  counters, matrix cell values, drift alert banner, sizing phase ribbon).
+  Defer: separate UI sprint after paper trading validates the data is meaningful.
+
+---
+
+### Status
+
+- [ ] Batch 1 shipped
+- [ ] Batch 2 shipped
+
+*Section 13 opened: 2026-04-20 | Owner: tesfayekb*
+
+---
+
 *Task Register v1.0 — April 2026 — tesfayekb*
