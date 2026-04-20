@@ -268,20 +268,25 @@ All sub-phases 2A, 2B, 2C complete. All strategies wired and feature-flagged.
 All AI agents built and deployed. See TASK_REGISTER.md Section 7 for details.
 
 ### PHASE 3 — Meta-Label + Validation (IN PROGRESS)
-- 3A: Meta-label model — infrastructure built (dormant until 100 trades)
-- 3B: A/B shadow infrastructure — NOT YET BUILT
+- 3A: Meta-label model — infrastructure built, dormant until 100 closed trades
+- 3B: A/B shadow infrastructure — COMPLETE (commit: 20260426_ab_shadow_tables.sql)
+  - `ab_session_comparison` table live
+  - `shadow_engine.py` running daily
+  - `useAbComparison` hook feeding Activation Dashboard
+  - 90-day gate tracked in `paper_phase_criteria`
 - 3C: Calendar spread — COMPLETE
 
 ### PHASE 4 — User Platform (IN PROGRESS)
 - 4C: Trading Console — COMPLETE (see Section 7)
 - 4A, 4B, 4D — NOT YET BUILT
 
-### NEXT BUILDS (in priority order):
-1. HARD-B: External alerting (Gmail)
-2. DASH-A: Phase Activation Dashboard
-3. Phase 3B: A/B shadow infrastructure
-4. Signal enhancements (VIX term structure, time-of-day, GEX directional bias)
-5. Phase 5A: Earnings volatility system
+### NEXT BUILDS (in priority order as of April 2026):
+1. HARD-B: External alerting (Gmail/Slack on halt/drawdown events)
+2. VVIX daily history fix (mirrors S6 E-2 — deferred, tracked in S8 xfail test)
+3. Calendar spread MTM pricing (replace entry-value stub with real far/near differential)
+4. Loop 2 meta-label model training (requires 100+ clean closed trades post-S4)
+5. Real capital deployment (requires A/B gate: 90 days + 100 trades + +8% B lead)
+6. Phase 4A/4B/4D: User platform expansion (post real-capital validation)
 
 See trading-docs/08-planning/MASTER_PLAN.md for full phase specifications.
 Full roadmap: Download MARKETMUSE_PHASE_PLAN_V2.md from project lead.
@@ -375,7 +380,10 @@ Cursor task: `CURSOR_TASK_PHASE_2C_AI_AGENTS.md`
 
 ## PHASE 5 — Strategy Expansion (Months 6-18)
 
-#### 5A: Earnings Volatility System (backend_earnings/, 8-12 weeks)
+#### 5A: Earnings Volatility System — COMPLETE (April 2026)
+`backend_earnings/` built, `earnings_straddle` strategy wired,
+flag `strategy:earnings_straddle:enabled` (default OFF — enable
+manually after operator review). `/trading/earnings` page live.
 - Universe: AAPL, NVDA, META, TSLA, AMZN, GOOGL
 - Straddle/strangle when historical earnings move > implied move
 - 15% capital allocation

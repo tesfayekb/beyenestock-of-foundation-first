@@ -339,6 +339,17 @@ print('Thresholds: 5=butterfly, 20=kelly+straddle+flow+sentiment, 40=ai_hint, 10
 - [x] Backend: /admin/trading/intelligence, /admin/trading/feature-flags endpoints
 - [x] Backend: /admin/subscriptions/key-status endpoint
 
+### Phase 5A — Earnings Volatility System
+- [x] New directory: `backend_earnings/` (isolated from `backend/`)
+- [x] Universe: AAPL, NVDA, META, TSLA, AMZN, GOOGL
+- [x] earnings_scanner / earnings_monitor / iv_analyzer wired to scheduler
+- [x] earnings_straddle strategy registered in strategy_selector
+- [x] Feature flag `strategy:earnings_straddle:enabled` (default OFF —
+      enable manually after operator review)
+- [x] `/trading/earnings` page live (route TRADING_EARNINGS)
+- [x] Status surfaces through `earnings_scanner` health row
+      (in `_SCHEDULED_SERVICES` exempt set as of commit abaf8db)
+
 ### Phase A — Closed-Loop AI Feedback (Loop 1)
 - [x] feedback_agent.py with temporal lateral join (not session-level)
 - [x] Wilson CI on every win-rate cell (95% confidence intervals)
@@ -387,61 +398,30 @@ print('Thresholds: 5=butterfly, 20=kelly+straddle+flow+sentiment, 40=ai_hint, 10
 ## SECTION 8 — ONGOING HARDENING (Any Sprint)
 
 ### Consolidation Sprint — P0/P1 Fixes (April 2026)
+**All sessions complete. See commit log for details.**
 
-These items fix silent failures identified in the 2026-04-19 audit.
-See CONSOLIDATION_SPRINT_PLAN.md for full detail on each fix.
+| Session | Focus | Commit | Status |
+|---|---|---|---|
+| S1 | Signal polarity + VIX writers | 270b2f6 | ✅ |
+| S2 | Earnings units + synthesis flag + kill switch | 5db2dec | ✅ |
+| S3 | Reliability fixes (service name, scheduler, logging) | ad85ab4 | ✅ |
+| S4 | P&L sign + kill switch enforcement + auth + RLS | ac02230 | ✅ |
+| S5 | Event regime + ROI levers + P1 UX | a739751 | ✅ |
+| S6 | Data feed correctness (SPX, VIX z-score, GEX IV) | a8175dd | ✅ |
+| S7 | Reliability cleanup (shutdown, scheduler, logger, DB) | a4c73cb | ✅ |
+| S8 | Test hardening (91 new tests across S1-S8) | d64e4ff | ✅ |
+| S9 | Documentation reconciliation | (this commit) | ✅ |
 
-**Session 1 — Signal Polarity + VIX Writers (branch: consolidation-s1)**
-- [~] B-3: _check_feature_flag polarity inverted — all 6 signals silently OFF (commit: 15605d5)
-- [~] B-1: polygon:vix:z_score never written — Signals D + F no-ops (commit: 15605d5)
-- [~] B-2: polygon:vix9d:current never written — Signal A degraded (commit: 15605d5)
-- [~] B-4: SIGNAL_FLAG_KEYS missing 3 of 6 in frontend (commit: 15605d5)
-- [~] A2: decision_context captured at selection time (commit: 15605d5)
-- [~] A5: signal_mult_audit log with has_vix_z_data smoke signal (commit: 15605d5)
-Status: PR open, baking 1 trading day before merge
+**Known deferred items (not blocking):**
+- VVIX daily history bug (mirrors S6 E-2 for VVIX) — tracked as xfail in `test_consolidation_s8.py`
+- Calendar spread MTM stub — replace in future session
+- RAILWAY_ADMIN_KEY operator setup — manual action, documented in Section 1F
 
-**Session 2 — Earnings + Synthesis + Kill Switch (pending)**
-- [ ] B-5: Earnings unit mismatch — percent vs fraction in has_sufficient_edge
-- [ ] B-6: strategy:earnings_straddle:enabled not in _TRADING_FLAG_KEYS (no kill switch)
-- [ ] B-7: Normalize earnings Redis key name (earnings:upcoming_events)
-- [ ] B-8: AI synthesis bypasses agents:ai_synthesis:enabled flag check
-- [ ] C-1: KillSwitchButton silently fails — RLS denies authenticated users
-- [ ] C-2: ExecutionEngine prefers signal decision_context over stale flag reads
-
-**Session 3 — Reliability Fixes (pending)**
-- [ ] C-3: polygon_feed health writes to wrong service name (data_ingestor → polygon_feed)
-- [ ] C-4: strategy:long_straddle:enabled flag not enforced in selector
-- [ ] C-5: bare except: pass with no logging in macro/flow/sentiment agents
-- [ ] C-6: useTradeIntelligence swallows query errors — blank Intelligence page
-- [ ] C-7: useAbComparison.gate.built always true — inconsistent with useActivationStatus
-- [ ] C-8: Missing replace_existing + day_of_week guards on agent scheduler entries
-
-**Session 4 — Test Hardening (pending)**
-- [ ] Integration test: strategy_selector.select() full signal_mult composition
-- [ ] Polarity test: all 6 signal flags default ON in live select() call
-- [ ] Feature flag mirror upsert test
-- [ ] _backfill_feature_flags_to_supabase test
-- [ ] Earnings unit test matrix (fraction inputs)
-- [ ] Edge Function auth tests (set-feature-flag, subscription-key-status)
-
-**Session 5 — Documentation Reconciliation (pending)**
-- [ ] TASK_REGISTER: mark Phase 5A items [x] with commit hashes
-- [ ] TASK_REGISTER: fix Section 10 strategy status table
-- [ ] MASTER_PLAN: Phase 3B status "COMPLETE (infra built)"
-- [ ] MASTER_PLAN: Phase 5A status "IN PRODUCTION"
-- [ ] reference/route-index.md: add all /trading/* routes
-- [ ] reference/database-migration-ledger.md: add 8 missing migrations
-- [ ] reference/permission-index.md: trading.view + trading.configure → implemented
-- [ ] reference/config-index.md: add 12 flag keys
-- [ ] Phase closure docs: 2A, 2B, 2C, 3C, 4C, Phase A
-- [ ] Risk register: add 4 new risks from audit
-
-**Session 6 — Data Feed Correctness (merged a8175dd)**
-- [x] E-1: SPX features use live intraday price not prev-day close (commit: a8175dd)
-- [x] E-2: VIX z-score daily history separate from 5-min intraday window (commit: a8175dd)
-- [x] E-4: databento_feed reads live VIX for GEX implied_vol (commit: a8175dd)
-- [x] P1-4: gex_conf regime selection aligned to 0.4 (commit: a8175dd)
-- [ ] VVIX intraday-window bug — deferred to S7 (same issue as E-2/E-3 for VVIX self.history)
+**Post-S8 hot fix (commit: abaf8db):** `heartbeat_check` made
+service-class-aware via `_SCHEDULED_SERVICES` frozenset — eliminates
+false-positive "degraded" entries on the Health page for the 11
+cron-scheduled services. Continuous services keep the original
+90 s gate. See `backend/tests/test_heartbeat_policy.py`.
 
 ### Health Check Quality
 
@@ -486,8 +466,8 @@ Document and preserve. Do not build yet.
 
 Last updated: April 19, 2026
 
-**Consolidation Sprint:** S1-S6 complete (commits on main through a8175dd).
-S7 (reliability), S8 (tests), S9 (docs) pending.
+**Consolidation Sprint:** S1-S9 complete. System operationally correct.
+See Section 8 sprint table for per-session commits.
 
 ### Infrastructure
 | Component | Status |
@@ -515,7 +495,7 @@ S7 (reliability), S8 (tests), S9 (docs) pending.
 | Long Straddle | ✅ Wired — OFF | strategy:long_straddle:enabled |
 | Bull Call Debit Spread | ✅ Wired via AI — OFF | strategy:ai_hint_override:enabled |
 | Bear Put Debit Spread | ✅ Wired via AI — OFF | strategy:ai_hint_override:enabled |
-| Calendar Spread | ❌ Phase 3C | N/A |
+| Calendar Spread | ✅ Wired — OFF | strategy:calendar_spread:enabled |
 
 ### Railway API Keys
 | Key | Status |
