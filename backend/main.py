@@ -63,6 +63,26 @@ gex_engine = None
 prediction_engine = None
 background_tasks: List[asyncio.Task] = []
 
+# Services that fire once per day (or a few times per day on a schedule).
+# heartbeat_check must NOT label these "degraded" between scheduled fires —
+# that is their normal idle state, not a failure. Each service writes its
+# own healthy / idle / error / degraded from inside its job handler.
+# Continuous services (prediction_engine, gex_engine, etc.) keep the
+# existing 90-second staleness gate.
+_SCHEDULED_SERVICES = frozenset({
+    "economic_calendar",
+    "macro_agent",
+    "sentiment_agent",
+    "synthesis_agent",
+    "surprise_detector",
+    "flow_agent",
+    "earnings_scanner",
+    "feedback_agent",
+    "prediction_watchdog",
+    "emergency_backstop",
+    "position_reconciliation",
+})
+
 
 def load_jobs_from_registry() -> Dict[str, str]:
     rows = (
@@ -579,6 +599,41 @@ def _run_earnings_monitor_job() -> None:
         logger.error("earnings_monitor_job_failed", error=str(exc))
 
 
+def _run_morning_agents_idle_marker() -> None:
+    """
+    Mark once-per-day morning agents as idle after they've completed.
+
+    economic_calendar (8:25), macro_agent (8:30), surprise_detector (8:45),
+    and earnings_scanner (8:45) all fire pre-market and then go silent for
+    the rest of the trading day. Without an explicit idle write the Health
+    page would show no heartbeat for 6+ hours, which reads like failure.
+
+    The other once-per-day agents (synthesis_agent, sentiment_agent,
+    flow_agent, feedback_agent) already self-flip to idle when their
+    feature flag is off or it is a non-market day, so they are not
+    included here.
+
+    This job fires at 10:30 AM ET — well after every morning agent has
+    completed. It only writes idle, never overwrites a healthy / error
+    status that was just written, because write_health_status is called
+    AFTER the agents wrote their own status earlier in the morning.
+    """
+    for svc in (
+        "economic_calendar",
+        "macro_agent",
+        "surprise_detector",
+        "earnings_scanner",
+    ):
+        try:
+            write_health_status(svc, "idle")
+        except Exception as exc:
+            logger.error(
+                "morning_agents_idle_marker_failed",
+                service=svc,
+                error=str(exc),
+            )
+
+
 def _run_feedback_agent_job() -> None:
     """
     Phase A (Loop 1): Closed-loop feedback brief.
@@ -781,6 +836,13 @@ async def heartbeat_check() -> None:
             now = datetime.now(timezone.utc)
             stale = []
             for row in rows:
+                # Scheduled services manage their own status from inside
+                # their job handlers — heartbeat_check must not overwrite
+                # whatever they last wrote (healthy / idle / error /
+                # degraded) with a false-positive "degraded" between
+                # fires. Continuous services keep the 90 s gate below.
+                if row["service_name"] in _SCHEDULED_SERVICES:
+                    continue
                 heartbeat = datetime.fromisoformat(
                     row["last_heartbeat_at"].replace("Z", "+00:00")
                 )
@@ -1140,6 +1202,19 @@ async def on_startup() -> None:
             day_of_week="mon-fri",
             hour="9-15", minute="*/15",
             id="trading_earnings_monitor",
+            timezone="America/New_York",
+            replace_existing=True,
+        )
+        # Mark the four pre-market morning agents as idle at 10:30 AM ET
+        # so the Health page does not show 6+ hours of "no heartbeat"
+        # after they finish their once-per-day run. See
+        # _run_morning_agents_idle_marker() for rationale.
+        scheduler.add_job(
+            _run_morning_agents_idle_marker,
+            trigger="cron",
+            day_of_week="mon-fri",
+            hour=10, minute=30,
+            id="trading_morning_agents_idle_marker",
             timezone="America/New_York",
             replace_existing=True,
         )
