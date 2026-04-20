@@ -5,22 +5,27 @@ import {
   AlertDescription,
   AlertTitle,
 } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { AlertTriangle, ShieldOff } from 'lucide-react';
+import { AlertTriangle, ShieldOff, Play } from 'lucide-react';
 
 interface KillSwitchButtonProps {
   sessionId: string | null;
   sessionStatus: string | null;
 }
 
+// The kill-switch Edge Function accepts both 'halt' and 'resume' actions.
+// Previously this component rendered a dead "Session Already Halted" Badge
+// when the session was halted, leaving operators with no way to resume
+// trading from the UI. Now halted sessions get a Resume button that
+// toggles session_status back to 'active'.
 export function KillSwitchButton({ sessionId, sessionStatus }: KillSwitchButtonProps) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   const isHalted = sessionStatus === 'halted';
+  const action: 'halt' | 'resume' = isHalted ? 'resume' : 'halt';
 
   async function handleConfirm() {
     if (!sessionId) return;
@@ -33,24 +38,29 @@ export function KillSwitchButton({ sessionId, sessionStatus }: KillSwitchButtonP
       const { data, error } = await supabase.functions.invoke(
         'kill-switch',
         {
-          body: { session_id: sessionId, action: 'halt' },
+          body: { session_id: sessionId, action },
         },
       );
 
       if (error) throw error;
       const payload = data as { ok?: boolean; error?: string } | null;
       if (!payload?.ok) {
-        throw new Error(payload?.error ?? 'Kill switch failed');
+        throw new Error(
+          payload?.error ?? `${action === 'halt' ? 'Kill switch' : 'Resume'} failed`,
+        );
       }
 
       toast({
-        title: 'Session halted',
-        description: 'All trading has been halted for today.',
+        title: action === 'halt' ? 'Session halted' : 'Session resumed',
+        description:
+          action === 'halt'
+            ? 'All trading has been halted for today.'
+            : 'Trading has been resumed for today\u2019s session.',
       });
       setShowConfirm(false);
     } catch (err) {
       toast({
-        title: 'Kill switch failed',
+        title: action === 'halt' ? 'Kill switch failed' : 'Resume failed',
         description: err instanceof Error ? err.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -59,39 +69,48 @@ export function KillSwitchButton({ sessionId, sessionStatus }: KillSwitchButtonP
     }
   }
 
-  if (isHalted) {
-    return (
-      <Badge
-        variant="outline"
-        className="bg-muted text-muted-foreground border-border px-3 py-1"
-      >
-        <ShieldOff className="mr-1.5 h-3.5 w-3.5" />
-        Session Already Halted
-      </Badge>
-    );
-  }
-
   if (showConfirm) {
+    const isHaltConfirm = action === 'halt';
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+      <div
+        className={
+          isHaltConfirm
+            ? 'flex flex-col gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3'
+            : 'flex flex-col gap-3 rounded-md border border-success/30 bg-success/5 p-3'
+        }
+      >
         <Alert className="border-0 bg-transparent p-0">
-          <AlertTriangle className="h-4 w-4 text-destructive" />
-          <AlertTitle className="text-destructive text-sm font-semibold">
-            Confirm Kill Switch
+          {isHaltConfirm ? (
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+          ) : (
+            <Play className="h-4 w-4 text-success" />
+          )}
+          <AlertTitle
+            className={
+              isHaltConfirm
+                ? 'text-destructive text-sm font-semibold'
+                : 'text-success text-sm font-semibold'
+            }
+          >
+            {isHaltConfirm ? 'Confirm Kill Switch' : 'Confirm Resume'}
           </AlertTitle>
           <AlertDescription className="text-xs">
-            This will immediately halt all trading for today&apos;s session.
-            The session will be halted. You can resume trading from this page.
+            {isHaltConfirm
+              ? 'This will immediately halt all trading for today\u2019s session. You can resume trading from this page.'
+              : 'This will resume trading for today\u2019s session. New predictions and positions will be allowed again.'}
           </AlertDescription>
         </Alert>
         <div className="flex gap-2">
           <Button
             size="sm"
-            variant="destructive"
+            variant={isHaltConfirm ? 'destructive' : 'default'}
+            className={isHaltConfirm ? undefined : 'bg-success hover:bg-success/90 text-success-foreground'}
             onClick={handleConfirm}
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Halting…' : 'Confirm Halt'}
+            {isSubmitting
+              ? isHaltConfirm ? 'Halting\u2026' : 'Resuming\u2026'
+              : isHaltConfirm ? 'Confirm Halt' : 'Confirm Resume'}
           </Button>
           <Button
             size="sm"
@@ -106,6 +125,21 @@ export function KillSwitchButton({ sessionId, sessionStatus }: KillSwitchButtonP
     );
   }
 
+  if (isHalted) {
+    return (
+      <Button
+        variant="default"
+        size="sm"
+        className="bg-success hover:bg-success/90 text-success-foreground"
+        onClick={() => setShowConfirm(true)}
+        disabled={!sessionId}
+      >
+        <Play className="mr-1.5 h-4 w-4" />
+        RESUME TRADING
+      </Button>
+    );
+  }
+
   return (
     <Button
       variant="destructive"
@@ -114,7 +148,7 @@ export function KillSwitchButton({ sessionId, sessionStatus }: KillSwitchButtonP
       disabled={!sessionId}
     >
       <ShieldOff className="mr-1.5 h-4 w-4" />
-      KILL SWITCH — Halt All Trading
+      KILL SWITCH &mdash; Halt All Trading
     </Button>
   );
 }
