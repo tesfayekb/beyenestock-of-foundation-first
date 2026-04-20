@@ -403,6 +403,25 @@ def run_weekly_calibration_job() -> None:
     except Exception as exc:
         logger.error("weekly_meta_label_failed", error=str(exc))
 
+    # 12M: D2 champion/challenger retrain scaffold. Deliberately
+    # runs AFTER train_meta_label_model in the same Sunday job so
+    # the champion evaluated here is always the most recently
+    # trained v1 — if 12K just rewrote meta_label_v1.pkl this hour,
+    # 12M reads that exact file. Self-gates on
+    # meta_label_v1.pkl existing + >= 50 labeled rows in the 90d
+    # window; below either gate it is a pure pass-through. Wrapped
+    # in its own try/except so a retrain failure never blocks the
+    # rest of the calibration chain. Retargeted to the meta-label
+    # model rather than the directional model per the 2026-04-20
+    # operator confirmation — see docstring and TASK_REGISTER for
+    # the three spec deviations this resolves.
+    try:
+        from model_retraining import run_meta_label_champion_challenger
+        cc_result = run_meta_label_champion_challenger(redis_client)
+        logger.info("weekly_champion_challenger_complete", **cc_result)
+    except Exception as exc:
+        logger.error("weekly_champion_challenger_failed", error=str(exc))
+
 
 def run_weekly_model_performance_job() -> None:
     """Runs every Sunday at 6:30 PM ET (23:30 UTC) — after calibration."""

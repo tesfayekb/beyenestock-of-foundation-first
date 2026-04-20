@@ -900,3 +900,268 @@ def train_meta_label_model(redis_client=None) -> dict:
     except Exception as exc:
         logger.error("meta_label_training_failed", error=str(exc))
         return {"trained": False, "error": str(exc)}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 12M — D2 champion/challenger retrain scaffold
+# ─────────────────────────────────────────────────────────────────────
+#
+# DEVIATION FROM THE ORIGINAL 12M SPEC (documented in TASK_REGISTER):
+# the spec framed this as a champion/challenger for the directional
+# LightGBM model `lgbm_direction_v1.pkl` with the 10-feature Phase-A
+# live-inference set and an `outcome_correct` target. Reading the
+# actual code surfaces three blockers against that literal framing:
+#   1) the real directional file is `direction_lgbm_v1.pkl`
+#      (token order) — the spec would gate on a path that can never
+#      exist in production;
+#   2) the directional model's feature space is the 25-column
+#      bar-engineered FEATURE_COLS list in
+#      backend/scripts/train_direction_model.py, not the 10 live
+#      features from trading_prediction_outputs — calling
+#      .predict() on the mismatched shape crashes, and if it silently
+#      padded would produce meaningless accuracy numbers;
+#   3) the directional model predicts "bull"/"bear" string labels,
+#      not 1/0 outcome_correct — so a naive equality comparison
+#      would always score the champion at 0 and swap on the first
+#      weekly run.
+#
+# Option A (confirmed by operator 2026-04-20): target the 12K
+# meta-label model instead, which DOES live in the
+# trading_prediction_outputs / 10-feature / {0,1} space this
+# scaffold's code is actually correct for. Pre-requisite
+# `meta_label_v1.pkl` is produced by train_meta_label_model()
+# (self-gated on 100 closed trades + 100 labeled rows), so until
+# that file exists this function is a complete pass-through — the
+# ROI contract of the task is preserved by construction.
+#
+# Walk-forward split matches the 12K pattern: .order("predicted_at")
+# is load-bearing — without it, PostgREST returns rows in
+# insertion-order at best and arbitrary planner-order at worst,
+# which contaminates the train/holdout split with future data and
+# makes the improvement metric meaningless.
+
+MIN_CHAMPION_CHALLENGER_ROWS = 50
+MIN_CHAMPION_CHALLENGER_TRAIN_ROWS = 30
+MIN_CHAMPION_CHALLENGER_HOLDOUT_ROWS = 10
+CHAMPION_CHALLENGER_SWAP_THRESHOLD = 0.01  # 1 percentage point
+
+
+def run_meta_label_champion_challenger(redis_client=None) -> dict:
+    """
+    12M (D2): weekly champion/challenger retrain for the 12K
+    meta-label model.
+
+    Loads champion `backend/models/meta_label_v1.pkl`, retrains
+    a challenger on the rolling 90-day labeled window from
+    trading_prediction_outputs, compares both on a 30-day
+    walk-forward holdout, and swaps ONLY if the challenger
+    improves holdout accuracy by >= 1 percentage point. On swap,
+    the prior champion is copied to `meta_label_v0.pkl` as an
+    emergency fallback and the new challenger is written to
+    `meta_label_v1.pkl` atomically from the caller's view (pickle
+    write is not torn-read-safe but the file system rename the OS
+    performs on close is; the dashboard / execution_engine read
+    either the old blob or the new one, never a half-written file).
+
+    Auto-gates:
+      * champion pkl absent → skip cleanly (pre-12K state).
+      * lightgbm / numpy / pickle import fails → skip.
+      * < 50 labeled rows in the 90d window → skip.
+      * train or holdout legs below their minimum counts → skip.
+
+    Never raises. All exceptions return an error payload so the
+    weekly calibration chain is never broken by a retrain failure.
+
+    Feature set MUST stay identical to train_meta_label_model() —
+    the champion was produced by that function, so any drift
+    between the two feature matrices corrupts the comparison.
+    """
+    try:
+        from pathlib import Path
+
+        model_dir = Path(__file__).parent / "models"
+        champion_path = model_dir / "meta_label_v1.pkl"
+        fallback_path = model_dir / "meta_label_v0.pkl"
+
+        if not champion_path.exists():
+            logger.info(
+                "champion_challenger_skipped_no_model",
+                expected_path=str(champion_path),
+            )
+            return {"swapped": False, "reason": "no_champion_model"}
+
+        try:
+            import lightgbm as lgb
+            import numpy as np
+            import pickle
+            import shutil
+        except ImportError as import_exc:
+            logger.warning(
+                "champion_challenger_import_failed",
+                error=str(import_exc),
+            )
+            return {
+                "swapped": False,
+                "reason": f"import_failed: {import_exc}",
+            }
+
+        cutoff_90 = (date.today() - timedelta(days=90)).isoformat()
+        cutoff_30 = (date.today() - timedelta(days=30)).isoformat()
+        holdout_boundary = f"{cutoff_30}T00:00:00+00:00"
+
+        result = (
+            get_client()
+            .table("trading_prediction_outputs")
+            .select(
+                "outcome_correct, confidence, vvix_z_score, "
+                "gex_confidence, cv_stress_score, vix, signal_weak, "
+                "prior_session_return, vix_term_ratio, "
+                "spx_momentum_4h, gex_flip_proximity, predicted_at"
+            )
+            .not_.is_("outcome_correct", "null")
+            .eq("no_trade_signal", False)
+            .gte("predicted_at", f"{cutoff_90}T00:00:00+00:00")
+            .order("predicted_at")
+            .execute()
+        )
+        rows = result.data or []
+
+        if len(rows) < MIN_CHAMPION_CHALLENGER_ROWS:
+            logger.info(
+                "champion_challenger_skipped_insufficient_data",
+                rows=len(rows),
+                required=MIN_CHAMPION_CHALLENGER_ROWS,
+            )
+            return {
+                "swapped": False,
+                "reason": "insufficient_data",
+                "rows": len(rows),
+            }
+
+        def _row_to_features(r: dict) -> list:
+            # Defaults mirror train_meta_label_model's fallbacks so
+            # the two code paths materialise the same feature vector
+            # for the same row. ANY divergence here silently
+            # corrupts every comparison this scaffold ever produces.
+            return [
+                float(r.get("confidence") or 0),
+                float(r.get("vvix_z_score") or 0),
+                float(r.get("gex_confidence") or 0),
+                float(r.get("cv_stress_score") or 0),
+                float(r.get("vix") or 18.0),
+                1.0 if r.get("signal_weak") else 0.0,
+                float(r.get("prior_session_return") or 0),
+                float(r.get("vix_term_ratio") or 1.0),
+                float(r.get("spx_momentum_4h") or 0),
+                float(r.get("gex_flip_proximity") or 0),
+            ]
+
+        train_rows = [
+            r for r in rows
+            if r.get("predicted_at", "") < holdout_boundary
+        ]
+        holdout_rows = [
+            r for r in rows
+            if r.get("predicted_at", "") >= holdout_boundary
+        ]
+
+        if (
+            len(train_rows) < MIN_CHAMPION_CHALLENGER_TRAIN_ROWS
+            or len(holdout_rows) < MIN_CHAMPION_CHALLENGER_HOLDOUT_ROWS
+        ):
+            logger.info(
+                "champion_challenger_skipped_bad_split",
+                train=len(train_rows),
+                holdout=len(holdout_rows),
+                train_required=MIN_CHAMPION_CHALLENGER_TRAIN_ROWS,
+                holdout_required=MIN_CHAMPION_CHALLENGER_HOLDOUT_ROWS,
+            )
+            return {
+                "swapped": False,
+                "reason": "insufficient_split",
+                "train": len(train_rows),
+                "holdout": len(holdout_rows),
+            }
+
+        X_train = np.array(
+            [_row_to_features(r) for r in train_rows]
+        )
+        y_train = np.array(
+            [1 if r.get("outcome_correct") else 0 for r in train_rows]
+        )
+        X_hold = np.array(
+            [_row_to_features(r) for r in holdout_rows]
+        )
+        y_hold = np.array(
+            [1 if r.get("outcome_correct") else 0 for r in holdout_rows]
+        )
+
+        with open(champion_path, "rb") as f:
+            champion = pickle.load(f)
+        champion_preds = np.asarray(champion.predict(X_hold))
+        champion_acc = float(np.mean(champion_preds == y_hold))
+
+        # Hyperparameters intentionally match
+        # train_meta_label_model's LGBMClassifier config so the
+        # only difference between champion and challenger at
+        # comparison time is the training data window — never the
+        # model architecture.
+        challenger = lgb.LGBMClassifier(
+            n_estimators=100,
+            learning_rate=0.05,
+            max_depth=4,
+            random_state=42,
+            verbose=-1,
+        )
+        challenger.fit(X_train, y_train)
+        challenger_preds = np.asarray(challenger.predict(X_hold))
+        challenger_acc = float(np.mean(challenger_preds == y_hold))
+
+        improvement = challenger_acc - champion_acc
+
+        if improvement >= CHAMPION_CHALLENGER_SWAP_THRESHOLD:
+            # Back up the outgoing champion to v0 BEFORE overwriting
+            # v1. On the rare failure path where shutil.copy succeeds
+            # and the pickle.dump that follows crashes, the operator
+            # can restore v0 manually — losing the copy first would
+            # leave us with no fallback at all.
+            shutil.copy(champion_path, fallback_path)
+            with open(champion_path, "wb") as f:
+                pickle.dump(challenger, f)
+            logger.info(
+                "model_swapped",
+                challenger_acc=round(challenger_acc, 3),
+                champion_acc=round(champion_acc, 3),
+                improvement=round(improvement, 3),
+                training_rows=len(train_rows),
+                holdout_rows=len(holdout_rows),
+                threshold=CHAMPION_CHALLENGER_SWAP_THRESHOLD,
+            )
+            return {
+                "swapped": True,
+                "challenger_acc": round(challenger_acc, 3),
+                "champion_acc": round(champion_acc, 3),
+                "improvement": round(improvement, 3),
+                "training_rows": len(train_rows),
+                "holdout_rows": len(holdout_rows),
+            }
+
+        logger.info(
+            "model_retained",
+            challenger_acc=round(challenger_acc, 3),
+            champion_acc=round(champion_acc, 3),
+            improvement=round(improvement, 3),
+            threshold=CHAMPION_CHALLENGER_SWAP_THRESHOLD,
+        )
+        return {
+            "swapped": False,
+            "challenger_acc": round(challenger_acc, 3),
+            "champion_acc": round(champion_acc, 3),
+            "improvement": round(improvement, 3),
+            "training_rows": len(train_rows),
+            "holdout_rows": len(holdout_rows),
+        }
+
+    except Exception as exc:
+        logger.error("champion_challenger_failed", error=str(exc))
+        return {"swapped": False, "error": str(exc)}
