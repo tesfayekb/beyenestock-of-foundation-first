@@ -37,6 +37,42 @@ class PolygonFeed:
         # over-saturate the rolling window.
         self.vix_daily_history: List[float] = []
         self._vix_daily_date_written: Optional[str] = None
+        # 12A: True 20-day SPX daily realized vol. The prior
+        # implementation read self.spx_history (5-minute intraday
+        # bars, 60 samples max) and wrote the variance-of-5-min-log-
+        # returns * sqrt(252) to polygon:spx:realized_vol_20d. The
+        # annualization factor 252 is for *daily* returns, so
+        # annualizing 5-min returns that way underestimates by a
+        # factor of sqrt(78) ≈ 8.8 — producing 1.05-1.29% instead of
+        # the true ~15-20% SPX daily RV. Every downstream consumer
+        # (P0.4 IV/RV filter, LightGBM iv_rv_ratio feature, butterfly
+        # threshold tuning) read garbage.
+        #
+        # The new series is appended once per trading day in the same
+        # 19:00 UTC EOD gate as the VIX daily history (T1-7 pattern),
+        # sourcing each sample from polygon:spx:prior_day_return (the
+        # session-over-session return fixed by T1-4 in S13). Capped at
+        # 20 trading days.
+        self.spx_daily_returns: List[float] = []
+        self._spx_daily_date_written: Optional[str] = None
+        # T1-7 pattern: restore last-append date from Redis so a
+        # process restart near EOD can't double-append the same
+        # calendar day. Independent of the VIX guard — SPX may have
+        # appended today even if VIX hasn't, or vice versa. Best-
+        # effort: if Redis is unavailable at startup, fall back to
+        # the in-memory guard only (matches VIX's graceful degrade).
+        try:
+            _last_spx_date = self.redis_client.get(
+                "polygon:spx:daily_returns:last_date"
+            )
+            if _last_spx_date:
+                self._spx_daily_date_written = (
+                    _last_spx_date.decode()
+                    if isinstance(_last_spx_date, bytes)
+                    else _last_spx_date
+                )
+        except Exception:
+            pass  # Redis unavailable — in-memory guard only
         # B-2: latest VIX9D value (Signal A term ratio numerator).
         self.last_vix9d: Optional[float] = None
         self._stop_event = asyncio.Event()
@@ -136,27 +172,15 @@ class PolygonFeed:
                                     error=type(prev_exc).__name__,
                                 )
 
-                        if len(self.spx_history) >= 5:
-                            import math
-                            log_returns = [
-                                math.log(self.spx_history[i] / self.spx_history[i - 1])
-                                for i in range(1, len(self.spx_history))
-                            ]
-                            n = len(log_returns)
-                            mean_r = sum(log_returns) / n
-                            variance = sum((r - mean_r) ** 2 for r in log_returns) / n
-                            realized_vol = math.sqrt(variance * 252) * 100
-                            self.redis_client.setex(
-                                "polygon:spx:realized_vol_20d",
-                                86400,
-                                str(round(realized_vol, 4)),
-                            )
-                            logger.info(
-                                "polygon_realized_vol_updated",
-                                realized_vol=round(realized_vol, 2),
-                                vix=vix,
-                                history_len=len(self.spx_history),
-                            )
+                        # 12A: polygon:spx:realized_vol_20d is now
+                        # written once per trading day in
+                        # _append_spx_daily_return_if_due (called from
+                        # _store_vix_baseline's 19:00 UTC gate).
+                        # Writing it here from 5-minute intraday bars
+                        # annualized with the daily factor 252 was the
+                        # root cause of the 1.05-1.29% garbage values
+                        # that poisoned every downstream consumer —
+                        # see __init__ for the full analysis.
                     except Exception as exc:
                         logger.warning("polygon_iv_rv_update_failed", error=str(exc))
 
@@ -323,6 +347,15 @@ class PolygonFeed:
                 self.vix_daily_history = self.vix_daily_history[-20:]
                 self._vix_daily_date_written = today_str
 
+        # 12A: SPX daily realized vol — share the same 19:00 UTC EOD
+        # gate as VIX (but with an INDEPENDENT date-written guard so a
+        # VIX-only skip in the block above doesn't block SPX, and vice
+        # versa). Co-locating both daily updates here means a single
+        # code path runs after market close; _poll_loop no longer
+        # touches polygon:spx:realized_vol_20d.
+        if now.hour >= 19:
+            self._append_spx_daily_return_if_due(today_str)
+
         # --- Compute the regime z-score (daily preferred, intraday fallback) ---
         # Need at least 5 samples either way. If the daily window hasn't
         # reached 5 entries yet (cold start before backfill landed) we
@@ -376,6 +409,92 @@ class PolygonFeed:
             daily_days=len(self.vix_daily_history),
             history_len=n,
         )
+
+    def _append_spx_daily_return_if_due(self, today_str: str) -> None:
+        """12A: Append today's SPX session return to the 20-day rolling
+        window and recompute true daily realized vol.
+
+        Source: polygon:spx:prior_day_return, set once per poll in
+        _compute_spx_features() as
+            (live_price - prior_session_close) / prior_session_close
+        — the genuine session-over-session return fixed by T1-4 in S13.
+
+        Guards:
+          * In-memory: _spx_daily_date_written prevents re-append within
+            the same process after the first EOD pass.
+          * Redis: polygon:spx:daily_returns:last_date (25-day TTL,
+            restored in __init__) survives process restarts so a
+            restart at 19:05 UTC after an append at 19:00 UTC cannot
+            double-count. Mirrors T1-7's VIX daily history guard.
+
+        Writes (best-effort, never raises):
+          * polygon:spx:realized_vol_20d     — 24h TTL. Only when
+            len(spx_daily_returns) >= 5. Downstream readers
+            (prediction_engine IV/RV filter) already apply a
+            rv_val >= 5.0 warmth guard, so the 1-4 day cold-start
+            window is explicitly tolerated.
+          * polygon:spx:daily_returns:last_date — 25-day TTL restart
+            guard (comfortably covers long holiday weekends).
+        """
+        # Lazy-init for callers that bypass __init__ via __new__ (tests).
+        if not hasattr(self, "spx_daily_returns"):
+            self.spx_daily_returns = []
+        if not hasattr(self, "_spx_daily_date_written"):
+            self._spx_daily_date_written = None
+
+        if self._spx_daily_date_written == today_str:
+            return  # already appended today
+
+        try:
+            spx_return_raw = self.redis_client.get(
+                "polygon:spx:prior_day_return"
+            )
+            if spx_return_raw is None:
+                # prior_day_return hasn't landed yet (cold start, or
+                # _fetch_spx_prev_close failed). Skip cleanly — next
+                # session will retry.
+                return
+
+            daily_return = float(spx_return_raw)
+            self.spx_daily_returns.append(daily_return)
+
+            # Cap the rolling window at 20 trading days.
+            if len(self.spx_daily_returns) > 20:
+                self.spx_daily_returns = self.spx_daily_returns[-20:]
+
+            self._spx_daily_date_written = today_str
+
+            # Persist last-date to Redis (25-day TTL).
+            self.redis_client.setex(
+                "polygon:spx:daily_returns:last_date",
+                86400 * 25,
+                today_str,
+            )
+
+            if len(self.spx_daily_returns) >= 5:
+                import math
+                n = len(self.spx_daily_returns)
+                mean_r = sum(self.spx_daily_returns) / n
+                variance = sum(
+                    (r - mean_r) ** 2 for r in self.spx_daily_returns
+                ) / n
+                realized_vol = math.sqrt(variance * 252) * 100
+                self.redis_client.setex(
+                    "polygon:spx:realized_vol_20d",
+                    86400,
+                    str(round(realized_vol, 4)),
+                )
+                logger.info(
+                    "polygon_spx_daily_rv_updated",
+                    realized_vol=round(realized_vol, 2),
+                    daily_days=n,
+                    latest_return=round(daily_return, 4),
+                )
+        except Exception as exc:
+            logger.warning(
+                "polygon_spx_daily_rv_failed",
+                error=str(exc),
+            )
 
     async def _write_daily_open_if_needed(self, vvix_open: float) -> None:
         if not self._is_open_minute():
