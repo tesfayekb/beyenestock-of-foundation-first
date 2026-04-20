@@ -196,6 +196,31 @@ Deno.serve(async (req: Request): Promise<Response> => {
         )
     }
 
+    // T2-12: write an audit row so halt/resume is reconstructable
+    // from trading-console history. Without this the kill switch
+    // was a silent state mutation — operators could halt the book
+    // and there was no record of who/when/why. Soft-fail: audit
+    // failure must NEVER block the kill-switch response itself.
+    try {
+        await ctx.serviceClient.from('audit_logs').insert({
+            action:
+                body.action === 'halt'
+                    ? 'kill_switch_session_halted'
+                    : 'kill_switch_session_resumed',
+            target_type: 'trading_sessions',
+            target_id: body.session_id,
+            metadata: {
+                action: body.action,
+                user_id: ctx.userId,
+                session_status: updatePayload.session_status,
+                halt_reason: updatePayload.halt_reason ?? null,
+            },
+        })
+    } catch (auditErr) {
+        // Audit failure must never block the kill-switch response.
+        console.error('[KILL-SWITCH] audit log failed', auditErr)
+    }
+
     return jsonResponse(
         { ok: true, session_id: body.session_id, action: body.action },
         200,

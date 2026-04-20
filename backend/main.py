@@ -1460,7 +1460,49 @@ async def get_health() -> Dict[str, list]:
 # All handlers fail soft: never raise, always return a JSON-serializable dict.
 # ---------------------------------------------------------------------------
 
-from fastapi import Body as FBody, Header, HTTPException
+from fastapi import Body as FBody, Depends, Header, HTTPException
+
+
+def _require_admin_key(
+    x_api_key: str = Header(default="", alias="X-Api-Key"),
+) -> None:
+    """T1-14: FastAPI dependency — gate all /admin/* GET endpoints.
+
+    Before this, six endpoints (intelligence, feature-flags, key-status,
+    activation/status, ab/status, earnings/status) were fully open to
+    anyone who guessed the Railway URL. They expose AI agent briefs,
+    the live feature-flag state (including the kill switch), masked
+    API-key presence, and A/B validation metrics — enough to fingerprint
+    the trading engine and confirm whether capital is deployed.
+
+    Behaviour:
+      * When ``config.RAILWAY_ADMIN_KEY`` is set (production path):
+        caller MUST present ``X-Api-Key: <that value>`` or we raise
+        401.
+      * When ``RAILWAY_ADMIN_KEY`` is unset (legacy / dev): endpoints
+        remain open but we log a warning each request. Production
+        deploys MUST set the secret; Railway already does in the
+        current environment.
+
+    NOTE: ``/health`` does NOT use this dependency — Railway's platform
+    health-probe hits it every few seconds and cannot present a secret.
+    That endpoint only returns liveness metadata (no trading state).
+    """
+    admin_key = getattr(config, "RAILWAY_ADMIN_KEY", "")
+    if admin_key:
+        if x_api_key != admin_key:
+            logger.warning(
+                "admin_endpoint_unauthorized",
+                provided_header_present=bool(x_api_key),
+            )
+            raise HTTPException(status_code=401, detail="Unauthorized")
+    else:
+        # Fail-open behaviour preserved so dev / legacy deploys that
+        # have not set RAILWAY_ADMIN_KEY are not suddenly 401-locked
+        # out of their own admin console. Every request logs a
+        # warning so the gap is visible on the dashboard.
+        logger.warning("admin_endpoint_open_no_railway_admin_key")
+
 
 # Whitelist of feature flags exposed to the trading console UI.
 # Adding a key here makes it readable AND writable from the frontend —
@@ -1514,7 +1556,9 @@ _SIGNAL_FLAGS = {
 
 
 @app.get("/admin/trading/intelligence")
-async def get_trading_intelligence():
+async def get_trading_intelligence(
+    _auth: None = Depends(_require_admin_key),  # T1-14
+):
     """Return all AI agent brief summaries + feature flag states from Redis.
 
     Used by the Trading Console War Room to render the AI Intelligence panel.
@@ -1562,7 +1606,9 @@ async def get_trading_intelligence():
 
 
 @app.get("/admin/trading/feature-flags")
-async def get_feature_flags():
+async def get_feature_flags(
+    _auth: None = Depends(_require_admin_key),  # T1-14
+):
     """Return the current state of every trading feature flag in Redis.
 
     Strategy/agent flags are default OFF (absent key = false).
@@ -1604,7 +1650,9 @@ def _mask_key(key_value: str) -> str:
 
 
 @app.get("/admin/subscriptions/key-status")
-async def get_subscription_key_status():
+async def get_subscription_key_status(
+    _auth: None = Depends(_require_admin_key),  # T1-14
+):
     """Return key configured status + masked preview for each API key.
 
     Reads os.environ via config.py only — never touches Supabase.
@@ -1691,7 +1739,9 @@ async def get_subscription_key_status():
 
 
 @app.get("/admin/activation/status")
-async def get_activation_status():
+async def get_activation_status(
+    _auth: None = Depends(_require_admin_key),  # T1-14
+):
     """
     DASH-A: Phase Activation Dashboard data.
 
@@ -1781,7 +1831,9 @@ async def get_activation_status():
 
 
 @app.get("/admin/ab/status")
-async def get_ab_status():
+async def get_ab_status(
+    _auth: None = Depends(_require_admin_key),  # T1-14
+):
     """
     Phase 3B: Returns A/B gate status and recent daily comparisons.
 
@@ -1824,7 +1876,9 @@ async def get_ab_status():
 
 
 @app.get("/admin/earnings/status")
-async def get_earnings_status():
+async def get_earnings_status(
+    _auth: None = Depends(_require_admin_key),  # T1-14
+):
     """
     Phase 5A: Returns earnings system snapshot.
 
@@ -1929,6 +1983,26 @@ async def set_feature_flag(
             )
             raise HTTPException(status_code=401, detail="Unauthorized")
     else:
+        # T1-12: previously we only logged a warning and stayed open.
+        # That meant any caller who guessed the Railway URL could flip
+        # trading flags — including the kill switch, earnings_straddle,
+        # and capital:deployment_pct. In production we now hard-fail
+        # with 503 instead; operators MUST set RAILWAY_ADMIN_KEY before
+        # the flag POST endpoint becomes reachable. Dev / legacy deploys
+        # (ENVIRONMENT != "production") keep the legacy warn-and-allow
+        # behaviour so local toggling still works.
+        environment = getattr(config, "ENVIRONMENT", "development")
+        if environment == "production":
+            logger.error(
+                "feature_flag_endpoint_blocked_no_key_in_production",
+            )
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Feature flag endpoint disabled: "
+                    "RAILWAY_ADMIN_KEY not configured"
+                ),
+            )
         logger.warning("feature_flag_endpoint_open_no_admin_key_set")
 
     allowed = set(_TRADING_FLAG_KEYS)

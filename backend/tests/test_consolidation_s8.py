@@ -87,6 +87,7 @@ def _ensure_main_importable():
         fastapi.FastAPI = _StubFastAPI
         fastapi.Body = _passthrough
         fastapi.Header = _passthrough
+        fastapi.Depends = _passthrough  # S14 extension
         fastapi.HTTPException = _StubHTTPException
         sys.modules["fastapi"] = fastapi
 
