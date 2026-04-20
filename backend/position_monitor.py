@@ -13,6 +13,43 @@ from logger import get_logger
 
 logger = get_logger("position_monitor")
 
+# ─────────────────────────────────────────────────────────────────────
+# VALID EXIT REASONS — MUST match trading_positions_exit_reason_check
+# ─────────────────────────────────────────────────────────────────────
+# When adding a new exit_reason string anywhere below, you MUST also
+# add it to:
+#   supabase/migrations/20260421_exit_reason_comprehensive.sql
+#   (or a newer migration that drops and recreates the constraint)
+#
+# Skipping the migration step causes SILENT REJECTS from Postgres:
+# the monitor's outer try/except swallows the error and the row stays
+# status='open' forever, leaving the position stuck in the book.
+#
+# The AST-based test at backend/tests/test_exit_reason_constraint.py
+# enforces this invariant in CI. It parses this file + execution_engine.py
+# for every hardcoded exit_reason literal and asserts each one is in
+# the constraint's IN-list — so forgetting the migration fails CI,
+# not production.
+#
+# Current valid exit reasons (kept in sync with the migration above):
+#   ── emitted by this file ──
+#     take_profit_40pct              L~686  — B3: 40% of max profit
+#     stop_loss_150pct_credit        L~726  — B3: 150% of credit
+#     take_profit_debit_100pct       L~537  — debit strategies TP
+#     stop_loss_debit_100pct         L~546  — debit strategies SL
+#     cv_stress_exit_d017            L~702  — D-017 CV_Stress override
+#     time_stop_230pm_d010           L~95   — D-010 short-gamma 2:30 ET
+#     time_stop_345pm_d011           L~137  — D-011 hard close 3:45 ET
+#     emergency_backstop             L~188  — runaway-loss backstop
+#     watchdog_engine_silent         L~300  — engine heartbeat absent
+#     eod_reconciliation_stale_open  L~379  — EOD stale-open sweep
+#     straddle_pre_event_exit        L~470  — Phase 2B pre-event exit
+#   ── legacy values kept for historical rows ──
+#     profit_target, stop_loss, time_stop_230pm, time_stop_345pm,
+#     touch_prob_threshold, cv_stress_trigger, state4_degrading,
+#     portfolio_stop, circuit_breaker, capital_preservation, manual
+# ─────────────────────────────────────────────────────────────────────
+
 # Import strategy gamma classification
 SHORT_GAMMA_STRATEGIES = {
     "put_credit_spread", "call_credit_spread",
