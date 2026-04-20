@@ -927,26 +927,68 @@ were shipped without empirical validation. Need calibration against real outcome
 
 ---
 
-### 12H — Phase A LightGBM Feature Engineering Scaffold
+### 12H — Phase A LightGBM Feature Engineering Scaffold ✅ COMPLETE (2026-04-20, `8bc3c85`)
 **Priority: MEDIUM — start collection now, training at 90 labeled sessions**
 **Auto-activates training when:** `labeled_sessions >= 90`
 
-- [ ] In `backend/prediction_engine.py`, persist additional features to `trading_prediction_outputs`:
-      Add columns: `prior_session_return`, `vix_term_ratio`, `spx_momentum_4h`,
+- [x] In `backend/prediction_engine.py`, persist additional features to `trading_prediction_outputs`:
+      Added columns: `prior_session_return`, `vix_term_ratio`, `spx_momentum_4h`,
       `gex_flip_proximity`, `earnings_proximity_score`
-      Migration needed for each new column (IF NOT EXISTS)
-- [ ] New script `backend/scripts/download_historical_data.py`:
-      SPX daily OHLCV 2010-2026 via Polygon historical API
-      VIX daily 2010-2026 via FRED API (free)
-      Write to `backend/data/spx_daily.parquet` and `backend/data/vix_daily.parquet`
-- [ ] New script `backend/scripts/train_direction_model.py`:
-      Loads parquet files + labeled predictions from Supabase
-      47-feature LightGBM with walk-forward validation (no data leakage)
-      Auto-gates: only trains when `labeled_sessions >= 90`, logs `insufficient_data` otherwise
-      Output: `backend/models/lgbm_direction_v1.pkl`
-- [ ] Test: scaffold runs, returns `insufficient_data` when < 90 sessions
+      Migration `supabase/migrations/20260422_add_prediction_features.sql` (IF NOT EXISTS, idempotent)
+      Feature logic extracted to `_compute_phase_a_features()` for independent unit testing.
+      Fail-open convention: three numeric features default to 0.0 (valid warmup value),
+      two ratio features return NULL when inputs missing (LightGBM handles NULL natively;
+      fabricated 1.0/0 would teach a phantom signal during feed gaps).
+      Incidental fix: corrected `vix` field in output dict (was always collapsing to 18.0
+      fallback because the prior call passed a pre-fetched value through the inline
+      `_safe_float(key, default)` helper that expects a Redis key, not a value).
+- [x] New script `backend/scripts/download_historical_data.py`:
+      **Already existed** with a superset of the spec: SPX 5-min bars, SPX daily
+      (Polygon + CBOE + yfinance), VIX/VVIX/VIX9D daily (CBOE free CSV) →
+      `backend/data/historical/*.parquet` + `download_manifest.json`. Per instruction
+      not to overwrite existing functionality, left intact.
+- [x] `backend/scripts/train_direction_model.py` — added 90-session auto-gate:
+      `count_labeled_sessions()` queries `trading_prediction_outputs` for distinct
+      session_ids with `outcome_correct IS NOT NULL`. Fails CLOSED (returns 0) on
+      Supabase error — refusing to train is safer than shipping a random-weight model.
+      `check_labeled_sessions_gate()` wraps this with the `>= 90` threshold.
+      `main()` calls the gate first and exits(0) cleanly on `insufficient_data`.
+      Exit code 0 (not non-zero) so a scheduled job doesn't page on-call during
+      the warming window.
+- [x] Tests (+9 new, 650 total passing, 0 failures, 0 regressions):
+      `test_prediction_engine.py`: 3 new covering feature contract, fail-open, and
+      div-by-zero guard on `spx_price=0`.
+      `test_phase_a_feature_scaffold.py`: 6 new — script existence, importability,
+      gate at 50 sessions, distinct-session counting (not raw rows), fail-closed
+      on Supabase outage, and 90-session boundary pinning.
 
-**Cursor sessions: 2 | Commit tag: feat(ml): Phase A LightGBM feature engineering scaffold**
+**FIX A / FIX B bundled with this task** (shipped in separate commit `4970095`
+on 2026-04-20, one commit earlier than the 12H commit):
+- FIX A — `src/hooks/trading/useActivationStatus.ts`: `feedback:counterfactual:enabled`
+  flipped to `builtStatus: 'live'` with updated description now that 12E
+  (counterfactual engine) is actually running in production.
+- FIX B — `trading_system_health` upserts wired into both EOD batch jobs:
+  `run_counterfactual_job()` and `run_matrix_update()`. Uses `status='idle'` on
+  success (batch jobs are not heartbeat services) with per-run stats in the
+  `details` JSONB column, and `status='error'` with `last_error_message` on
+  exception. Health writes wrapped in their own try/except so observability
+  failures never mask the real job result. Required companion migration
+  `20260421_health_service_name_eod_jobs.sql` that expands the
+  `trading_system_health_service_name_check` CHECK constraint to allow
+  `counterfactual_engine` and `strategy_matrix` — without it Postgres would
+  silently reject every upsert. `HealthPage.tsx` `EXPECTED_SERVICES` now
+  includes both services.
+  Tests: 4 new (idle-on-success + error-on-exception for each job), asserting
+  exact service name, status, and `details` payload shape.
+
+**Pre-deploy actions**:
+- Apply `supabase/migrations/20260422_add_prediction_features.sql` to production
+  (idempotent via IF NOT EXISTS, safe any order).
+- Apply `supabase/migrations/20260421_health_service_name_eod_jobs.sql` to production
+  if FIX B is being deployed — without it the EOD health writes are rejected
+  by the CHECK constraint.
+
+**Cursor sessions: 2 | Commit tag: feat(ml): Phase A feature scaffold (12H)**
 
 ---
 
