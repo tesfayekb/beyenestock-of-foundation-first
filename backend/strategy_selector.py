@@ -808,6 +808,41 @@ class StrategySelector:
                             confidence=hint_confidence,
                             regime_top=ordered[0],
                         )
+
+                        # Never allow AI hint to revive a strategy that
+                        # already stop-outted today. Mirrors the CHANGE 3
+                        # butterfly_forbidden gate in _stage1_regime_gate
+                        # so same-strategy re-entry is blocked regardless
+                        # of whether selection came from regime map or
+                        # AI hint override. Without this, the hint path
+                        # silently reintroduces iron_butterfly after a
+                        # 150% stop, defeating the whole safety sprint.
+                        #
+                        # Fail-open: Redis error → hint proceeds (no
+                        # regression vs. pre-guard behaviour). The
+                        # fallback is ordered[0] (regime top pick), so
+                        # trading still happens on this cycle — just
+                        # with the regime-preferred strategy instead of
+                        # the failed one. No trade is skipped entirely.
+                        try:
+                            from datetime import date as _date
+                            _today = _date.today().isoformat()
+                            _failed_key = (
+                                f"strategy_failed_today:{strategy_type}:{_today}"
+                            )
+                            if (
+                                self.redis_client
+                                and self.redis_client.get(_failed_key)
+                            ):
+                                logger.info(
+                                    "ai_hint_blocked_failed_today",
+                                    strategy=strategy_type,
+                                    date=_today,
+                                    fallback=ordered[0],
+                                )
+                                strategy_type = ordered[0]
+                        except Exception:
+                            pass  # fail open — never block trades on flag check
             except Exception as hint_err:
                 logger.warning(
                     "ai_hint_override_failed", error=str(hint_err)

@@ -494,3 +494,217 @@ def test_strategy_failed_flag_2h_ttl():
         f"expected 2h TTL (7200s), got {ttl}s — recalibration regressed"
     )
     assert value == "1"
+
+
+# ── AI hint override failed-today guard ───────────────────────────────
+# Mirrors the butterfly_forbidden gate in _stage1_regime_gate for the
+# AI hint selection path. Without this, strategy:ai_hint_override would
+# silently revive iron_butterfly after a 150% stop-out, defeating the
+# whole safety sprint. The fallback is ordered[0] — trading still
+# happens, just with the regime-preferred strategy.
+
+def _stub_select_dependencies(
+    monkeypatch, selector, ordered_list, hint_flag_on=True
+):
+    """Stub select()'s inner stages so the AI hint override block is
+    the only non-trivial logic under test. Downstream get_strikes()
+    is made to raise so select() returns None — we assert on
+    captured logger.info calls, which have already fired by that
+    point.
+    """
+    import strategy_selector as ss_mod
+
+    monkeypatch.setattr(
+        selector, "_check_feature_flag",
+        lambda key, default=False: (
+            hint_flag_on
+            if key == "strategy:ai_hint_override:enabled"
+            else default
+        ),
+    )
+    monkeypatch.setattr(
+        selector, "_stage0_time_gate",
+        lambda cv_stress: (True, "ok"),
+    )
+    monkeypatch.setattr(
+        selector, "_stage1_regime_gate",
+        lambda regime, time_gate: list(ordered_list),
+    )
+    monkeypatch.setattr(
+        selector, "_stage2_direction_filter",
+        lambda c, d, pb, pe: list(ordered_list),
+    )
+    monkeypatch.setattr(
+        ss_mod, "check_trade_frequency",
+        lambda trades, regime: (True, "ok"),
+    )
+
+    def _raise(*a, **k):
+        raise RuntimeError("stub: stop select() after AI hint block")
+    monkeypatch.setattr(ss_mod, "get_strikes", _raise)
+
+    info_calls: list = []
+    monkeypatch.setattr(
+        ss_mod.logger, "info",
+        lambda event, **kwargs: info_calls.append((event, kwargs)),
+    )
+    monkeypatch.setattr(ss_mod.logger, "warning", lambda *a, **k: None)
+    monkeypatch.setattr(ss_mod.logger, "error", lambda *a, **k: None)
+    monkeypatch.setattr(ss_mod.logger, "debug", lambda *a, **k: None)
+    return info_calls
+
+
+def _hint_prediction(hint="iron_butterfly", confidence=0.80):
+    return {
+        "regime": "pin_range",
+        "direction": "neutral",
+        "p_bull": 0.33,
+        "p_bear": 0.33,
+        "cv_stress_score": 0.0,
+        "rcs": 50.0,
+        "regime_agreement": True,
+        "strategy_hint": hint,
+        "confidence": confidence,
+    }
+
+
+def _hint_session():
+    return {
+        "id": "test",
+        "virtual_trades_count": 0,
+        "consecutive_losses_today": 0,
+        "session_status": "active",
+    }
+
+
+def test_ai_hint_blocked_when_strategy_failed_today(monkeypatch):
+    """When Redis has strategy_failed_today:iron_butterfly:<today>, an
+    AI hint of iron_butterfly must fall back to ordered[0] (regime-
+    based top pick, e.g. iron_condor). Trading is NOT skipped — the
+    regime pick still goes through. Mirrors CHANGE 3 from the safety
+    sprint for the AI hint selection path."""
+    from datetime import date
+    from strategy_selector import StrategySelector
+
+    today = date.today().isoformat()
+    failed_key = f"strategy_failed_today:iron_butterfly:{today}"
+
+    def _redis_get(key):
+        if key == "strategy:ai_hint_override:enabled":
+            return b"true"
+        if key == failed_key:
+            return b"1"
+        return None
+
+    mock_redis = MagicMock()
+    mock_redis.get.side_effect = _redis_get
+
+    selector = StrategySelector.__new__(StrategySelector)
+    selector.redis_client = mock_redis
+
+    info_calls = _stub_select_dependencies(
+        monkeypatch, selector,
+        ordered_list=["iron_condor", "iron_butterfly"],
+    )
+
+    selector.select(_hint_prediction(), _hint_session())
+
+    # The AI hint initially wins (strategy_from_ai_hint logged)...
+    chosen = [c for c in info_calls if c[0] == "strategy_from_ai_hint"]
+    assert len(chosen) == 1, (
+        "AI hint must be selected before the failed-today check fires"
+    )
+    assert chosen[0][1]["hint"] == "iron_butterfly"
+
+    # ...then the new guard reverts strategy_type to ordered[0].
+    blocked = [c for c in info_calls if c[0] == "ai_hint_blocked_failed_today"]
+    assert len(blocked) == 1, (
+        f"expected one ai_hint_blocked_failed_today log, "
+        f"got {[c[0] for c in info_calls]}"
+    )
+    assert blocked[0][1]["strategy"] == "iron_butterfly"
+    assert blocked[0][1]["fallback"] == "iron_condor", (
+        "fallback must be ordered[0] so trading continues — "
+        "no trade should be skipped entirely"
+    )
+    assert blocked[0][1]["date"] == today
+
+
+def test_ai_hint_allowed_when_no_failed_flag(monkeypatch):
+    """Clean Redis (no failed-today flag) → AI hint of iron_butterfly
+    proceeds untouched. The new guard is a no-op when the strategy
+    has not stop-outted today."""
+    from strategy_selector import StrategySelector
+
+    def _redis_get(key):
+        if key == "strategy:ai_hint_override:enabled":
+            return b"true"
+        return None  # no failed_today flag
+
+    mock_redis = MagicMock()
+    mock_redis.get.side_effect = _redis_get
+
+    selector = StrategySelector.__new__(StrategySelector)
+    selector.redis_client = mock_redis
+
+    info_calls = _stub_select_dependencies(
+        monkeypatch, selector,
+        ordered_list=["iron_condor", "iron_butterfly"],
+    )
+
+    selector.select(_hint_prediction(), _hint_session())
+
+    chosen = [c for c in info_calls if c[0] == "strategy_from_ai_hint"]
+    assert len(chosen) == 1
+    assert chosen[0][1]["hint"] == "iron_butterfly"
+
+    # The new guard must NOT fire when no flag is set.
+    blocked = [c for c in info_calls if c[0] == "ai_hint_blocked_failed_today"]
+    assert blocked == [], (
+        f"guard must be a no-op without the failed-today flag; "
+        f"got {blocked}"
+    )
+
+
+def test_ai_hint_fail_open_when_redis_unavailable(monkeypatch):
+    """If redis_client.get() raises during the failed-today check, the
+    AI hint must proceed normally (fail-open). This preserves ROI
+    during Redis outages: the hint still wins, no exception bubbles
+    up to callers. Matches the try/except pass pattern used by every
+    other butterfly safety gate."""
+    from strategy_selector import StrategySelector
+
+    class _FlakyRedis:
+        def __init__(self):
+            self._calls = 0
+
+        def get(self, key):
+            # First call (feature flag) succeeds; subsequent calls
+            # (the failed-today check) raise to simulate a mid-cycle
+            # Redis outage.
+            self._calls += 1
+            if key == "strategy:ai_hint_override:enabled":
+                return b"true"
+            raise ConnectionError("simulated Redis outage")
+
+    selector = StrategySelector.__new__(StrategySelector)
+    selector.redis_client = _FlakyRedis()
+
+    info_calls = _stub_select_dependencies(
+        monkeypatch, selector,
+        ordered_list=["iron_condor", "iron_butterfly"],
+    )
+
+    # Must NOT raise — the inner try/except swallows the Redis error.
+    selector.select(_hint_prediction(), _hint_session())
+
+    # AI hint still selected; guard silently skipped.
+    chosen = [c for c in info_calls if c[0] == "strategy_from_ai_hint"]
+    assert len(chosen) == 1, (
+        "AI hint selection must survive Redis errors (fail-open)"
+    )
+    blocked = [c for c in info_calls if c[0] == "ai_hint_blocked_failed_today"]
+    assert blocked == [], (
+        "Redis error must not trigger the block log — fail-open means "
+        "the hint proceeds unblocked"
+    )
