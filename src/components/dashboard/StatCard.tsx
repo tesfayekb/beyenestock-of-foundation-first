@@ -1,10 +1,14 @@
+import { type ReactNode } from 'react';
 import { LucideIcon, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 interface StatCardProps {
   title: string;
-  value: string | number;
+  // Widened from string | number so callers can pass a colored element
+  // (e.g. the formatPnl helper's <span className={pnl.className}>{pnl.text}</span>).
+  // String/number callers are unchanged — ReactNode is a superset.
+  value: ReactNode;
   icon: LucideIcon;
   trend?: { value: string; direction: 'up' | 'down' | 'neutral' };
   className?: string;

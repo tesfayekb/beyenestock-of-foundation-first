@@ -18,26 +18,13 @@ import {
   useTradingPositions,
   type PositionStatusFilter,
 } from '@/hooks/trading/useTradingPositions';
+import { formatPnl } from '@/lib/format-pnl';
 
 const TABS: { label: string; value: PositionStatusFilter }[] = [
   { label: 'All', value: 'all' },
   { label: 'Open', value: 'open' },
   { label: 'Closed', value: 'closed' },
 ];
-
-function formatPnl(value: number | null): string {
-  if (value == null) return '—';
-  const sign = value >= 0 ? '+' : '';
-  return `${sign}$${Math.abs(value).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function pnlClass(value: number | null): string {
-  if (value == null || value === 0) return 'text-muted-foreground';
-  return value > 0 ? 'text-success' : 'text-destructive';
-}
 
 function statusBadgeClass(status: string): string {
   const s = status.toLowerCase();
@@ -113,11 +100,16 @@ export default function TradingPositionsPage() {
         <StatCard title="Total Positions" value={totalCount} icon={TrendingUp} />
         <StatCard title="Open" value={openCount} icon={TrendingUp} />
         <StatCard title="Closed" value={closedCount} icon={TrendingUp} />
-        <StatCard
-          title="Total Virtual P&L"
-          value={totalPnl != null ? formatPnl(totalPnl) : '—'}
-          icon={TrendingUp}
-        />
+        {(() => {
+          const pnl = formatPnl(totalPnl);
+          return (
+            <StatCard
+              title="Total Virtual P&L"
+              value={<span className={pnl.className}>{pnl.text}</span>}
+              icon={TrendingUp}
+            />
+          );
+        })()}
       </div>
 
       {/* Tab filter */}
@@ -188,8 +180,9 @@ export default function TradingPositionsPage() {
                 </thead>
                 <tbody className="divide-y">
                   {data.map((pos, idx) => {
-                    const pnl =
+                    const rawPnl =
                       pos.status === 'closed' ? pos.net_pnl : pos.current_pnl;
+                    const pnl = formatPnl(rawPnl);
                     return (
                       <tr
                         key={pos.id}
@@ -240,11 +233,9 @@ export default function TradingPositionsPage() {
                             : '—'}
                         </td>
                         <td
-                          className={`px-4 py-3 text-right font-mono font-semibold ${pnlClass(
-                            pnl ?? null
-                          )}`}
+                          className={`px-4 py-3 text-right font-mono ${pnl.className}`}
                         >
-                          {formatPnl(pnl ?? null)}
+                          {pnl.text}
                         </td>
                         <td className="px-4 py-3">
                           <Badge

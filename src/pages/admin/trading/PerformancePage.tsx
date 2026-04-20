@@ -15,6 +15,7 @@ import { EmptyState } from '@/components/dashboard/EmptyState';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
+import { formatPnl } from '@/lib/format-pnl';
 
 interface TradingSessionSummaryRow {
   session_date: string;
@@ -35,20 +36,6 @@ interface ModelPerformanceRow {
   profit_factor_20d: number | null;
   preservation_triggers_this_week: number | null;
   challenger_active: boolean | null;
-}
-
-function formatPnl(value: number | null): string {
-  if (value == null) return '—';
-  const sign = value >= 0 ? '+' : '';
-  return `${sign}$${Math.abs(value).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function pnlClass(value: number | null): string {
-  if (value == null || value === 0) return 'text-muted-foreground';
-  return value > 0 ? 'text-success' : 'text-destructive';
 }
 
 function driftBadgeClass(status: string | null): string {
@@ -189,16 +176,17 @@ function StrategyBreakdownCard() {
                       </p>
                       <p className="text-xs text-muted-foreground">win</p>
                     </div>
-                    <div className="text-right">
-                      <p
-                        className={`text-sm font-semibold font-mono ${
-                          s.avgPnl >= 0 ? 'text-success' : 'text-destructive'
-                        }`}
-                      >
-                        {s.avgPnl >= 0 ? '+' : ''}${s.avgPnl.toFixed(2)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">avg</p>
-                    </div>
+                    {(() => {
+                      const pnl = formatPnl(s.avgPnl);
+                      return (
+                        <div className="text-right">
+                          <p className={`text-sm font-mono ${pnl.className}`}>
+                            {pnl.text}
+                          </p>
+                          <p className="text-xs text-muted-foreground">avg</p>
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
               </div>
@@ -323,11 +311,16 @@ export default function TradingPerformancePage() {
           value={sessions?.length ?? 0}
           icon={BarChart2}
         />
-        <StatCard
-          title="Total Virtual P&L"
-          value={totalPnl != null ? formatPnl(totalPnl) : '—'}
-          icon={BarChart2}
-        />
+        {(() => {
+          const pnl = formatPnl(totalPnl);
+          return (
+            <StatCard
+              title="Total Virtual P&L"
+              value={<span className={pnl.className}>{pnl.text}</span>}
+              icon={BarChart2}
+            />
+          );
+        })()}
         <StatCard
           title="Overall Win Rate"
           value={
@@ -490,6 +483,7 @@ export default function TradingPerformancePage() {
                       trades > 0
                         ? `${((wins / trades) * 100).toFixed(1)}%`
                         : '—';
+                    const pnl = formatPnl(s.virtual_pnl);
                     return (
                       <tr
                         key={s.session_date}
@@ -499,11 +493,9 @@ export default function TradingPerformancePage() {
                           {s.session_date}
                         </td>
                         <td
-                          className={`px-4 py-3 text-right font-mono text-xs font-semibold ${pnlClass(
-                            s.virtual_pnl
-                          )}`}
+                          className={`px-4 py-3 text-right font-mono text-xs ${pnl.className}`}
                         >
-                          {formatPnl(s.virtual_pnl)}
+                          {pnl.text}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-xs">
                           {trades}

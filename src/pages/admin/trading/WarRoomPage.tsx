@@ -40,6 +40,7 @@ import {
   isBriefStale,
 } from '@/hooks/trading/useTradeIntelligence';
 import { ROUTES } from '@/config/routes';
+import { formatPnl } from '@/lib/format-pnl';
 
 // P1-15: Single source of truth — must match HealthPage.tsx EXPECTED_SERVICES
 // exactly. Phantom services (learning_engine, sentinel, cboe_feed) were
@@ -91,11 +92,6 @@ function sessionStatusBadgeClass(status: string | null): string {
   if (s === 'halted') return 'bg-destructive/10 text-destructive border-destructive/20';
   if (s === 'closed') return 'bg-muted text-muted-foreground border-border';
   return 'bg-muted text-muted-foreground border-border';
-}
-
-function pnlTextClass(pnl: number | null): string {
-  if (pnl == null) return 'text-foreground';
-  return pnl >= 0 ? 'text-success' : 'text-destructive';
 }
 
 export default function TradingWarRoomPage() {
@@ -223,15 +219,16 @@ export default function TradingWarRoomPage() {
 
       {/* Top row: stat cards */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Virtual P&L"
-          value={
-            session?.virtual_pnl != null
-              ? `${session.virtual_pnl >= 0 ? '+' : ''}$${session.virtual_pnl.toFixed(2)}`
-              : '—'
-          }
-          icon={Activity}
-        />
+        {(() => {
+          const pnl = formatPnl(session?.virtual_pnl ?? null);
+          return (
+            <StatCard
+              title="Virtual P&L"
+              value={<span className={pnl.className}>{pnl.text}</span>}
+              icon={Activity}
+            />
+          );
+        })()}
         <StatCard
           title="Win Rate"
           value={winRate != null ? `${winRate.toFixed(1)}%` : '—'}
@@ -576,33 +573,30 @@ export default function TradingWarRoomPage() {
               </p>
             ) : (
               <div className="space-y-2">
-                {openPositions.slice(0, 5).map((pos) => (
-                  <div
-                    key={pos.id}
-                    className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs"
-                  >
-                    <div className="space-y-0.5 min-w-0">
-                      <p className="font-medium capitalize truncate">
-                        {pos.strategy_type ?? '—'} · {pos.instrument ?? '—'}
-                      </p>
-                      <p className="text-muted-foreground">
-                        {pos.contracts ?? 0} contracts · credit{' '}
-                        {pos.entry_credit != null
-                          ? `$${pos.entry_credit.toFixed(2)}`
-                          : '—'}
-                      </p>
-                    </div>
-                    <span
-                      className={`font-mono font-semibold shrink-0 ${pnlTextClass(
-                        pos.current_pnl ?? null
-                      )}`}
+                {openPositions.slice(0, 5).map((pos) => {
+                  const pnl = formatPnl(pos.current_pnl ?? null);
+                  return (
+                    <div
+                      key={pos.id}
+                      className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs"
                     >
-                      {pos.current_pnl != null
-                        ? `${pos.current_pnl >= 0 ? '+' : ''}$${pos.current_pnl.toFixed(2)}`
-                        : '—'}
-                    </span>
-                  </div>
-                ))}
+                      <div className="space-y-0.5 min-w-0">
+                        <p className="font-medium capitalize truncate">
+                          {pos.strategy_type ?? '—'} · {pos.instrument ?? '—'}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {pos.contracts ?? 0} contracts · credit{' '}
+                          {pos.entry_credit != null
+                            ? `$${pos.entry_credit.toFixed(2)}`
+                            : '—'}
+                        </p>
+                      </div>
+                      <span className={`font-mono shrink-0 ${pnl.className}`}>
+                        {pnl.text}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>
