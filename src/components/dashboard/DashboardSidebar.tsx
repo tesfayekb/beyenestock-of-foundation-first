@@ -85,7 +85,10 @@ export const DashboardSidebar = React.memo(function DashboardSidebar({ sections,
   );
 
   const activeDashboard = useMemo(
-    () => availableDashboards.find((d) => location.pathname.startsWith(d.basePath)),
+    () =>
+      availableDashboards.find((d) => location.pathname.startsWith(d.basePath)) ??
+      availableDashboards.find((d) => d.basePath === '/dashboard') ??
+      availableDashboards[0],
     [availableDashboards, location.pathname],
   );
 
