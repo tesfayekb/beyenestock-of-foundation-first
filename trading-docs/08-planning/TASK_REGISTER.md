@@ -460,6 +460,19 @@ Document and preserve. Do not build yet.
 - [ ] Unusual Whales paid API subscription
   (validate Polygon P/C alone adds value first — if yes, subscribe)
 
+- [ ] Phase C — Adaptive Risk Parameters: replace hardcoded 3% daily halt
+  threshold with volatility-scaled threshold (2.5× daily_stddev from real
+  trade history). Prevents false halts on volatile-but-profitable days.
+  Build after Loop 2 trained + 100 real closed trades. Extend
+  calibration_engine.py — infrastructure already exists.
+
+- [ ] Phase 5B — Earnings Learning Loop: AI learning layer on top of
+  rule-based earnings straddle system. Optimize edge score weights,
+  entry/exit timing per ticker, earnings universe expansion via vol
+  clustering. Build after 50+ earnings trades. Requires outcome labeling
+  (~4-6 hours once data exists). Current system (backend_earnings/) is
+  fully rule-based with no feedback loop.
+
 ---
 
 ## SECTION 10 — CURRENT SYSTEM STATUS
