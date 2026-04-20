@@ -645,6 +645,53 @@ class StrategySelector:
                 except Exception:
                     pass  # fail open on concentration-check error
 
+            # 12C: GEX wall stability — 30-minute rolling range check.
+            # If the pin has drifted >0.5% (≈35 SPX points at 7000) in
+            # the last 30 min, it is breaking: blocking butterfly and
+            # falling through to iron_condor (Option B) preserves
+            # trading while avoiding the exact failure mode that caused
+            # 3 butterfly losses on 2026-04-20 (wall shifted 80pts
+            # while system kept opening on the stale level).
+            # Requires 4+ samples before activating — self-gates during
+            # the first ~20 min of each session while gex_engine warms
+            # the history list. 12B counter is emitted via the shared
+            # butterfly_block_reason path, NOT a separate incr here
+            # (double-counting would distort gate-effectiveness stats).
+            if not butterfly_forbidden:
+                try:
+                    import json as _sjson
+                    wh_raw = (
+                        self.redis_client.get("gex:wall_history")
+                        if self.redis_client else None
+                    )
+                    if wh_raw:
+                        wh = _sjson.loads(wh_raw)
+                        if len(wh) >= 4:
+                            walls = [float(h["wall"]) for h in wh]
+                            spx_for_range = self._get_spx_price()
+                            wall_range_pct = (
+                                (max(walls) - min(walls)) / spx_for_range
+                                if spx_for_range > 0 else 0.0
+                            )
+                            if wall_range_pct > 0.005:
+                                butterfly_forbidden = True
+                                butterfly_block_reason = "wall_unstable"  # 12B
+                                forbidden_reason = (
+                                    f"wall_unstable_range_"
+                                    f"{wall_range_pct * 100:.2f}pct"
+                                )
+                                logger.info(
+                                    "butterfly_blocked_wall_unstable",
+                                    wall_range_pct=round(
+                                        wall_range_pct * 100, 3
+                                    ),
+                                    wall_min=round(min(walls), 1),
+                                    wall_max=round(max(walls), 1),
+                                    samples=len(wh),
+                                )
+                except Exception:
+                    pass  # fail open — wall history error never blocks trades
+
             if butterfly_forbidden:
                 logger.info(
                     "butterfly_forbidden",

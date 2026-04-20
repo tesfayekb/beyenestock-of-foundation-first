@@ -165,9 +165,51 @@ class GexEngine:
         self.redis_client.set("gex:nearest_wall", nearest_wall or "")
         self.redis_client.set("gex:flip_zone", flip_zone or "")
         self.redis_client.set("gex:confidence", confidence)
+
+        # 12C: append to rolling 30-min wall history so strategy_selector
+        # can block butterfly when the pin is breaking (wall drift > 0.5%
+        # over the last 30 min). 2026-04-20 losses: wall moved 7115→7195
+        # (80pts = 1.1%) while the system opened 3 butterflies on the old
+        # wall — this gate would have caught it once 4+ samples landed.
+        self._append_wall_history(nearest_wall)
+
         self.last_compute_at = datetime.now(timezone.utc)
         self._write_heartbeat(confidence)
         return {"gex_net": net_gex, "gex_confidence": confidence}
+
+    def _append_wall_history(self, nearest_wall) -> None:
+        """12C: append a timestamped wall entry and prune to 30 min.
+
+        Stored at Redis key `gex:wall_history` as a JSON list of
+        `{"ts": epoch_seconds, "wall": float}`. The key has a 1-hour
+        TTL so a crashed engine can't leave stale entries forever;
+        1h comfortably exceeds the 30-min window we read back.
+
+        Guards:
+          * `nearest_wall` may be None, "", or 0 when no positive
+            gamma mass exists — skip cleanly in that case. Downstream
+            only gates when there are 4+ samples anyway.
+          * Fail-open: any Redis/JSON error must not affect the GEX
+            computation — the wall-history key is purely advisory.
+        """
+        try:
+            if not nearest_wall:
+                return
+            wall_value = float(nearest_wall)
+            if wall_value <= 0:
+                return
+            import time as _time
+            key = "gex:wall_history"
+            raw = self.redis_client.get(key)
+            history = json.loads(raw) if raw else []
+            now_ts = _time.time()
+            history.append({"ts": now_ts, "wall": wall_value})
+            # Prune to last 30 minutes (1800s) so the rolling window
+            # always reflects current regime, not yesterday's pin.
+            history = [h for h in history if now_ts - h["ts"] < 1800]
+            self.redis_client.setex(key, 3600, json.dumps(history))
+        except Exception:
+            pass  # purely advisory — never affect GEX computation
 
     def _write_heartbeat(self, confidence: float) -> None:
         staleness = 0
