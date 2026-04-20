@@ -25,7 +25,12 @@ def get_or_create_session(session_date: Optional[date] = None) -> Optional[dict]
             .maybe_single()
             .execute()
         )
-        if result.data:
+        # T2-14: guard against transient Supabase responses where
+        # .execute() itself returns None. Without this, accessing
+        # .data raises AttributeError, the outer except logs
+        # "session_create_failed", and the caller (trading_cycle)
+        # skips the entire 5-minute cycle with reason "no_session".
+        if result is not None and result.data:
             return result.data
 
         new_session = {
@@ -52,7 +57,11 @@ def get_or_create_session(session_date: Optional[date] = None) -> Optional[dict]
             metadata={"session_date": date_str},
         )
         logger.info("session_created", session_date=date_str)
-        if not created or not created.data:
+        # T2-14: explicit None check before truthiness on .data.
+        # The previous `not created` worked but did not document the
+        # transient-None case from Supabase. This form makes the
+        # intent unambiguous and matches the guard above.
+        if created is None or not created.data:
             logger.error("session_upsert_empty_response", session_date=date_str)
             return None
         return created.data[0]
@@ -86,6 +95,11 @@ def get_today_session() -> Optional[dict]:
             .maybe_single()
             .execute()
         )
+        # T2-14: same guard as get_or_create_session — Supabase can
+        # return None on transient connection blips and we must not
+        # raise AttributeError on .data here.
+        if result is None:
+            return None
         return result.data
     except Exception as e:
         logger.error("session_fetch_failed", error=str(e))

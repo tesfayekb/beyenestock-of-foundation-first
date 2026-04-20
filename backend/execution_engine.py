@@ -402,6 +402,30 @@ class ExecutionEngine:
                     session_id=session_id,
                 )
 
+                # T0-8: on 5th consecutive loss, enforce the halt.
+                # Previously only logged "session_halt" — never called it.
+                # Now update session_status so trading_cycle and
+                # open_virtual_position both stop immediately.
+                # update_session is already imported at module top
+                # (line 12) — no local import needed.
+                if consecutive == 5:
+                    try:
+                        update_session(
+                            session_id,
+                            session_status="halted",
+                            halt_reason="D022_five_consecutive_losses",
+                        )
+                        logger.warning(
+                            "session_halted_d022_five_consecutive_losses",
+                            session_id=session_id,
+                        )
+                    except Exception as halt_exc:
+                        logger.error(
+                            "consecutive_loss_halt_failed",
+                            session_id=session_id,
+                            error=str(halt_exc),
+                        )
+
             # Write calibration log entry for slippage model training (D-015)
             try:
                 cal_entry = {

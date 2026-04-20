@@ -1044,6 +1044,8 @@ async def on_startup() -> None:
             minute="*/5",
             id="trading_prediction_cycle_local",
             replace_existing=True,
+            max_instances=1,   # T0-9: one cycle at a time — no overlap
+            coalesce=True,     # T0-9: skip missed fires if previous running
         )
         scheduler.add_job(
             run_eod_criteria_evaluation,

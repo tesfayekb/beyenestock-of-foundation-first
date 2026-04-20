@@ -27,7 +27,21 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 DATABENTO_API_KEY = os.getenv("DATABENTO_API_KEY")
 TRADIER_API_KEY = os.getenv("TRADIER_API_KEY")
 TRADIER_ACCOUNT_ID = os.getenv("TRADIER_ACCOUNT_ID")
-TRADIER_SANDBOX = os.getenv("TRADIER_SANDBOX", "true").lower() == "true"
+_tradier_sandbox_raw = os.getenv("TRADIER_SANDBOX")
+if _tradier_sandbox_raw is None:
+    # T2-13: no default — fail explicitly.
+    # In development: set TRADIER_SANDBOX=true.
+    # In production: set TRADIER_SANDBOX=false for live, true for paper.
+    # Generating a default silently routes live keys to wrong environment.
+    import warnings
+    warnings.warn(
+        "TRADIER_SANDBOX not set — defaulting to True (sandbox). "
+        "Explicitly set TRADIER_SANDBOX=true or TRADIER_SANDBOX=false.",
+        stacklevel=2,
+    )
+    TRADIER_SANDBOX = True
+else:
+    TRADIER_SANDBOX = _tradier_sandbox_raw.lower() == "true"
 POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
 
 # Phase 2A: Economic Intelligence Layer (all optional — system works without them)

@@ -80,12 +80,30 @@ def run_trading_cycle(
                 .eq("status", "open")
                 .execute()
             )
+            if open_result is None:
+                # T0-1b: None response → treat as error, halt this cycle.
+                # Combined with the T0-1a fail-closed drawdown change,
+                # this prevents trading on an unknown unrealized P&L.
+                logger.warning(
+                    "trading_cycle_mtm_fetch_none",
+                    reason="supabase returned None for open positions",
+                )
+                result["skipped_reason"] = "mtm_fetch_failed"
+                return result
             unrealized_pnl = sum(
                 (p.get("current_pnl") or 0.0)
                 for p in (open_result.data or [])
             )
-        except Exception:
-            pass  # use realized only if MTM fetch fails
+        except Exception as mtm_exc:
+            # T0-1b: MTM failure + drawdown check would use 0 unrealized.
+            # If we have open positions, 0 could mask a -3%+ loss already
+            # in the book. Halt this cycle rather than trade on uncertainty.
+            logger.warning(
+                "trading_cycle_mtm_fetch_failed",
+                error=str(mtm_exc),
+            )
+            result["skipped_reason"] = "mtm_fetch_failed"
+            return result
 
         daily_pnl = realized_pnl + unrealized_pnl
         if check_daily_drawdown(session["id"], daily_pnl, account_value):

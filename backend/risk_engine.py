@@ -390,11 +390,18 @@ def check_daily_drawdown(
             # circular-import risk at module load time.
             try:
                 from alerting import send_alert, CRITICAL
+                # T0-10: alert copy was wrong — positions are NOT
+                # auto-closed on halt. position_monitor continues
+                # to manage them (TP/SL still active). Corrected copy
+                # reflects what actually happens: only NEW entries
+                # are gated; the open book is unaffected.
                 send_alert(
                     CRITICAL,
                     "daily_halt_triggered",
                     f"Daily drawdown reached {drawdown_pct:.2%}. "
-                    f"All positions closed. Trading halted for today. "
+                    f"New entries halted for today. "
+                    f"Existing positions continue to be managed "
+                    f"(stops and TP still active). "
                     f"Session P&L: ${current_daily_pnl:.2f}.",
                 )
             except Exception:
@@ -403,8 +410,14 @@ def check_daily_drawdown(
         return False
 
     except Exception as e:
-        logger.error("check_daily_drawdown_failed", error=str(e))
-        return False
+        # T0-1a: fail CLOSED — if we can't check drawdown we must not trade.
+        # Returning False here was silently allowing trading during DB outages.
+        # The -3% halt is the last line of defense; it must never fail open.
+        logger.error(
+            "check_daily_drawdown_failed_halting",
+            error=str(e),
+        )
+        return True  # Treat as halted — cannot verify drawdown, do not trade
 
 
 def check_trade_frequency(
