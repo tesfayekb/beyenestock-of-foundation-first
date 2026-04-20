@@ -184,8 +184,18 @@ def _fetch_polygon_put_call(cfg) -> dict:
     Returns put/call volume breakdown plus ratio. Empty dict on failure.
     """
     try:
-        from datetime import date
-        today = date.today().isoformat()
+        # T1-11: use ET timezone for the 0DTE expiration date.
+        # date.today() is server-local (UTC on Railway). After 8 PM ET
+        # the UTC date rolls forward to the next day — we were then
+        # querying Polygon for tomorrow's expiration (empty / wrong-
+        # day options data) from ~8 PM ET until midnight ET every
+        # weekday. Trading hours on Railway land on the right UTC
+        # day, but the 8:45 PM ET synthesis refresh and any late-
+        # evening operator-triggered runs were polluting the flow
+        # brief with an empty put/call ratio.
+        from zoneinfo import ZoneInfo
+        trade_date = datetime.now(ZoneInfo("America/New_York")).date()
+        today = trade_date.isoformat()
 
         # S7-6: apiKey moved to the Authorization header — same pattern
         # as polygon_feed.py uses. Keeps the key out of Railway log

@@ -55,7 +55,11 @@ def test_prediction_skips_when_no_feed_data():
         "consecutive_losses_today": 0,
         "session_status": "active",
     }
-    with patch("prediction_engine.get_today_session", return_value=fake_session):
+    # S15 T2-4 forced-evolution: run_cycle now gates on is_market_open()
+    # before the feed-data check. This test validates the feed-data
+    # path specifically, so mock the calendar open.
+    with patch("prediction_engine.get_today_session", return_value=fake_session), \
+         patch("market_calendar.is_market_open", return_value=True):
         result = engine.run_cycle()
 
     assert result is not None

@@ -217,6 +217,38 @@ class PredictionEngine:
                         "gex_flip_zone_used": None,
                         "gex_conf_at_regime": 0.0,
                     }
+
+                # T2-5: minor catalyst branch (PPI, retail sales, IP,
+                # housing starts, etc.). Same "event" regime label so
+                # strategy_selector still picks the event-family
+                # strategies (long_straddle / calendar_spread) instead
+                # of a normal-day pin-range play, but with a softer
+                # cap than major catalysts:
+                #
+                #   major:   rcs=55  tier=moderate
+                #   minor:   rcs=65  tier=low
+                #
+                # Minor-catalyst days historically produce smaller
+                # close-to-close moves and tighter IV crush than CPI
+                # or NFP, so the sizing cap can relax. Previously
+                # these days fell through to the VVIX/GEX regime
+                # classifier entirely — losing the event override
+                # and the straddle/calendar routing that goes with it.
+                if intel.get("has_minor_catalyst"):
+                    logger.info(
+                        "regime_minor_catalyst_override",
+                        day_classification=intel.get("day_classification"),
+                    )
+                    return {
+                        "regime": "event",
+                        "regime_hmm": "event",
+                        "regime_lgbm": "event",
+                        "regime_agreement": True,
+                        "rcs": 65.0,
+                        "allocation_tier": "low",
+                        "gex_flip_zone_used": None,
+                        "gex_conf_at_regime": 0.0,
+                    }
         except Exception:
             pass  # Calendar unavailable — fall through to normal regime logic
 
@@ -697,6 +729,32 @@ class PredictionEngine:
                     "allocation_tier": "danger",
                     "spx_price": 5200.0,
                 }
+
+            # T2-4: gate the cycle on RTH (9:30 AM - 4:00 PM ET).
+            # Scheduler fires at minute="*/5" from hour 9, which means
+            # the 9:00, 9:05, 9:10, 9:15, 9:20, 9:25 fires land BEFORE
+            # the market is open. At those minutes Polygon /v3/snapshot
+            # has stale last-session data and Tradier quotes reflect
+            # pre-market thin microstructure — the resulting prediction
+            # rows pollute the outcome-labeling and drift-detection
+            # pipelines. Post-16:00 fires (there is no cron for them
+            # today, but market_calendar also returns False on holidays
+            # and early-close afternoons) are suppressed for the same
+            # reason.
+            #
+            # Import is method-local so that (a) the circular-import
+            # risk with market_calendar stays contained, (b) the entire
+            # block fails OPEN on any calendar error — a broken import
+            # must never silently stop trading during a real session.
+            try:
+                from market_calendar import is_market_open
+                if not is_market_open():
+                    logger.debug("prediction_cycle_skipped_market_closed")
+                    self._write_heartbeat()
+                    return None
+            except Exception:
+                # Fail open — cycle proceeds if calendar check fails.
+                pass
 
             self._cycle_count += 1
             session = get_today_session()

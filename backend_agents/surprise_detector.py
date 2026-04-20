@@ -30,6 +30,55 @@ LARGE_SURPRISE_THRESHOLD = 0.15  # 15% deviation from consensus = large surprise
 SMALL_SURPRISE_THRESHOLD = 0.05  # 5% = small surprise
 
 
+def _classify_direction(event_name: str, deviation: float) -> str:
+    """T1-10: classify the directional surprise for a macro event.
+
+    Pure function — event family matching plus deviation-bucket logic.
+    Extracted from _detect_surprises so the NFP polarity fix is
+    independently testable.
+
+    NFP polarity was previously broken: only three branches existed
+    (<5% = bull, >10% = bear, else = bear). The `else` swept in the
+    5-10% positive-deviation band ("mild jobs beat") and classified
+    it as bearish "too cold" — the opposite of the actual market
+    reaction. NFP prints in that band are Goldilocks: strong enough
+    to confirm growth, weak enough to keep the Fed benign.
+
+    Polarity now:
+      * > +10%  bear (too hot — Fed tightening risk)
+      * +5% to +10%  bull (mild beat — Goldilocks)
+      * -5% to +5%  bull (inline — slight positive bias)
+      * -10% to -5%  bull (mild miss — Fed less hawkish)
+      * < -10%  bear (recession fear)
+    """
+    if any(x in event_name for x in ["CPI", "PCE", "PPI"]):
+        # Higher inflation = bearish for SPX
+        return "bear" if deviation > 0 else "bull"
+
+    if any(x in event_name for x in ["Nonfarm", "Employment", "NFP", "ADP"]):
+        # T1-10: explicit branches — see docstring for the polarity map.
+        # Do NOT collapse the "mild beat" and "inline" branches into a
+        # single `abs(deviation) < 0.05` — the inline zone extends only
+        # to -5% on the miss side (anything beyond is a mild miss which
+        # still returns bull, but via a different semantic branch).
+        if deviation > 0.10:
+            return "bear"   # Too hot — Fed tightening risk
+        if deviation >= 0.05:
+            return "bull"   # Mild beat — Goldilocks
+        if deviation > -0.05:
+            return "bull"   # Inline — slight positive bias
+        if deviation >= -0.10:
+            return "bull"   # Mild miss — Fed less hawkish
+        return "bear"       # Too cold — recession fear
+
+    if "Federal Funds" in event_name:
+        return "neutral"  # Rate decisions require more context
+
+    # Generic: a beat on anything else we have no special polarity for
+    # is treated as growth-positive (bull), a miss as bearish.
+    return "bull" if deviation < 0 else "bear"
+
+
 def run_surprise_detector(redis_client) -> dict:
     """
     Main entry point. Run at 8:45 AM ET on catalyst days.
@@ -93,24 +142,11 @@ def _detect_surprises(intel: dict) -> list[dict]:
 
         deviation = (actual - estimate) / abs(estimate)
 
-        # Classify surprise direction based on event type
-        if any(x in event_name for x in ["CPI", "PCE", "PPI"]):
-            # Higher inflation = bearish for SPX
-            direction = "bear" if deviation > 0 else "bull"
-        elif any(x in event_name for x in ["Nonfarm", "Employment", "NFP", "ADP"]):
-            # Jobs: too hot = risk of Fed tightening = mildly bearish
-            # Too cold = recession fear = bearish
-            # Goldilocks (slight miss) = bullish
-            if abs(deviation) < 0.05:
-                direction = "bull"  # Goldilocks
-            elif deviation > 0.10:
-                direction = "bear"  # Too hot
-            else:
-                direction = "bear"  # Too cold
-        elif "Federal Funds" in event_name:
-            direction = "neutral"  # Rate decisions require more context
-        else:
-            direction = "bull" if deviation < 0 else "bear"
+        # T1-10: direction classification extracted to a pure module-level
+        # helper so it is independently testable without a live Finnhub
+        # payload. Same behaviour as before for CPI/PCE/PPI/Fed/generic,
+        # but fixes the NFP fall-through bug — see _classify_direction.
+        direction = _classify_direction(event_name, deviation)
 
         magnitude = (
             "large" if abs(deviation) > LARGE_SURPRISE_THRESHOLD

@@ -41,9 +41,33 @@ def label_prediction_outcomes(target_date: Optional[date] = None) -> dict:
     summary = {"labeled": 0, "skipped": 0, "errors": 0, "total": 0}
 
     try:
-        # Fetch unlabeled trade signals for target_date
-        day_start = f"{target_date.isoformat()}T00:00:00+00:00"
-        day_end = f"{target_date.isoformat()}T23:59:59+00:00"
+        # T2-2: build the day window from ET session boundaries, not
+        # UTC midnight. `predicted_at` is written as UTC timestamps by
+        # run_cycle, and an ET trading session straddles a UTC date
+        # boundary every evening after 8 PM ET (= next UTC day). The
+        # previous UTC-midnight-to-midnight filter on the target date
+        # missed every evening/overnight prediction that belonged to
+        # the just-closed ET session and mis-included pre-midnight
+        # UTC predictions from the prior ET session.
+        #
+        # Window: 4:00 AM ET (pre-market open, well before the 9:30
+        # RTH open the S15 T2-4 gate now enforces) through 8:00 PM ET
+        # (covers post-market labeling jobs). Both timestamps are
+        # timezone-aware so .isoformat() yields the correct UTC
+        # offset and PostgREST / Supabase do a proper timestamptz
+        # comparison.
+        from zoneinfo import ZoneInfo
+        ET = ZoneInfo("America/New_York")
+        day_start_et = datetime(
+            target_date.year, target_date.month, target_date.day,
+            4, 0, 0, tzinfo=ET,
+        )
+        day_end_et = datetime(
+            target_date.year, target_date.month, target_date.day,
+            20, 0, 0, tzinfo=ET,
+        )
+        day_start = day_start_et.isoformat()
+        day_end = day_end_et.isoformat()
 
         result = (
             get_client()
@@ -162,22 +186,34 @@ def label_prediction_outcomes(target_date: Optional[date] = None) -> dict:
 def compute_directional_accuracy(days: int = 20) -> dict:
     """
     Compute directional prediction accuracy over the last N days.
-    Accuracy = % of predictions where direction matched position outcome.
-    Proxy: bull prediction + win = correct; bear prediction + win = correct.
-    Phase 4B: uses virtual position P&L as outcome proxy.
+
+    T2-1: now reads outcome_correct directly from
+    trading_prediction_outputs. That column is populated by
+    label_prediction_outcomes(), which compares the predicted direction
+    against the actual SPX +30-minute move — the definition of
+    directional accuracy.
+
+    Previous implementation (Phase 4B) used virtual-position P&L win
+    rate as a proxy. That measures execution quality, not model
+    calibration. A bearish prediction that made money on a credit
+    spread was counted as "correct" even if SPX rallied, and drift
+    detection / champion-challenger responded to P&L luck instead of
+    calibration. The proxy had no reference to `direction` at all.
     """
     try:
         cutoff = (date.today() - timedelta(days=days)).isoformat()
+
         result = (
             get_client()
             .table("trading_prediction_outputs")
-            .select("direction, no_trade_signal, predicted_at, session_id")
+            .select("outcome_correct")
             .gte("predicted_at", cutoff)
             .eq("no_trade_signal", False)
+            .not_.is_("outcome_correct", "null")
             .execute()
         )
-        predictions = result.data or []
-        n = len(predictions)
+        rows = result.data or []
+        n = len(rows)
 
         if n < 5:
             return {
@@ -185,40 +221,21 @@ def compute_directional_accuracy(days: int = 20) -> dict:
                 "observations": n,
                 "days": days,
                 "sufficient_data": False,
+                "method": "outcome_correct",
             }
 
-        # Get closed positions in same period
-        pos_result = (
-            get_client()
-            .table("trading_positions")
-            .select("net_pnl, entry_regime, strategy_type")
-            .gte("entry_at", cutoff)
-            .eq("status", "closed")
-            .eq("position_mode", "virtual")
-            .execute()
-        )
-        positions = pos_result.data or []
-        p = len(positions)
-
-        if p < 3:
-            return {
-                "accuracy": None,
-                "observations": n,
-                "positions": p,
-                "days": days,
-                "sufficient_data": False,
-            }
-
-        # Simple proxy: win rate as accuracy proxy
-        wins = sum(1 for pos in positions if (pos.get("net_pnl") or 0) > 0)
-        win_rate = wins / p if p > 0 else 0
+        correct = sum(1 for r in rows if r.get("outcome_correct") is True)
+        accuracy = correct / n
 
         return {
-            "accuracy": round(win_rate, 4),
-            "observations": p,
+            "accuracy": round(accuracy, 4),
+            "observations": n,
+            "correct": correct,
             "days": days,
             "sufficient_data": True,
+            "method": "outcome_correct",
         }
+
     except Exception as e:
         logger.error("accuracy_compute_failed", days=days, error=str(e))
         return {
@@ -226,6 +243,7 @@ def compute_directional_accuracy(days: int = 20) -> dict:
             "observations": 0,
             "days": days,
             "sufficient_data": False,
+            "method": "outcome_correct",
         }
 
 
