@@ -1219,6 +1219,45 @@ class StrategySelector:
                     )
             # ── End signal enhancements ───────────────────────────────
 
+            # D3 (12D): regime x strategy performance matrix sizing.
+            # Cuts contracts by 25% for any (regime, strategy) cell
+            # where the last 90 days shows >= 10 trades and win_rate
+            # < 40%. Applied AFTER signal_mult but BEFORE event-day
+            # size cuts so event-day stacking is symmetric with the
+            # other multipliers. Fail-open: any Redis error leaves
+            # sizing unchanged. Cannot block a trade — only down-size.
+            try:
+                from strategy_performance_matrix import (
+                    get_matrix_sizing_multiplier,
+                )
+                matrix_mult = get_matrix_sizing_multiplier(
+                    self.redis_client,
+                    regime,
+                    strategy_type,
+                )
+                if matrix_mult != 1.0 and sizing["contracts"] > 0:
+                    original_contracts = sizing["contracts"]
+                    adjusted = max(
+                        1, int(sizing["contracts"] * matrix_mult)
+                    )
+                    sizing = {
+                        **sizing,
+                        "contracts": adjusted,
+                        "risk_pct": round(
+                            sizing["risk_pct"] * matrix_mult, 4
+                        ),
+                    }
+                    logger.info(
+                        "strategy_matrix_contracts_adjusted",
+                        original=original_contracts,
+                        adjusted=adjusted,
+                        multiplier=matrix_mult,
+                        regime=regime,
+                        strategy=strategy_type,
+                    )
+            except Exception:
+                pass  # fail open — matrix read must never block trades
+
             # Apply event-day multiplier after sizing
             if event_size_mult < 1.0 and sizing["contracts"] > 0:
                 original_contracts = sizing["contracts"]

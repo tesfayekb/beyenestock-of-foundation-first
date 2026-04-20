@@ -186,6 +186,24 @@ def data_ingestor_keepalive() -> None:
         logger.error("data_ingestor_keepalive_failed", error=str(exc))
 
 
+def run_matrix_update_job() -> None:
+    """D3 (12D): update the regime x strategy performance matrix.
+
+    Scheduled at 4:20 PM ET, mon-fri (scheduler TZ is America/New_York
+    so the cron runs at the wall-clock ET minute across DST). Reads
+    the last 90 days of closed virtual positions, aggregates per-cell
+    stats, and persists them to Redis for strategy_selector sizing.
+
+    Fail-open: any error is logged but must not crash the scheduler.
+    """
+    try:
+        from strategy_performance_matrix import run_matrix_update
+        result = run_matrix_update(redis_client)
+        logger.info("strategy_matrix_eod_complete", **result)
+    except Exception as exc:
+        logger.error("strategy_matrix_eod_failed", error=str(exc))
+
+
 def run_eod_criteria_evaluation() -> None:
     """Runs daily at 5:00 PM ET after market close.
     Step 1: Label today's predictions with realized SPX outcomes.
@@ -1143,6 +1161,22 @@ async def on_startup() -> None:
             hour=17,
             minute=0,
             id="trading_eod_criteria_evaluation",
+            replace_existing=True,
+        )
+        # D3 (12D): regime x strategy performance matrix refresh.
+        # Runs at 4:20 PM ET — after the 3:45 PM D-010 hard-close
+        # backstop has finalised net_pnl on the day's positions, but
+        # before the 5:00 PM criteria evaluation so operators see
+        # fresh sizing stats alongside GLC metrics. Scheduler TZ is
+        # America/New_York so hour=16 is wall-clock 4 PM ET across
+        # DST transitions (not UTC 4 PM).
+        scheduler.add_job(
+            run_matrix_update_job,
+            trigger="cron",
+            day_of_week="mon-fri",
+            hour=16,
+            minute=20,
+            id="strategy_matrix_eod_update",
             replace_existing=True,
         )
         scheduler.add_job(
