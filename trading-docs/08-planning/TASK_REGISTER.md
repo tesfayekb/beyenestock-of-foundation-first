@@ -994,16 +994,52 @@ on 2026-04-20, one commit earlier than the 12H commit):
 
 ### 12I — OCO Bracket Orders (C1)
 **Priority: MEDIUM — reduces exit slippage 30-50%**
-**Auto-activates when:** `TRADIER_SANDBOX=false` (real capital only)
+**Status: SCAFFOLD COMPLETE — SHIPPED `d1eab32` (2026-04-20)**
+**Auto-activates when:** `TRADIER_SANDBOX=false` AND `OCO_BRACKET_ENABLED=true`
 
-- [ ] In `backend/execution_engine.py`, after real position opened:
-      If `TRADIER_SANDBOX=false`: submit OCO bracket via Tradier bracket order API
-      Take-profit leg: limit at `entry_credit * 0.40` profit
-      Stop-loss leg: stop at `entry_credit * 1.50` loss
-- [ ] In `backend/position_monitor.py`: if `oco_order_id` on position,
-      check OCO fill status from Tradier instead of computing P&L manually
-- [ ] Migration: `ALTER TABLE trading_positions ADD COLUMN IF NOT EXISTS oco_order_id TEXT`
-- [ ] Test: in sandbox mode → no OCO submitted; real mode → OCO submitted
+- [x] In `backend/execution_engine.py`, after real position opened:
+      `_submit_oco_bracket()` helper posts to
+      `/v1/accounts/{id}/orders` with `class=bracket`, gated on
+      `(not TRADIER_SANDBOX) and OCO_BRACKET_ENABLED`. Outer try/except
+      guarantees OCO failure can never fail a position open.
+      Take-profit leg: limit at `entry_credit * 0.40` profit.
+      Stop-loss leg: stop at `entry_credit * 1.50` loss.
+      (`d1eab32`)
+- [x] In `backend/position_monitor.py`: TODO 12I comment added above
+      the stop-loss branch noting a future OCO fill-status check via
+      Tradier GET. Current P&L polling is safe — first exit wins,
+      second close attempt is a no-op because `close_virtual_position`
+      gates on `status='open'`. (`d1eab32`)
+- [x] Migration: `supabase/migrations/20260422_add_oco_order_id.sql`
+      adds `trading_positions.oco_order_id TEXT` idempotently via
+      `IF NOT EXISTS`. (`d1eab32`)
+- [x] Test: 10 new tests in `backend/tests/test_oco_bracket.py`
+      covering dual-guard, fail-open, missing credentials, payload
+      shape, and persistence. pytest: 660 passed, 1 skipped, 1 xfailed
+      (was 650, +10 for 12I). (`d1eab32`)
+
+**SHIPPED DIVERGENCE (safer than spec):** the spec called for activation
+via `TRADIER_SANDBOX=false` alone. Shipped implementation adds a
+deliberate second switch `OCO_BRACKET_ENABLED` (default `False`) because
+the scaffold has four **MUST-FIX** items documented in the docstring of
+`_submit_oco_bracket` that would produce rejected orders or wrong-sided
+closes if activated as-is:
+
+1. Hardcoded `side="buy_to_close"` is wrong for debit strategies
+   (long_*, debit_*_spread, long_straddle, calendar_spread).
+2. TP/SL math (`entry_credit * 0.60` / `entry_credit * 2.50`) is
+   inverted for debit strategies.
+3. `class: bracket` with `symbol: SPX` cannot close multi-leg spreads;
+   Tradier requires `class: multileg` with per-leg OCC option symbols.
+4. Sandbox round-trip verification (submit -> fill -> cancel) must
+   precede any production enable.
+
+The dual-flag guard preserves the ROI-neutral claim: today's production
+state (real mode with `OCO_BRACKET_ENABLED=false`, the default) is a
+no-op, and flipping a single env var can never accidentally submit
+broken orders. Base URL also routes to `sandbox.tradier.com` when
+`TRADIER_SANDBOX=true` so MUST-FIX #4 verification can be staged
+cleanly with both flags on against the sandbox account first.
 
 **Cursor sessions: 1 | Commit tag: feat(execution): OCO bracket orders C1**
 
