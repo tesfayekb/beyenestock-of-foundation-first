@@ -329,6 +329,28 @@ def run_weekly_calibration_job() -> None:
     except Exception as exc:
         logger.error("weekly_butterfly_calibration_failed", error=str(exc))
 
+    # 12J: earnings learning loop. edge_calculator lives in the
+    # sibling backend_earnings/ directory — mirror the sys.path
+    # insert pattern used by _run_earnings_scan_job / _entry_job /
+    # _monitor_job above. Self-gates on closed_earnings_trades >= 50;
+    # below that, compute_edge_score keeps reading the hardcoded
+    # EARNINGS_HISTORY dict.
+    try:
+        import os as _os
+        import sys as _sys
+        _EARNINGS_PATH = _os.path.abspath(
+            _os.path.join(
+                _os.path.dirname(__file__), "..", "backend_earnings"
+            )
+        )
+        if _EARNINGS_PATH not in _sys.path:
+            _sys.path.insert(0, _EARNINGS_PATH)
+        from edge_calculator import train_earnings_model
+        earnings_result = train_earnings_model(redis_client)
+        logger.info("weekly_earnings_model_complete", **earnings_result)
+    except Exception as exc:
+        logger.error("weekly_earnings_model_failed", error=str(exc))
+
 
 def run_weekly_model_performance_job() -> None:
     """Runs every Sunday at 6:30 PM ET (23:30 UTC) — after calibration."""

@@ -73,14 +73,48 @@ def monitor_earnings_positions(redis_client) -> dict:
                 exit_reason = _should_exit(pos, today, redis_client)
                 if exit_reason:
                     pricing = _approximate_current_value(pos)
+                    exit_value = pricing["current_value"]
                     ok = close_earnings_position(
                         position_id=pos["id"],
-                        exit_value=pricing["current_value"],
+                        exit_value=exit_value,
                         exit_reason=exit_reason,
                         actual_move_pct=pricing.get("actual_move_pct"),
                     )
                     if ok:
                         summary["closed"] += 1
+                        # 12J: label the closed outcome for the earnings
+                        # learning loop. close_earnings_position returns
+                        # bool (not the closed row) so we compute net_pnl
+                        # here from the pre-close debit + freshly
+                        # computed exit_value. Fail-open: any labeling
+                        # failure is swallowed inside
+                        # label_earnings_outcome and must not affect
+                        # the monitor summary.
+                        try:
+                            from edge_calculator import (
+                                label_earnings_outcome,
+                            )
+                            total_debit = float(pos.get("total_debit") or 0)
+                            net_pnl = round(exit_value - total_debit, 2)
+                            label_input = {
+                                **pos,
+                                "net_pnl": net_pnl,
+                                "exit_at": datetime.now(
+                                    timezone.utc
+                                ).isoformat(),
+                                "actual_move_pct": pricing.get(
+                                    "actual_move_pct"
+                                ),
+                            }
+                            label_earnings_outcome(
+                                label_input, redis_client
+                            )
+                        except Exception as label_exc:
+                            logger.warning(
+                                "earnings_outcome_label_outer_failed",
+                                position_id=pos.get("id"),
+                                error=str(label_exc),
+                            )
                     else:
                         summary["errors"] += 1
                 else:
