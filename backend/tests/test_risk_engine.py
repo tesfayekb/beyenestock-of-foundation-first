@@ -78,3 +78,83 @@ def test_check_trade_frequency_blocked_at_regime_cap():
     allowed, reason = check_trade_frequency(cap, "pin_range")
     assert allowed is False
     assert reason is not None
+
+
+# ── T0-7: floor-to-1 sizing when budget is ≥ 50% of one contract cost ──────────
+
+def test_minimum_1_contract_when_budget_above_50pct():
+    """
+    T0-7: Phase 1 sizing × D-004 moderate reduction (0.70×) on $100k gives
+    $100k × 0.004 × 0.70 = $280 max risk. A width-5 iron butterfly costs
+    $500/contract. int(280/500)=0 previously dropped every single-contract
+    moderate trade. The floor now rounds up to 1 when budget ≥ 50% of cost.
+    """
+    from risk_engine import compute_position_size
+    result = compute_position_size(
+        account_value=100_000.0,
+        spread_width=5.0,
+        sizing_phase=1,
+        allocation_tier="moderate",
+        strategy_type="iron_butterfly",
+    )
+    assert result["contracts"] == 1, (
+        f"Phase 1 moderate sizing must produce 1 contract minimum "
+        f"when budget is 56% of contract cost. Got {result['contracts']}"
+    )
+
+
+def test_zero_contracts_when_budget_below_50pct():
+    """
+    T0-7: The floor must NOT round up when the budget is genuinely too
+    small. $20k × 0.004 × 0.70 = $56. $56/$500 = 0.112 < 0.50 → 0 contracts.
+    Protects tiny accounts from auto-sizing to 1 on huge spreads.
+    """
+    from risk_engine import compute_position_size
+    result = compute_position_size(
+        account_value=20_000.0,
+        spread_width=5.0,
+        sizing_phase=1,
+        allocation_tier="moderate",
+        strategy_type="iron_butterfly",
+    )
+    assert result["contracts"] == 0, (
+        f"Budget 11% of contract cost must stay at 0 contracts. "
+        f"Got {result['contracts']}"
+    )
+
+
+def test_floor_does_not_override_danger_tier():
+    """
+    T0-7: Danger tier short-circuits to 0 contracts BEFORE the floor check.
+    The floor must not accidentally revive a danger-halted trade.
+    """
+    from risk_engine import compute_position_size
+    result = compute_position_size(
+        account_value=100_000.0,
+        spread_width=5.0,
+        sizing_phase=1,
+        allocation_tier="danger",
+        strategy_type="iron_butterfly",
+    )
+    assert result["contracts"] == 0, (
+        f"Danger tier must always return 0 contracts regardless of budget. "
+        f"Got {result['contracts']}"
+    )
+    assert result["size_reduction_reason"] == "allocation_tier_danger_d004"
+
+
+def test_floor_respects_zero_spread_width():
+    """
+    T0-7: spread_width=0 short-circuits to 0 contracts before the floor.
+    The floor must not kick in here (would also divide by zero).
+    """
+    from risk_engine import compute_position_size
+    result = compute_position_size(
+        account_value=100_000.0,
+        spread_width=0,
+        sizing_phase=1,
+        allocation_tier="moderate",
+        strategy_type="iron_butterfly",
+    )
+    assert result["contracts"] == 0
+    assert result["size_reduction_reason"] == "zero_spread_width"

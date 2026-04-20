@@ -362,6 +362,14 @@ def compute_position_size(
         max_risk_dollars = account_value * risk_pct
         contracts = int(max_risk_dollars / stressed_loss_per_contract)
 
+        # T0-7 floor: never size to zero when risk budget allows at least
+        # one contract — except danger tier which explicitly returns 0 above.
+        # Without this, D-004 moderate reduction (0.70×) on Phase 1 sizing
+        # produces $280 budget vs $500/contract → int(0.56) = 0 on every
+        # single-contract trade regardless of signal quality.
+        if contracts == 0 and max_risk_dollars >= stressed_loss_per_contract * 0.50:
+            contracts = 1
+
         logger.info(
             "position_sized",
             spread_width=spread_width,
