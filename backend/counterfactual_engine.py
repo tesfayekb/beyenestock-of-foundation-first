@@ -345,5 +345,43 @@ def generate_weekly_summary(
 
 
 def run_counterfactual_job(redis_client=None) -> Dict[str, Any]:
-    """Entry point invoked by the daily 4:25 PM ET scheduled job."""
-    return label_counterfactual_outcomes(redis_client)
+    """
+    Entry point invoked by the daily 4:25 PM ET scheduled job.
+
+    Writes `trading_system_health` so the Engine Health admin page
+    reflects the last run. Status is `idle` on success (the engine is
+    a batch job, not a heartbeat service — `idle` is the correct label
+    between runs) and `error` on exception. Per-run stats land in the
+    `details` JSONB column rather than as top-level kwargs, because
+    `trading_system_health` has no `labeled`/`skipped` columns — passing
+    them directly to `write_health_status` would silently fail the
+    upsert. Health writes are wrapped in their own try/except so any
+    observability failure never masks the real job result.
+    """
+    try:
+        result = label_counterfactual_outcomes(redis_client)
+        try:
+            from db import write_health_status
+            write_health_status(
+                "counterfactual_engine",
+                "idle",
+                details={
+                    "labeled": result.get("labeled", 0),
+                    "skipped": result.get("skipped", 0),
+                },
+            )
+        except Exception:
+            pass  # observability must never mask the real result
+        return result
+    except Exception as exc:
+        try:
+            from db import write_health_status
+            write_health_status(
+                "counterfactual_engine",
+                "error",
+                last_error_message=str(exc),
+            )
+        except Exception:
+            pass
+        logger.error("run_counterfactual_job_failed", error=str(exc))
+        return {"labeled": 0, "skipped": 0, "error": str(exc)}

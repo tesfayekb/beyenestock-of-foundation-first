@@ -330,3 +330,60 @@ def test_run_counterfactual_job_fail_open():
     assert "error" in result
     assert result["labeled"] == 0
     assert result["skipped"] == 0
+
+
+# ── 4. health-status writes (FIX 2 / admin Engine Health page) ────────
+
+def test_run_counterfactual_job_writes_idle_health_on_success():
+    """Happy path: the EOD job must upsert `counterfactual_engine`
+    with status='idle' so the admin Engine Health panel sees it as
+    a healthy batch job (not as an offline heartbeat service).
+    Per-run stats must land in the `details` JSONB column — the
+    table has no `labeled`/`skipped` columns, so passing them as
+    top-level kwargs would silently fail the upsert."""
+    from counterfactual_engine import run_counterfactual_job
+
+    mock_health = MagicMock(return_value=True)
+    stub_result = {"labeled": 7, "skipped": 2}
+
+    with patch(
+        "counterfactual_engine.label_counterfactual_outcomes",
+        return_value=stub_result,
+    ), patch("db.write_health_status", mock_health):
+        result = run_counterfactual_job()
+
+    assert result == stub_result
+    mock_health.assert_called_once()
+    args, kwargs = mock_health.call_args
+    assert args[0] == "counterfactual_engine"
+    assert args[1] == "idle"
+    assert kwargs.get("details") == {"labeled": 7, "skipped": 2}
+
+
+def test_run_counterfactual_job_writes_error_health_on_exception():
+    """Failure path: if label_counterfactual_outcomes itself raises
+    (not just returns an error dict), the wrapper must catch it,
+    record status='error' with the message, and return a safe
+    zero-valued result — never re-raise into the scheduler."""
+    from counterfactual_engine import run_counterfactual_job
+
+    mock_health = MagicMock(return_value=True)
+
+    def _boom(*_a, **_kw):
+        raise RuntimeError("unexpected labeler crash")
+
+    with patch(
+        "counterfactual_engine.label_counterfactual_outcomes", _boom
+    ), patch("db.write_health_status", mock_health):
+        result = run_counterfactual_job()
+
+    assert result["labeled"] == 0
+    assert result["skipped"] == 0
+    assert "unexpected labeler crash" in result["error"]
+    mock_health.assert_called_once()
+    args, kwargs = mock_health.call_args
+    assert args[0] == "counterfactual_engine"
+    assert args[1] == "error"
+    assert "unexpected labeler crash" in kwargs.get(
+        "last_error_message", ""
+    )

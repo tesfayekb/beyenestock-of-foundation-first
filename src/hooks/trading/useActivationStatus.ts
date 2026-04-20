@@ -243,11 +243,11 @@ export const ALL_FEATURES: FeatureDefinition[] = [
         label: 'Counterfactual Tracking',
         category: 'model',
         description:
-            'Learns from no-trade days — were they correct skips?',
+            'Simulates P&L on no-trade cycles. Weekly summary activates after 30 sessions.',
         activationThreshold: 30,
         thresholdType: 'trades',
         autoEnable: true,
-        builtStatus: 'not_built',
+        builtStatus: 'live',
     },
     {
         key: 'model:meta_label:enabled',

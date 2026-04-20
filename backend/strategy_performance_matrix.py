@@ -183,5 +183,47 @@ def get_matrix_sizing_multiplier(
 
 
 def run_matrix_update(redis_client) -> Dict[str, Any]:
-    """Entry point invoked by the scheduled EOD job in main.py."""
-    return update_performance_matrix(redis_client)
+    """
+    Entry point invoked by the scheduled EOD job in main.py.
+
+    Writes `trading_system_health` so the Engine Health admin page
+    reflects the last run. Per-run stats land in the `details` JSONB
+    column — `trading_system_health` has no `cells_updated` /
+    `positions_analyzed` columns, so passing them directly would
+    silently fail the upsert. Health writes are wrapped in their own
+    try/except so an observability failure can never mask the real
+    result of the matrix update.
+    """
+    try:
+        result = update_performance_matrix(redis_client)
+        try:
+            from db import write_health_status
+            write_health_status(
+                "strategy_matrix",
+                "idle",
+                details={
+                    "cells_updated": result.get("cells_updated", 0),
+                    "positions_analyzed": result.get(
+                        "positions_analyzed", 0
+                    ),
+                },
+            )
+        except Exception:
+            pass  # observability must never mask the real result
+        return result
+    except Exception as exc:
+        try:
+            from db import write_health_status
+            write_health_status(
+                "strategy_matrix",
+                "error",
+                last_error_message=str(exc),
+            )
+        except Exception:
+            pass
+        logger.error("run_matrix_update_failed", error=str(exc))
+        return {
+            "cells_updated": 0,
+            "positions_analyzed": 0,
+            "error": str(exc),
+        }

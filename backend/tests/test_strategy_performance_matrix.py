@@ -238,3 +238,60 @@ def test_matrix_zero_contracts_stays_zero():
     multiplier = 0.75
     adjusted = max(1, int(original * multiplier)) if original > 0 else 0
     assert adjusted == 0
+
+
+# ── health-status writes (FIX 2 / admin Engine Health page) ───────────
+
+def test_run_matrix_update_writes_idle_health_on_success():
+    """Happy path: EOD aggregator must upsert `strategy_matrix` with
+    status='idle' and stats in `details` JSONB. The table has no
+    `cells_updated`/`positions_analyzed` columns, so passing them as
+    top-level kwargs would silently fail the upsert."""
+    from strategy_performance_matrix import run_matrix_update
+
+    mock_health = MagicMock(return_value=True)
+    stub_result = {"cells_updated": 4, "positions_analyzed": 10}
+
+    with patch(
+        "strategy_performance_matrix.update_performance_matrix",
+        return_value=stub_result,
+    ), patch("db.write_health_status", mock_health):
+        result = run_matrix_update(MagicMock())
+
+    assert result == stub_result
+    mock_health.assert_called_once()
+    args, kwargs = mock_health.call_args
+    assert args[0] == "strategy_matrix"
+    assert args[1] == "idle"
+    assert kwargs.get("details") == {
+        "cells_updated": 4,
+        "positions_analyzed": 10,
+    }
+
+
+def test_run_matrix_update_writes_error_health_on_exception():
+    """Failure path: if update_performance_matrix raises, the wrapper
+    must catch it, record status='error' with the message, and return
+    a safe zero-valued result — never re-raise into the EOD scheduler."""
+    from strategy_performance_matrix import run_matrix_update
+
+    mock_health = MagicMock(return_value=True)
+
+    def _boom(*_a, **_kw):
+        raise RuntimeError("matrix aggregation crash")
+
+    with patch(
+        "strategy_performance_matrix.update_performance_matrix", _boom
+    ), patch("db.write_health_status", mock_health):
+        result = run_matrix_update(MagicMock())
+
+    assert result["cells_updated"] == 0
+    assert result["positions_analyzed"] == 0
+    assert "matrix aggregation crash" in result["error"]
+    mock_health.assert_called_once()
+    args, kwargs = mock_health.call_args
+    assert args[0] == "strategy_matrix"
+    assert args[1] == "error"
+    assert "matrix aggregation crash" in kwargs.get(
+        "last_error_message", ""
+    )

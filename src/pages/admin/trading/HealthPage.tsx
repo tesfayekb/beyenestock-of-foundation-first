@@ -65,6 +65,11 @@ const EXPECTED_SERVICES = [
   'earnings_scanner',
   // Phase A (Loop 1): closed-loop feedback brief, runs 9:10 AM ET
   'feedback_agent',
+  // 12D / 12E: end-of-day learning jobs (once per trading day)
+  // - strategy_matrix: regime x strategy performance matrix, 4:20 PM ET
+  // - counterfactual_engine: no-trade-cycle P&L simulation, 4:25 PM ET
+  'strategy_matrix',
+  'counterfactual_engine',
   // HARD-A: Circuit breaker health services
   // - prediction_watchdog: every 5 min during market hours, idle outside
   // - emergency_backstop: once at 3:55 PM ET
