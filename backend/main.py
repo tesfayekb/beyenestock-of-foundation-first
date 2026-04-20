@@ -186,6 +186,44 @@ def data_ingestor_keepalive() -> None:
         logger.error("data_ingestor_keepalive_failed", error=str(exc))
 
 
+def run_counterfactual_job_wrapper() -> None:
+    """D4 (12E): label today's no-trade predictions with simulated P&L.
+
+    Runs at 4:25 PM ET mon-fri — after the D3 matrix update (4:20 PM)
+    and before the 5:00 PM criteria evaluation so operator logs show
+    matrix → counterfactual → criteria in the expected order.
+
+    Fail-open: any error is logged but must not crash the scheduler.
+    """
+    try:
+        from counterfactual_engine import run_counterfactual_job
+        result = run_counterfactual_job(redis_client)
+        logger.info("counterfactual_eod_complete", **result)
+    except Exception as exc:
+        logger.error("counterfactual_eod_failed", error=str(exc))
+
+
+def run_counterfactual_weekly_wrapper() -> None:
+    """D4 (12E): weekly missed-opportunity summary, Sundays 6:30 PM ET.
+
+    Self-gates on `closed_sessions >= 30` inside generate_weekly_summary
+    — below that threshold it logs `counterfactual_summary_skipped_
+    insufficient_data` and returns None, so early-operating-week runs
+    cost one Supabase count query and nothing else.
+    """
+    try:
+        from counterfactual_engine import generate_weekly_summary
+        summary = generate_weekly_summary(redis_client)
+        if summary:
+            logger.info(
+                "counterfactual_weekly_complete",
+                week_ending=summary.get("week_ending"),
+                rows=summary.get("total_no_trade_rows"),
+            )
+    except Exception as exc:
+        logger.error("counterfactual_weekly_failed", error=str(exc))
+
+
 def run_matrix_update_job() -> None:
     """D3 (12D): update the regime x strategy performance matrix.
 
@@ -1177,6 +1215,31 @@ async def on_startup() -> None:
             hour=16,
             minute=20,
             id="strategy_matrix_eod_update",
+            replace_existing=True,
+        )
+        # D4 (12E): daily counterfactual labeling at 4:25 PM ET.
+        # Sits between the 4:20 matrix update and the 5:00 criteria
+        # evaluation. Scheduler TZ is America/New_York — hour=16 is
+        # wall-clock 4 PM ET across DST (NOT UTC 4 PM).
+        scheduler.add_job(
+            run_counterfactual_job_wrapper,
+            trigger="cron",
+            day_of_week="mon-fri",
+            hour=16,
+            minute=25,
+            id="counterfactual_eod_job",
+            replace_existing=True,
+        )
+        # D4 (12E): weekly missed-opportunity summary on Sundays at
+        # 6:30 PM ET, alongside run_weekly_model_performance_job.
+        # Self-gates on closed_sessions >= 30 inside the function.
+        scheduler.add_job(
+            run_counterfactual_weekly_wrapper,
+            trigger="cron",
+            day_of_week="sun",
+            hour=18,
+            minute=30,
+            id="counterfactual_weekly_job",
             replace_existing=True,
         )
         scheduler.add_job(
