@@ -177,7 +177,10 @@ def test_z_score_daily_key_written_when_daily_history_present():
 
     feed._store_vix_baseline(20.0)
 
-    written_keys = [c.args[0] for c in feed.redis_client.set.call_args_list]
+    # S13 T1-6: VIX z-score writes migrated from .set to .setex(7200).
+    written_keys = [
+        c.args[0] for c in feed.redis_client.setex.call_args_list
+    ]
     assert "polygon:vix:z_score_daily" in written_keys, (
         f"polygon:vix:z_score_daily not written. Keys: {written_keys}"
     )
@@ -201,7 +204,10 @@ def test_z_score_intraday_key_written_from_5min_window():
 
     feed._store_vix_baseline(19.1)
 
-    written_keys = [c.args[0] for c in feed.redis_client.set.call_args_list]
+    # S13 T1-6: intraday z-score also migrated from .set to .setex(7200).
+    written_keys = [
+        c.args[0] for c in feed.redis_client.setex.call_args_list
+    ]
     assert "polygon:vix:z_score_intraday" in written_keys, (
         f"polygon:vix:z_score_intraday not written. Keys: {written_keys}"
     )

@@ -837,8 +837,14 @@ def _run_feedback_agent_job() -> None:
 
 def pre_market_scan() -> None:
     """
-    Pre-market regime and day_type classification. Runs at 9:00 AM ET (14:00 UTC).
-    Classifies today's session as: trend, open_drive, range, reversal, event, unknown.
+    Pre-market regime and day_type classification. Runs at 9:35 AM ET.
+    (T1-2: was 9:00 AM — moved to ensure fresh VVIX/VIX data after the
+    first RTH polygon_feed poll has landed in Redis. At 9:00 AM the
+    VVIX 1h TTL from the prior session has long expired and the regime
+    classifier was reading vvix_z=0 for the entire session.)
+
+    Classifies today's session as: trend, open_drive, range, reversal,
+    event, unknown.
     Uses VVIX Z-score, overnight ATR proxy, and macro calendar check.
     Updates trading_sessions.day_type and day_type_confidence.
     """
@@ -1022,7 +1028,15 @@ async def on_startup() -> None:
                 trigger="cron",
                 day_of_week="mon-fri",
                 hour=9,
-                minute=0,
+                # T1-2: was minute=0 (9:00 AM ET). polygon_feed only
+                # starts polling at RTH open (9:30 AM ET) and the
+                # VVIX 1-hour TTL from the prior session expires
+                # ~5 PM ET the day before. At 9:00 AM the
+                # polygon:vvix:z_score key is missing → vvix_z=0.0
+                # → day_type misclassified as "range" for the entire
+                # session. Moving to 9:35 ensures the first RTH
+                # poll (9:30) has landed fresh data.
+                minute=35,
                 id="trading_pre_market_scan",
                 replace_existing=True,
             )

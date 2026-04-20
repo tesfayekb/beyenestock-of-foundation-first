@@ -19,6 +19,12 @@ class PolygonFeed:
         self.last_vvix: Optional[float] = None
         self.history: List[float] = []
         self.spx_history: List[float] = []
+        # T1-4: true previous-session SPX close, fetched once per
+        # session from /v2/aggs/ticker/I:SPX/prev. Used by
+        # _compute_spx_features() to write a real session-over-session
+        # prior_day_return instead of the 5-min-bar return that the
+        # original implementation accidentally wrote under the same key.
+        self.spx_prev_session_close: Optional[float] = None
         self.last_vix: Optional[float] = None
         # B-1: 5-min intraday rolling VIX window (~100 min when full).
         # Used for the fast intraday z-score and realised-vol calc.
@@ -104,7 +110,31 @@ class PolygonFeed:
                         spx_price = await self._fetch_spx_price()
                         if spx_price and spx_price > 0:
                             self.spx_history.append(spx_price)
-                            self.spx_history = self.spx_history[-20:]
+                            # T1-3: was -20. safe_return(48) for the
+                            # 4-hour intraday return needs >48 samples;
+                            # 20 is mathematically incapable of producing
+                            # a non-zero return_4h. 60 = 5h of 5-min
+                            # bars (full RTH session) — covers all
+                            # multi-timeframe LightGBM features.
+                            self.spx_history = self.spx_history[-60:]
+
+                        # T1-4: fetch true prior-session close once per
+                        # day. Re-fetch at the open minute (9:30) so a
+                        # process that was already running yesterday
+                        # picks up the new prior close on the new day.
+                        if (
+                            self.spx_prev_session_close is None
+                            or self._is_open_minute()
+                        ):
+                            try:
+                                prev = await self._fetch_spx_prev_close()
+                                if prev:
+                                    self.spx_prev_session_close = prev
+                            except Exception as prev_exc:
+                                logger.debug(
+                                    "polygon_spx_prev_close_skipped",
+                                    error=type(prev_exc).__name__,
+                                )
 
                         if len(self.spx_history) >= 5:
                             import math
@@ -217,8 +247,14 @@ class PolygonFeed:
             std_i = var_i ** 0.5
             if std_i > 0:
                 z_intraday = round((current - avg_i) / std_i, 4)
-                self.redis_client.set(
-                    "polygon:vix:z_score_intraday", z_intraday
+                # T1-6: 2-hour TTL — 24x the 5-min poll cadence so the
+                # key is always overwritten under healthy operation,
+                # but expires within 2h if the feed crashes (instead
+                # of persisting a stale z-score forever).
+                self.redis_client.setex(
+                    "polygon:vix:z_score_intraday",
+                    7200,
+                    str(z_intraday),
                 )
 
         # --- Daily: one append per trading day, after 19:00 UTC (~3 PM ET) ---
@@ -241,9 +277,51 @@ class PolygonFeed:
             now.hour >= 19
             and self._vix_daily_date_written != today_str
         ):
-            self.vix_daily_history.append(current)
-            self.vix_daily_history = self.vix_daily_history[-20:]
-            self._vix_daily_date_written = today_str
+            # T1-7: cross-check Redis so a process restart near EOD
+            # cannot double-append the same calendar day. The
+            # in-memory _vix_daily_date_written guard is wiped on
+            # every restart; without this Redis check, deploying at
+            # (say) 7:05 PM UTC after the daily append already ran at
+            # 7:00 PM UTC would land a second sample for the same
+            # date — biasing the rolling 20-day window for the next
+            # 20 sessions.
+            try:
+                redis_last = self.redis_client.get(
+                    "polygon:vix:daily_history:last_date"
+                )
+                # Production redis client uses decode_responses=True
+                # (returns str), but be defensive in case the client
+                # is constructed differently in tests.
+                if isinstance(redis_last, bytes):
+                    redis_last = redis_last.decode()
+
+                if redis_last == today_str:
+                    # Already appended today (likely in a prior
+                    # process). Sync the in-memory guard but FALL
+                    # THROUGH so we still recompute and write the
+                    # z-score with the current sample — only the
+                    # history append is skipped.
+                    self._vix_daily_date_written = today_str
+                else:
+                    self.vix_daily_history.append(current)
+                    self.vix_daily_history = self.vix_daily_history[-20:]
+                    self._vix_daily_date_written = today_str
+                    # 48h TTL = survives a long weekend; the next
+                    # 19:00 UTC append on the following session
+                    # overwrites it cleanly.
+                    self.redis_client.setex(
+                        "polygon:vix:daily_history:last_date",
+                        86400 * 2,
+                        today_str,
+                    )
+            except Exception:
+                # Redis failure — degrade to the original in-memory-
+                # only guard. Worst case is one duplicated append
+                # after a restart while Redis is down; better than
+                # silently skipping the daily sample entirely.
+                self.vix_daily_history.append(current)
+                self.vix_daily_history = self.vix_daily_history[-20:]
+                self._vix_daily_date_written = today_str
 
         # --- Compute the regime z-score (daily preferred, intraday fallback) ---
         # Need at least 5 samples either way. If the daily window hasn't
@@ -268,12 +346,26 @@ class PolygonFeed:
             return  # Zero variance — z-score undefined
 
         z_score = round((current - avg) / std, 4)
-        self.redis_client.set("polygon:vix:20d_mean", round(avg, 4))
-        self.redis_client.set("polygon:vix:20d_std", round(std, 4))
+        # T1-6: every VIX z-score / stat key now uses setex(7200).
+        # Bare .set() left these keys in Redis indefinitely — if the
+        # poller crashed mid-session the regime engine would keep
+        # reading yesterday's z-score for hours/days until manual
+        # intervention. 2h TTL = 24x the 5-min poll cadence, so the
+        # key is overwritten well before expiry under healthy ops.
+        self.redis_client.setex(
+            "polygon:vix:20d_mean", 7200, str(round(avg, 4))
+        )
+        self.redis_client.setex(
+            "polygon:vix:20d_std", 7200, str(round(std, 4))
+        )
         # Legacy key — kept for backward compat during the rollout.
         # New callers should read polygon:vix:z_score_daily instead.
-        self.redis_client.set("polygon:vix:z_score", z_score)
-        self.redis_client.set("polygon:vix:z_score_daily", z_score)
+        self.redis_client.setex(
+            "polygon:vix:z_score", 7200, str(z_score)
+        )
+        self.redis_client.setex(
+            "polygon:vix:z_score_daily", 7200, str(z_score)
+        )
         logger.debug(
             "polygon_vix_zscore_updated",
             vix=round(current, 2),
@@ -592,6 +684,44 @@ class PolygonFeed:
             )
         return None
 
+    async def _fetch_spx_prev_close(self) -> Optional[float]:
+        """T1-4: fetch the previous trading session's SPX close.
+
+        Uses /v2/aggs/ticker/I:SPX/prev — the same endpoint
+        _fetch_spx_close() used before S6 replaced live SPX with the
+        snapshot endpoint. We now bring it back, but only for the
+        prior_day_return feature, NOT for spx_history (which must
+        stay intraday-snapshot-driven for return_5m / 30m / 1h / 4h).
+
+        Returns None on failure; caller leaves spx_prev_session_close
+        unchanged so prior_day_return is simply not written that cycle.
+        """
+        try:
+            import config
+            api_key = config.POLYGON_API_KEY
+            if not api_key:
+                return None
+
+            import httpx
+            headers = {"Authorization": f"Bearer {api_key}"}
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://api.polygon.io/v2/aggs/ticker/I:SPX/prev",
+                    headers=headers,
+                )
+            if resp.status_code == 200:
+                results = resp.json().get("results", []) or []
+                if results:
+                    close = float(results[0].get("c", 0.0) or 0.0)
+                    if close > 0:
+                        return close
+        except Exception as e:
+            logger.debug(
+                "polygon_spx_prev_close_failed",
+                error=type(e).__name__,
+            )
+        return None
+
     async def _fetch_spx_close(self) -> Optional[float]:
         """Deprecated — use _fetch_spx_price().
 
@@ -624,10 +754,33 @@ class PolygonFeed:
         self.redis_client.setex("polygon:spx:return_1h",  300, str(safe_return(12)))
         self.redis_client.setex("polygon:spx:return_4h",  300, str(safe_return(48)))
 
-        # Prior day return (use spx_history as daily closes)
-        if len(closes) >= 2:
-            prior = (closes[-1] - closes[-2]) / closes[-2] if closes[-2] else 0.0
-            self.redis_client.setex("polygon:spx:prior_day_return", 86400, str(prior))
+        # T1-4: prior_day_return = TRUE session-over-session return.
+        # The previous code computed (closes[-1] - closes[-2]) / closes[-2]
+        # over self.spx_history — but spx_history is a 5-minute intraday
+        # series, so this was actually a 5-minute bar return mislabeled
+        # as a daily return. LightGBM was learning from a feature that
+        # never matched its name.
+        # We now use the dedicated spx_prev_session_close value
+        # populated by _fetch_spx_prev_close() in the poll loop. If it
+        # has not landed yet (cold start) we deliberately SKIP the
+        # write rather than fall back to the wrong-by-construction
+        # 5-min return. Downstream readers already tolerate a missing
+        # key.
+        # Lazy-init guard for older callers / tests that construct
+        # PolygonFeed via __new__ and only populate spx_history (matches
+        # the same defensiveness used for vix_daily_history above).
+        if not hasattr(self, "spx_prev_session_close"):
+            self.spx_prev_session_close = None
+        if self.spx_prev_session_close and self.spx_prev_session_close > 0:
+            current_price = closes[-1] if closes else 0.0
+            if current_price > 0:
+                prior = (
+                    (current_price - self.spx_prev_session_close)
+                    / self.spx_prev_session_close
+                )
+                self.redis_client.setex(
+                    "polygon:spx:prior_day_return", 86400, str(prior)
+                )
 
         # RSI-14 (simplified from available history)
         if len(closes) >= 15:
@@ -641,9 +794,35 @@ class PolygonFeed:
             self.redis_client.setex("polygon:spx:rsi_14", 300, str(round(rsi, 2)))
 
     def _is_market_hours(self) -> bool:
-        import zoneinfo
-        now = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
-        return now.weekday() < 5 and time(9, 30) <= now.time() <= time(16, 0)
+        """T1-1: calendar-aware market-hours check.
+
+        The original weekday < 5 + time-range check happily polled on
+        NYSE holidays (e.g. Good Friday, Thanksgiving) and on early-
+        close days (1 PM ET on the day after Thanksgiving, day before
+        July 4 etc.). On those days we appended stale or non-session
+        data to vix_history and spx_history, biasing the z-scores for
+        the next 1-2 sessions until the bad samples rolled out.
+
+        market_calendar.is_market_open() honours the NYSE holiday
+        calendar, early-close schedule, and timezone correctly.
+
+        Import is method-local to avoid circular-import risk —
+        market_calendar must remain a leaf module that does not pull
+        in any data-feed code.
+        """
+        try:
+            from market_calendar import is_market_open
+            return is_market_open()
+        except Exception:
+            # Fail open to the legacy weekday + time-range check so a
+            # broken calendar import can never silently disable polling
+            # during regular market hours.
+            import zoneinfo
+            now = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
+            return (
+                now.weekday() < 5
+                and time(9, 30) <= now.time() <= time(16, 0)
+            )
 
     def _is_open_minute(self) -> bool:
         import zoneinfo

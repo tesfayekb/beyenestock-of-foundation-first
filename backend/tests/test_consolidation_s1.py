@@ -137,15 +137,21 @@ def test_vix_baseline_writes_three_keys_after_5_samples():
     feed.vix_history = []
     feed.redis_client = MagicMock()
 
-    # Push 4 samples — should NOT write yet (under 5-sample minimum).
+    # Push 4 samples — should NOT write the 20d/z_score keys yet.
+    # (S13 T1-6: writes migrated from .set to .setex with 7200 TTL.)
     for v in [18.0, 18.5, 19.0, 18.2]:
         feed._store_vix_baseline(v)
-    feed.redis_client.set.assert_not_called()
+    pre5_setex_keys = {
+        call.args[0] for call in feed.redis_client.setex.call_args_list
+    }
+    assert "polygon:vix:20d_mean" not in pre5_setex_keys
+    assert "polygon:vix:20d_std" not in pre5_setex_keys
+    assert "polygon:vix:z_score" not in pre5_setex_keys
 
     # 5th sample triggers the write.
     feed._store_vix_baseline(20.0)
     written_keys = {
-        call.args[0] for call in feed.redis_client.set.call_args_list
+        call.args[0] for call in feed.redis_client.setex.call_args_list
     }
     assert "polygon:vix:20d_mean" in written_keys
     assert "polygon:vix:20d_std" in written_keys
@@ -194,12 +200,14 @@ def test_vix_baseline_zscore_math_matches_signal_thresholds():
     # Spike — should produce a positive z_score >> 0.
     feed._store_vix_baseline(22.0)
 
+    # S13 T1-6: z_score writes migrated from .set to .setex(7200).
+    # setex args = (key, ttl_seconds, value) — value is at index 2.
     z_writes = [
-        call for call in feed.redis_client.set.call_args_list
+        call for call in feed.redis_client.setex.call_args_list
         if call.args[0] == "polygon:vix:z_score"
     ]
     assert z_writes, "z_score never written"
-    final_z = float(z_writes[-1].args[1])
+    final_z = float(z_writes[-1].args[2])
     assert final_z > 1.5, (
         f"Spike of 22.0 against ~18 baseline produced z={final_z}; "
         "Signal-D would not trip — units likely mismatched"
