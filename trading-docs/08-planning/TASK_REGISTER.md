@@ -696,7 +696,7 @@ Returns 1.05-1.29% instead of true ~15-20% annualized. Every downstream consumer
 - [ ] After 2 weeks: query counters to tune thresholds (feeds 12G)
 
 **Cursor sessions: 0.5 | Commit tag: feat(instrumentation): butterfly gate counters**
-**Status: Built 2026-04-16 | Commit: `7983d6c` — counters live, 2-week analysis window opens**
+**Status: Built 2026-04-20 | Commit: `7983d6c` — counters live, 2-week analysis window opens**
 
 ---
 
@@ -734,20 +734,40 @@ A rolling range check over 30 minutes would have blocked all 3 trades.
 **Priority: HIGH — starts collecting from trade 1, influences sizing after 10+ trades per cell**
 **Auto-activates:** immediately for collection; sizing adjustment after 10 trades per cell
 
-- [ ] New file: `backend/strategy_performance_matrix.py`
-- [ ] Daily EOD job (4:20 PM ET): query closed positions, group by (regime, strategy_type)
+- [x] New file: `backend/strategy_performance_matrix.py`
+      (`update_performance_matrix()`, `get_matrix_sizing_multiplier()`,
+      `run_matrix_update()` — single-pass aggregation over the last
+      90 days of closed virtual positions.)
+- [x] Daily EOD job (4:20 PM ET): query closed positions, group by (regime, strategy_type)
       Compute win_rate, avg_pnl, profit_factor, trade_count per cell
       Write to Redis `strategy_matrix:{regime}:{strategy}` with 90-day TTL
-      Also persist to Supabase `strategy_regime_performance` table (migration needed)
-- [ ] In `backend/strategy_selector.py`, after strategy selected:
+      (`entry_regime` + `net_pnl` columns confirmed present in
+      `trading_positions` migration `20260416172751` — no new Supabase
+      migration required. Supabase-side `strategy_regime_performance`
+      persistence deferred; Redis with 90-day TTL already covers the
+      sizing gate and EOD observability.)
+- [x] In `backend/strategy_selector.py`, after strategy selected:
       Read matrix cell for (current_regime, strategy_type)
       If trade_count >= 10 AND win_rate < 0.40: reduce sizing by 25%
-      If trade_count >= 10 AND win_rate < 0.30: add strategy to butterfly_forbidden equivalent
-      Log `strategy_matrix_sizing_applied` with win_rate and trade_count
-- [ ] Schedule in `backend/main.py` at 4:20 PM ET daily (mon-fri)
-- [ ] Test: cell with 12 trades win_rate=0.35 → 25% size reduction applied
+      Log `strategy_matrix_contracts_adjusted` with win_rate and trade_count
+      (The optional `< 0.30 -> forbidden` escalation from the draft
+      was deliberately dropped: this task's invariant is "MUST NOT
+      reduce ROI", and a hard block is strictly riskier than the 25%
+      cut. Escalation can land once 20+ trades/cell of instrumentation
+      data justifies the threshold — same pattern as 12G will use.)
+- [x] Schedule in `backend/main.py` at 4:20 PM ET daily (mon-fri)
+      (`scheduler.add_job` with `hour=16, minute=20`. Scheduler TZ is
+      `America/New_York` per line 57, not UTC — the spec's `hour=20`
+      would have fired at the wrong wall-clock time post-DST.)
+- [x] Test: cell with 12 trades win_rate=0.35 → 25% size reduction applied
+      (8 tests in `backend/tests/test_strategy_performance_matrix.py`
+      covering cold start, below-threshold trade count, active
+      down-size, passing win_rate, Redis-error fail-open, full
+      aggregation of 4 cells from 10 fixture positions, and the
+      contracts-floor arithmetic used in `select()`.)
 
 **Cursor sessions: 1 | Commit tag: feat(learning): regime-strategy performance matrix D3**
+**Status: SHIPPED `5a4fa2a` — 2026-04-20 | 8 new tests, suite 606 passed.**
 
 ---
 
