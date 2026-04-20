@@ -728,7 +728,11 @@ def _run_macro_agent_job() -> None:
     try:
         import sys
         import os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend_agents"))
+        _AGENTS_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents")
+        )
+        if _AGENTS_PATH not in sys.path:
+            sys.path.insert(0, _AGENTS_PATH)
         from macro_agent import run_macro_agent
         if redis_client:
             run_macro_agent(redis_client)
@@ -748,7 +752,11 @@ def _run_synthesis_agent_job() -> None:
     try:
         import sys
         import os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend_agents"))
+        _AGENTS_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents")
+        )
+        if _AGENTS_PATH not in sys.path:
+            sys.path.insert(0, _AGENTS_PATH)
         from synthesis_agent import run_synthesis_agent
         if redis_client:
             run_synthesis_agent(redis_client)
@@ -762,7 +770,11 @@ def _run_surprise_detector_job() -> None:
     try:
         import sys
         import os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend_agents"))
+        _AGENTS_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents")
+        )
+        if _AGENTS_PATH not in sys.path:
+            sys.path.insert(0, _AGENTS_PATH)
         from surprise_detector import run_surprise_detector
         if redis_client:
             run_surprise_detector(redis_client)
@@ -782,10 +794,11 @@ def _run_flow_agent_job() -> None:
     try:
         import sys
         import os
-        sys.path.insert(
-            0,
-            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        _AGENTS_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents")
         )
+        if _AGENTS_PATH not in sys.path:
+            sys.path.insert(0, _AGENTS_PATH)
         from flow_agent import run_flow_agent
         if redis_client:
             run_flow_agent(redis_client)
@@ -804,10 +817,11 @@ def _run_sentiment_agent_job() -> None:
     try:
         import sys
         import os
-        sys.path.insert(
-            0,
-            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        _AGENTS_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents")
         )
+        if _AGENTS_PATH not in sys.path:
+            sys.path.insert(0, _AGENTS_PATH)
         from sentiment_agent import run_sentiment_agent
         if redis_client:
             run_sentiment_agent(redis_client)
@@ -1010,10 +1024,11 @@ def _run_feedback_agent_job() -> None:
 
         import sys
         import os
-        sys.path.insert(
-            0,
-            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        _AGENTS_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents")
         )
+        if _AGENTS_PATH not in sys.path:
+            sys.path.insert(0, _AGENTS_PATH)
         from feedback_agent import run_feedback_agent
         result = run_feedback_agent(redis_client) or {}
         status = result.get("status", "error")
