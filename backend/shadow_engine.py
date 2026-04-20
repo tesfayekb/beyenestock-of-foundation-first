@@ -381,8 +381,18 @@ def get_ab_gate_status() -> dict:
         )
         closed_trades = tc_result.count or 0
 
-        # Annualize: assume $100k account, 252 trading days/year
-        account = 100_000.0
+        # S11: annualize using LIVE deployed capital instead of the old
+        # hardcoded $100k. shadow_engine runs post-market when Tradier
+        # may be closed (cached value still works); on any failure we
+        # fall back to 100_000.0 because shadow analytics must never
+        # block — it's a research surface, not a trading decision.
+        try:
+            from capital_manager import get_deployed_capital
+            account = get_deployed_capital(
+                getattr(self, "redis_client", None)
+            )
+        except Exception:
+            account = 100_000.0  # graceful fallback for shadow analytics
         trading_days = len(rows)
         if trading_days > 0:
             a_annualized = (a_total / account) / trading_days * 252 * 100

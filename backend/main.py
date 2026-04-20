@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import config
+from capital_manager import CapitalError, get_deployed_capital
 from databento_feed import DatabentoFeed
 from db import get_client, write_health_status
 from gex_engine import GexEngine
@@ -104,8 +105,26 @@ def load_jobs_from_registry() -> Dict[str, str]:
 
 
 def run_prediction_cycle() -> None:
-    """Runs every 5 minutes. Full prediction -> strategy -> execution cycle."""
-    result = run_trading_cycle(account_value=100_000.0, sizing_phase=1)
+    """Runs every 5 minutes. Full prediction -> strategy -> execution cycle.
+
+    S11: account_value is now sourced from capital_manager.get_deployed_capital
+    (live Tradier equity * deployment_pct * leverage). On any failure to
+    determine deployed capital safely, the cycle is skipped — never run
+    against the old hardcoded 100_000 fallback. Risk management correctness
+    over uptime.
+    """
+    try:
+        deployed_capital = get_deployed_capital(redis_client)
+    except CapitalError as cap_exc:
+        logger.warning(
+            "cycle_skipped_capital_error",
+            reason=str(cap_exc),
+        )
+        return
+
+    result = run_trading_cycle(
+        account_value=deployed_capital, sizing_phase=1
+    )
     if result.get("skipped_reason"):
         logger.info("cycle_skipped", reason=result["skipped_reason"])
 
@@ -1321,6 +1340,24 @@ async def on_startup() -> None:
         # Create today's trading session on startup
         get_or_create_session()
 
+        # S11: seed capital allocation defaults on first boot.
+        # Both default to 1.0 (100% deployment, no leverage). We only
+        # set them if absent so an operator's existing config is never
+        # overwritten on a redeploy. Wrapped in try/except because Redis
+        # is the source of truth here — if the write fails the defaults
+        # in capital_manager.get_deployment_config still apply.
+        try:
+            if redis_client is not None:
+                if not redis_client.exists("capital:deployment_pct"):
+                    redis_client.set("capital:deployment_pct", "1.0")
+                if not redis_client.exists("capital:leverage_multiplier"):
+                    redis_client.set("capital:leverage_multiplier", "1.0")
+        except Exception as cap_seed_exc:
+            logger.warning(
+                "capital_defaults_seed_failed",
+                error=str(cap_seed_exc),
+            )
+
         # CSP-fix: backfill the Redis flag state into the
         # trading_feature_flags Supabase table so the Lovable-hosted
         # frontend can read flag state via direct supabase-js queries.
@@ -1423,6 +1460,18 @@ _TRADING_FLAG_KEYS = [
     # Controls backend_earnings/main_earnings.py run_earnings_entry().
     # Standard polarity (NOT in _SIGNAL_FLAGS): absent key = OFF.
     "strategy:earnings_straddle:enabled",
+    # S11: capital allocation — controls
+    # deployed_capital = equity * deployment_pct * leverage_multiplier.
+    # These are NUMERIC Redis keys (not boolean flags) but registered
+    # here so they show up in /trading/flags and get audit-mirrored
+    # into trading_feature_flags for the change log. Standard polarity
+    # (NOT in _SIGNAL_FLAGS): the backfill records "enabled=True" only
+    # if the value is literally the string "true", which it never is
+    # for these numeric keys — that is fine. The trading engine reads
+    # these directly from Redis via capital_manager, not via the
+    # boolean enabled column.
+    "capital:deployment_pct",
+    "capital:leverage_multiplier",
 ]
 
 # Signal flags follow REVERSE polarity (default ON). Set membership for

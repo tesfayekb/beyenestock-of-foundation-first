@@ -389,7 +389,16 @@ def compute_sharpe_ratio(days: int = 20) -> Optional[float]:
     Target: >= 1.5 (GLC-005). Account value assumed 100,000 (Phase 1 sizing).
     """
     try:
-        ACCOUNT_VALUE = 100_000.0
+        # S11: Sharpe denominator now uses LIVE deployed capital instead
+        # of the old hardcoded 100_000. Falls back to 100_000.0 only if
+        # capital_manager cannot determine equity (Tradier unreachable
+        # during weekly batch run) — Sharpe is a research metric, not a
+        # trading decision, so a graceful fallback is appropriate.
+        try:
+            from capital_manager import get_deployed_capital
+            ACCOUNT_VALUE = get_deployed_capital(None)
+        except Exception:
+            ACCOUNT_VALUE = 100_000.0
         cutoff = (date.today() - timedelta(days=days)).isoformat()
         result = (
             get_client()
