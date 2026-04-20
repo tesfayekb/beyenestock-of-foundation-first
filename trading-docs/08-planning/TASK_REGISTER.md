@@ -873,19 +873,57 @@ Prevents false halts on volatile-but-profitable days.
 Current thresholds (0.25 concentration, 0.75 drawdown, 0.003 wall distance, 0.40 gex_conf)
 were shipped without empirical validation. Need calibration against real outcomes.
 
-- [ ] In `backend/calibration_engine.py`, add `calibrate_butterfly_thresholds()`:
-      Query closed butterfly trades, replay each through saved gate metric values
-      Compute ROC curve per gate: blocked-correctly (trade lost) vs blocked-incorrectly (trade won)
-      Find optimal threshold at max F1 per gate
-      Write tuned values to Redis: `butterfly:threshold:concentration`,
-      `butterfly:threshold:gex_conf`, `butterfly:threshold:wall_distance`
-- [ ] In `backend/strategy_selector.py`, read thresholds from Redis with hardcoded fallbacks
-      Log `butterfly_threshold_source=calibrated|default`
-- [ ] Auto-gate: only calibrate when `closed_butterfly_trades >= 20`
-- [ ] Add to weekly calibration job
-- [ ] Test: 25 butterfly trades → calibration runs and writes Redis keys
+- [x] In `backend/calibration_engine.py`, add `calibrate_butterfly_thresholds()`:
+      Queries last 90 days of closed butterfly trades, parses per-trade
+      gate metrics (`gex_conf`, `dist_pct`, `wall_concentration`) out of
+      `decision_context`, and runs a candidate-grid search per threshold.
+      Objective: maximise dollar P&L improvement vs. blocking nothing
+      (equivalent to `-sum(net_pnl)` over the blocked subset, i.e.
+      counts correctly-blocked losses against incorrectly-blocked wins).
+      Writes tuned values to `butterfly:threshold:{gex_conf,
+      wall_distance, concentration}` with 8-day TTL (survives a weekend).
+      Partial data is OK — any threshold whose metric is missing in
+      `decision_context` is simply left at the default.
+- [x] **Writer extension (critical fix):** added `_capture_butterfly_metrics`
+      on `StrategySelector` to stash `gex_conf`, `dist_pct`, and
+      `wall_concentration` on the instance once per stage-1 invocation,
+      then spread those into `signal["decision_context"]` in `select()`
+      when `strategy_type == "iron_butterfly"`. Without this the
+      calibrator would have no per-trade metric history to learn from
+      — 12G would have shipped permanently dormant. Pre-existing
+      butterfly rows lack the new keys and are skipped by the parser,
+      matching the 20-trade gate exactly.
+- [x] In `backend/strategy_selector.py`, added `_read_butterfly_thresholds`
+      helper called once at the top of `_stage1_regime_gate`. Reads
+      `butterfly:threshold:*` keys with per-key defensive clamps
+      (gex_conf ∈ [0.1, 0.9], wall_distance ∈ [0.0005, 0.01],
+      concentration ∈ [0.05, 0.6]). Missing key / parse error /
+      out-of-band value falls back to the hardcoded default for that
+      single threshold — a partial calibration never regresses other
+      thresholds. The three gates (concentration < min,
+      gex_conf >= min, dist_to_wall < max) now consume the local
+      `_BFLY_*` variables. Emits a `butterfly_thresholds_applied`
+      debug log with `source=calibrated|default`.
+- [x] Auto-gates on `closed_butterfly_trades >= 20` AND
+      `parsed_context_rows >= 10` — either gate missed → Redis
+      untouched, defaults stay in force.
+- [x] Added to `run_weekly_calibration_job` in `backend/main.py`, right
+      after 12F's adaptive halt threshold calibration.
+- [x] Tests (`backend/tests/test_butterfly_threshold_calibration.py`):
+      12 cases covering <20 trades gate, <10 parsed context rows gate,
+      `_find_best_threshold` direction=above (gex_conf split), direction=below
+      (dist_pct split), Redis write/TTL verification, Supabase fail-open,
+      selector reads calibrated gex_conf, fallback to default when key
+      absent, fail-open on Redis error, defensive out-of-band rejection,
+      `_capture_butterfly_metrics` populates stash, capture fail-open.
+- [x] Companion change: `test_consolidation_s6.py::test_strategy_selector_
+      pin_still_uses_04_threshold` updated to grep for both
+      `gex_conf_min = 0.4` (default) AND `gex_conf >= _BFLY_GEX_CONF_MIN`
+      (variable consumption) — the old literal-string regression guard
+      would have false-positived after the refactor.
 
 **Cursor sessions: 1 | Commit tag: feat(calibration): butterfly threshold auto-tuning 12G**
+**Status: SHIPPED `8cb2fa5` — 2026-04-20 | 12 new tests, suite 637 passed.**
 
 ---
 
