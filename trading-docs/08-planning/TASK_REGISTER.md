@@ -1453,6 +1453,111 @@ Full diagnostic report: produced by Cursor agent on 2026-04-20.
 
 ---
 
+### Section 13 — UI Observability Sprint (Item 11)
+
+Previously deferred. Build now — annotated with activation state so operators
+understand which panels show live data vs "warming up" data.
+
+All panels are READ-ONLY — no trade decisions are affected. Every panel shows
+"warming up" state until enough data exists.
+
+---
+
+#### UI-1 — Learning Dashboard Page (`/trading/learning`)
+**New page — surface all Section 12 observability data in one place**
+**Activation note: shows "warming up" for most panels until 10+ sessions**
+
+Panels to include:
+
+- [ ] **Realized Vol vs VIX panel**
+      Source: `GET /trading/learning-stats` endpoint (new)
+      Shows: `polygon:spx:realized_vol_20d` vs `polygon:vix:current` ratio
+      Label: "IV/RV Ratio" — green when VIX > RV×1.10 (good for credit), red when below
+      Warmup: shows "collecting data (N/20 daily sessions)" until daily_len >= 5
+
+- [ ] **Butterfly Gate Counters panel**
+      Source: same endpoint
+      Shows: bar chart of `butterfly:blocked:{reason}:{today}` counters
+      Reasons: regime_mismatch, time_gate, failed_today, low_concentration,
+               wall_unstable, drawdown_block (when wired), allowed
+      Label: "Today's Butterfly Gates" — helps tune thresholds after 20+ trades
+      Warmup: shows "no butterfly attempts today" when all counters are 0
+
+- [ ] **Regime × Strategy Matrix panel**
+      Source: same endpoint
+      Shows: table of `strategy_matrix:{regime}:{strategy}` Redis values
+      Columns: regime, strategy, win_rate, avg_pnl, profit_factor, trade_count
+      Highlight: cells with trade_count >= 10 AND win_rate < 0.40 (active reduction)
+      Warmup: shows "collecting trades (N trades, need 10 per cell)" until first cell hits 10
+
+- [ ] **Model Drift Alert banner**
+      Source: same endpoint (reads `model_drift_alert` Redis key)
+      Shows: red banner at top of page when `model_drift_alert = "1"`
+      Content: "Model drift detected — 10-day accuracy has dropped. Review predictions."
+      Also show: current 10-day vs 30-day accuracy from last drift check result
+      No banner when key absent (normal state)
+
+- [ ] **Sizing Phase ribbon**
+      Source: same endpoint (reads `capital:sizing_phase` Redis key)
+      Shows: small ribbon on every admin page when phase > 1
+      Content: "Phase 2 Active — sizing increased 50%" or "Phase 3 Active — 2× sizing"
+      No ribbon when phase = 1 (default, no noise)
+
+- [ ] **Adaptive Halt Threshold panel**
+      Source: same endpoint
+      Shows: current `risk:halt_threshold_pct` vs hardcoded -3% default
+      Label: "Daily Halt Threshold" — "Adaptive: -2.4%" or "Default: -3.0%"
+      Warmup: shows "default (-3%) until 100 closed trades" when key absent
+
+- [ ] **Calibrated Butterfly Thresholds panel**
+      Source: same endpoint
+      Shows: `butterfly:threshold:gex_conf`, `butterfly:threshold:wall_distance`,
+              `butterfly:threshold:concentration` vs their hardcoded defaults
+      Label: "Butterfly Gate Thresholds" — shows calibrated vs default for each
+      Warmup: shows "using defaults until 20 butterfly trades" when keys absent
+
+---
+
+#### UI-2 — Backend endpoint (`GET /trading/learning-stats`)
+**New FastAPI endpoint to serve all observability data to the Learning Dashboard**
+
+- [ ] Add `GET /trading/learning-stats` to `backend/main.py`
+      Reads all Redis keys listed in UI-1 in a single handler
+      Returns JSON with all values + warmup states
+      Requires `RAILWAY_ADMIN_KEY` authentication (same as other admin endpoints)
+      Fail-open: missing Redis keys return null/default, never 500
+
+---
+
+#### UI-3 — Drift alert banner on War Room and Performance pages
+**Elevate model drift to highest-visibility pages**
+
+- [ ] Add `model_drift_alert` banner check to `src/pages/admin/trading/WarRoomPage.tsx`
+- [ ] Add `model_drift_alert` banner check to `src/pages/admin/trading/PerformancePage.tsx`
+      Note: PerformancePage already has `drift_status` from the sessions table —
+      this is a DIFFERENT alert (live Redis flag vs historical session data).
+      Label the new banner clearly: "Live drift alert" vs existing "Session drift status"
+
+---
+
+#### UI-4 — Missed Opportunity Summary on Performance page
+**Surface counterfactual engine weekly report**
+
+- [ ] On `PerformancePage.tsx`, add a "Missed Opportunities" section
+      Source: Supabase query on `trading_prediction_outputs` where `no_trade_signal=True`
+              and `counterfactual_pnl IS NOT NULL`
+      Shows: top 3 no-trade reasons by total counterfactual P&L this week
+      Warmup label: "Available after 30 sessions" when closed_sessions < 30
+
+---
+
+**Build order:** UI-2 (endpoint) → UI-1 (Learning Dashboard) → UI-3 (banners) → UI-4 (counterfactual)
+**Commit tag:** `feat(ui): learning dashboard + observability panels`
+**Activation note:** Every panel shows warmup state until its data threshold is met.
+No panel affects any trade decision — pure read-only observability.
+
+---
+
 ### Deferred (conscious decision, not forgotten)
 
 - **Item 8** — Counterfactual spread width hardcoded to 5pt iron_condor win band.
