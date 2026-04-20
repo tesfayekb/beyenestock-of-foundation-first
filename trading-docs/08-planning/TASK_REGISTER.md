@@ -1047,16 +1047,74 @@ cleanly with both flags on against the sandbox account first.
 
 ### 12J — Phase 5B Earnings Learning Loop Scaffold
 **Priority: LOW-MEDIUM — scaffold now, activates at 50 earnings trades**
+**Status: SCAFFOLD COMPLETE — SHIPPED `390f478` (2026-04-20)**
 **Auto-activates when:** `closed_earnings_trades >= 50`
 
-- [ ] In `backend_earnings/edge_calculator.py`, add `label_earnings_outcome()`:
-      After position closes: label correct_direction, pnl_vs_expected, iv_crush_captured
-      Write to Supabase `earnings_trade_outcomes` table (migration needed)
-- [ ] Add `train_earnings_model()` scaffold in same file:
-      Features: days_to_earnings, iv_rank, sector, historical_move, current_iv_rv
-      Output: per-ticker edge score weights replacing hardcoded EARNINGS_HISTORY
-      Auto-gate: only trains when `closed_earnings_trades >= 50`
-- [ ] Test: labeling fires on close; training returns `insufficient_data` below 50
+- [x] In `backend_earnings/edge_calculator.py`, added
+      `label_earnings_outcome()`: fires from trade #1 on every close
+      with no warmup gate. Writes correct_direction,
+      pnl_vs_expected (= net_pnl / total_debit), iv_crush_captured,
+      expected/actual move pct, and net_pnl to the new
+      `earnings_trade_outcomes` table. Fail-open — any labeling
+      failure is swallowed and never affects the parent close path.
+      Wired into `earnings_monitor.py` right after a successful
+      `close_earnings_position`, using the pre-close `pos` row
+      plus freshly computed `net_pnl` and `exit_at`. (`390f478`)
+- [x] Added `train_earnings_model()` scaffold in the same file.
+      Auto-gates on `MIN_EARNINGS_OUTCOMES_FOR_TRAINING = 50`
+      (below that: `trained=False`, no Redis write). Above: builds
+      per-ticker stats (win_rate, avg_pnl, sample_count, edge_score
+      = win_rate * 0.6 + normalized avg_pnl * 0.4), excludes any
+      ticker with fewer than `MIN_PER_TICKER_SAMPLES = 3` trades,
+      and writes the dict to Redis key `earnings:ticker_weights`
+      with an 8-day TTL. Wired into `run_weekly_calibration_job`
+      in `backend/main.py` (Sunday 6 PM ET) via the same sys.path
+      insert pattern as the earnings scan/entry/monitor jobs.
+      Fail-open — a training failure leaves the previous weights
+      (or the hardcoded `EARNINGS_HISTORY`) in place. (`390f478`)
+- [x] Migration `supabase/migrations/20260422_earnings_trade_outcomes.sql`:
+      new table + service-role RLS + ticker index. Idempotent.
+      (`390f478`)
+- [x] Tests: `backend/tests/test_earnings_learning.py` with 8 new
+      tests covering labeling field shape, win/loss direction,
+      labeling fail-open, training gate at 50, training above 50,
+      per-ticker sample floor at 3, and training fail-open.
+      pytest: 668 passed, 1 skipped, 1 xfailed (was 660, +8 for 12J).
+      (`390f478`)
+
+**SHIPPED DIVERGENCES from spec** (required for code to execute
+against the live schema; all documented in the migration and in the
+docstrings of the new functions):
+
+1. **Migration FK correction.** `position_id REFERENCES
+   public.earnings_positions(id) ON DELETE SET NULL`, not
+   `trading_positions(id)`. Earnings positions live in
+   `earnings_positions` (see `20260426_earnings_system.sql`); a FK
+   to `trading_positions` would reject every insert because the
+   UUIDs come from a different table.
+
+2. **Field mapping.** Spec used SPX-side names on the input dict
+   (`instrument`, `entry_credit`, `expected_move_pct`).
+   Implementation reads the actual `earnings_positions` columns
+   (`ticker`, `total_debit`, `implied_move_pct`) while still
+   emitting the outcome-table column names spelled out in the
+   migration, so analytics downstream stays consistent.
+
+3. **Monitor wiring.** Spec mentioned "called by `earnings_monitor`
+   when a position closes" but did not include the diff.
+   `close_earnings_position` returns `bool` (not the closed row),
+   so the label input dict is built at the call site in
+   `earnings_monitor.py` from the pre-close `pos` plus the freshly
+   computed `net_pnl = exit_value - total_debit` and the current
+   UTC timestamp as `exit_at`. Wrapped in an outer try/except so
+   any labeling failure is invisible to the monitor summary.
+
+**ROI impact: zero today.** Labeling is pure observability, training
+is dormant below 50 earnings trades, and even above threshold the
+learned weights are written to a fresh Redis key that no consumer
+reads yet — `compute_edge_score()` still uses the hardcoded
+`EARNINGS_HISTORY` dict until a follow-up change wires it to prefer
+the learned weights.
 
 **Cursor sessions: 2 | Commit tag: feat(earnings): learning loop scaffold Phase 5B**
 
