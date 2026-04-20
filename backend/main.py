@@ -1936,6 +1936,231 @@ async def get_feature_flags(
         return {"flags": {}}
 
 
+# ---------------------------------------------------------------------------
+# Section 13 UI-2 — Learning-stats observability endpoint.
+# Read-only aggregate of every Section 12 Redis observability key,
+# served to the Learning Dashboard UI. Admin-authenticated. Fail-open
+# on every key — a missing / malformed Redis value returns null or a
+# documented default, NEVER raises to the caller.
+# ---------------------------------------------------------------------------
+
+
+def _build_strategy_matrix_summary() -> list:
+    """Read every `strategy_matrix:{regime}:{strategy}` Redis key and
+    return the payloads as a flat list, sorted by trade_count desc so
+    the UI can render the most-active cells first.
+
+    Keys without a parseable JSON body are silently skipped — they are
+    usually mid-write races or hand-edited junk, not something an
+    operator dashboard should crash on. Returns [] on any top-level
+    error (Redis down, decode errors, etc.) so the endpoint never 500s.
+    """
+    try:
+        if not redis_client:
+            return []
+        import json
+
+        keys = redis_client.keys("strategy_matrix:*") or []
+        result: list = []
+        for key in keys:
+            key_str = key.decode() if isinstance(key, bytes) else key
+            parts = key_str.replace("strategy_matrix:", "").split(":", 1)
+            if len(parts) != 2:
+                continue
+            try:
+                raw = redis_client.get(key_str)
+                if not raw:
+                    continue
+                val = json.loads(raw)
+                if not isinstance(val, dict):
+                    continue
+                result.append({
+                    "regime": parts[0],
+                    "strategy": parts[1],
+                    **val,
+                })
+            except Exception:
+                # Skip single bad cell; keep the rest of the matrix.
+                continue
+        return sorted(
+            result,
+            key=lambda x: x.get("trade_count", 0) or 0,
+            reverse=True,
+        )
+    except Exception:
+        return []
+
+
+@app.get("/admin/trading/learning-stats")
+async def get_learning_stats(
+    _auth: None = Depends(_require_admin_key),  # T1-14
+):
+    """Section 13 UI-2: read-only observability aggregate for the
+    Learning Dashboard. Collects every Section 12 Redis key the UI
+    panels need in a single round-trip. Every field is fail-open:
+    a missing / malformed key becomes null or a documented default
+    — no field ever raises to the caller.
+
+    Intentional path choice: lives under `/admin/trading/` to match
+    the six other admin-authenticated GETs (intelligence,
+    feature-flags, key-status, activation/status, ab/status,
+    earnings/status). The Section 13 doc refers to the endpoint as
+    `/trading/learning-stats` colloquially; the real route is
+    `/admin/trading/learning-stats` so RAILWAY_ADMIN_KEY gating
+    stays consistent.
+    """
+    def _safe_get(key: str, default=None):
+        try:
+            if not redis_client:
+                return default
+            val = redis_client.get(key)
+            if val is None:
+                return default
+            return val.decode() if isinstance(val, bytes) else val
+        except Exception:
+            return default
+
+    def _safe_float_key(key: str, default=None):
+        try:
+            val = _safe_get(key)
+            return float(val) if val is not None else default
+        except Exception:
+            return default
+
+    def _safe_int_key(key: str, default=None):
+        try:
+            val = _safe_get(key)
+            return int(val) if val is not None else default
+        except Exception:
+            return default
+
+    try:
+        from datetime import date as _date
+        today = _date.today().isoformat()
+
+        vix_current = _safe_float_key("polygon:vix:current")
+        realized_vol_20d = _safe_float_key("polygon:spx:realized_vol_20d")
+        if vix_current is not None and realized_vol_20d:
+            iv_rv_ratio = round(vix_current / realized_vol_20d, 3)
+        else:
+            iv_rv_ratio = None
+
+        butterfly_gates = {
+            reason: _safe_int_key(
+                f"butterfly:blocked:{reason}:{today}", default=0
+            )
+            for reason in [
+                "regime_mismatch",
+                "time_gate",
+                "failed_today",
+                "low_concentration",
+                "wall_unstable",
+                "drawdown_block",
+            ]
+        }
+
+        halt_threshold_pct = _safe_float_key("risk:halt_threshold_pct")
+        halt_threshold_source = (
+            "adaptive" if halt_threshold_pct is not None else "default"
+        )
+
+        butterfly_gex_conf = _safe_float_key(
+            "butterfly:threshold:gex_conf"
+        )
+        butterfly_wall_dist = _safe_float_key(
+            "butterfly:threshold:wall_distance"
+        )
+        butterfly_conc = _safe_float_key(
+            "butterfly:threshold:concentration"
+        )
+        butterfly_source = (
+            "calibrated" if butterfly_gex_conf is not None else "default"
+        )
+
+        return {
+            # 12A — Realized vol vs VIX.
+            # realized_vol_last_date is the date string written by
+            # polygon_feed on the most recent daily append (25-day
+            # TTL). The UI can infer warmth from whether
+            # realized_vol_20d is non-null — it's gated at daily_len
+            # >= 5 inside the writer, so non-null ≡ >= 5 samples.
+            "realized_vol_20d": realized_vol_20d,
+            "vix_current": vix_current,
+            "iv_rv_ratio": iv_rv_ratio,
+            "realized_vol_last_date": _safe_get(
+                "polygon:spx:daily_returns:last_date"
+            ),
+
+            # 12B — Butterfly gate counters (today).
+            "butterfly_gates": butterfly_gates,
+            "butterfly_allowed_today": _safe_int_key(
+                f"butterfly:allowed:{today}", default=0
+            ),
+
+            # 12D — Regime × Strategy matrix (summary of all cells).
+            "strategy_matrix": _build_strategy_matrix_summary(),
+
+            # 12F — Adaptive halt threshold.
+            "halt_threshold_pct": halt_threshold_pct,
+            "halt_threshold_source": halt_threshold_source,
+
+            # 12G — Calibrated butterfly thresholds.
+            "butterfly_thresholds": {
+                "gex_conf": (
+                    butterfly_gex_conf
+                    if butterfly_gex_conf is not None else 0.40
+                ),
+                "wall_distance": (
+                    butterfly_wall_dist
+                    if butterfly_wall_dist is not None else 0.003
+                ),
+                "concentration": (
+                    butterfly_conc
+                    if butterfly_conc is not None else 0.25
+                ),
+                "source": butterfly_source,
+            },
+
+            # 12L — Model drift alert (live Redis flag, not the
+            # session-drift column on trading_sessions — those are
+            # different signals; see UI-3 banner copy).
+            "model_drift_alert": _safe_get("model_drift_alert") == "1",
+
+            # 12N — Sizing phase + audit trail.
+            "sizing_phase": _safe_int_key(
+                "capital:sizing_phase", default=1
+            ),
+            "sizing_phase_advanced_at": _safe_get(
+                "capital:sizing_phase_advanced_at"
+            ),
+        }
+    except Exception as exc:
+        logger.error("get_learning_stats_failed", error=str(exc))
+        # Absolute fail-open fallback — the endpoint contract is
+        # "never 500"; UI treats any null/empty field as warming up.
+        return {
+            "realized_vol_20d": None,
+            "vix_current": None,
+            "iv_rv_ratio": None,
+            "realized_vol_last_date": None,
+            "butterfly_gates": {},
+            "butterfly_allowed_today": 0,
+            "strategy_matrix": [],
+            "halt_threshold_pct": None,
+            "halt_threshold_source": "default",
+            "butterfly_thresholds": {
+                "gex_conf": 0.40,
+                "wall_distance": 0.003,
+                "concentration": 0.25,
+                "source": "default",
+            },
+            "model_drift_alert": False,
+            "sizing_phase": 1,
+            "sizing_phase_advanced_at": None,
+            "error": str(exc),
+        }
+
+
 def _mask_key(key_value: str) -> str:
     """Return masked key: first 4 chars + '...' + last 6 chars.
 
