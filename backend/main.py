@@ -151,6 +151,22 @@ def execution_engine_keepalive() -> None:
         logger.error("execution_engine_keepalive_failed", error=str(exc))
 
 
+def data_ingestor_keepalive() -> None:
+    """Keep the data_ingestor umbrella row fresh.
+
+    The individual feeds (tradier_websocket, polygon_feed,
+    databento_feed) write their own health rows continuously, but
+    "data_ingestor" itself was only written once at startup and
+    then never again — leaving it stuck in degraded after the
+    heartbeat_check gate elapsed. The same 30 s cadence as the
+    other engine keepalives keeps it well inside the 90 s gate.
+    """
+    try:
+        write_health_status("data_ingestor", "healthy")
+    except Exception as exc:
+        logger.error("data_ingestor_keepalive_failed", error=str(exc))
+
+
 def run_eod_criteria_evaluation() -> None:
     """Runs daily at 5:00 PM ET after market close.
     Step 1: Label today's predictions with realized SPX outcomes.
@@ -599,6 +615,78 @@ def _run_earnings_monitor_job() -> None:
         logger.error("earnings_monitor_job_failed", error=str(exc))
 
 
+def _flush_stale_scheduled_service_status() -> None:
+    """
+    One-shot startup cleanup of stale "degraded" rows on scheduled services.
+
+    Background: before the service-class-aware heartbeat_check fix
+    (commit abaf8db), the 90-second staleness gate was applied to
+    every row in trading_system_health, including the 11 cron-scheduled
+    services in _SCHEDULED_SERVICES. Those false-positive "degraded"
+    rows persist in the table after the fix deploys — heartbeat_check
+    now correctly leaves them alone, but each scheduled service only
+    overwrites its own row when it next fires. For services like
+    prediction_watchdog (hour="9-15" mon-fri only) that can be
+    12+ hours away, leaving the Health page red the whole time.
+
+    This function runs once at on_startup() after the new code lands.
+    For every row in _SCHEDULED_SERVICES whose current status is
+    "degraded", it writes "idle" so the Health page shows a clean
+    neutral state until the agent's next real fire overwrites with
+    healthy / error / idle as appropriate.
+
+    Critical safety properties:
+      - Only touches rows in _SCHEDULED_SERVICES (continuous services
+        and their 90 s gate are completely unaffected).
+      - Only flips "degraded" -> "idle". Any service currently in
+        "error", "healthy", or "idle" status is left untouched —
+        real failures stay visible.
+      - Soft-fails on any DB error so a Supabase outage cannot block
+        boot.
+      - No ROI / signal / regime / sizing impact whatsoever.
+    """
+    try:
+        rows = (
+            get_client()
+            .table("trading_system_health")
+            .select("service_name,status")
+            .in_("service_name", list(_SCHEDULED_SERVICES))
+            .eq("status", "degraded")
+            .execute()
+            .data
+            or []
+        )
+        if not rows:
+            logger.info(
+                "scheduled_service_flush_clean",
+                checked=len(_SCHEDULED_SERVICES),
+            )
+            return
+
+        flushed = []
+        for row in rows:
+            try:
+                write_health_status(row["service_name"], "idle")
+                flushed.append(row["service_name"])
+            except Exception as exc:
+                logger.error(
+                    "scheduled_service_flush_failed",
+                    service=row["service_name"],
+                    error=str(exc),
+                )
+
+        logger.info(
+            "scheduled_service_flush_complete",
+            flushed=flushed,
+            count=len(flushed),
+        )
+    except Exception as exc:
+        logger.error(
+            "scheduled_service_flush_error",
+            error=str(exc),
+        )
+
+
 def _run_morning_agents_idle_marker() -> None:
     """
     Mark once-per-day morning agents as idle after they've completed.
@@ -942,6 +1030,13 @@ async def on_startup() -> None:
             replace_existing=True,
         )
         scheduler.add_job(
+            data_ingestor_keepalive,
+            trigger="interval",
+            seconds=30,
+            id="data_ingestor_keepalive",
+            replace_existing=True,
+        )
+        scheduler.add_job(
             run_prediction_cycle,
             trigger="cron",
             day_of_week="mon-fri",
@@ -1238,6 +1333,12 @@ async def on_startup() -> None:
             ]
         )
         write_health_status("data_ingestor", "healthy")
+
+        # Clean up any stale "degraded" rows that the pre-abaf8db
+        # heartbeat_check left behind on scheduled services. Safe
+        # one-shot — only flips degraded -> idle, preserves real
+        # error / healthy / idle. See function docstring for detail.
+        _flush_stale_scheduled_service_status()
     except Exception as exc:
         logger.critical("startup_failed", error=str(exc))
         write_health_status(

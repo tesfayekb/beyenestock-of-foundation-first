@@ -427,3 +427,241 @@ def test_morning_idle_marker_job_registered_at_10_30_am_et():
     assert "day_of_week=\"mon-fri\"" in window, (
         "Idle-marker must only fire on weekdays"
     )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Cache-vs-heartbeat race regression tests
+# (the actual bug behind the Health page flicker)
+# ─────────────────────────────────────────────────────────────────────
+
+def test_cache_does_not_starve_last_heartbeat_at():
+    """
+    Regression guard for the S7-5 cache vs heartbeat_check race.
+
+    Original bug: write_health_status short-circuited every same-status
+    write, which meant `last_heartbeat_at` only refreshed when status
+    actually changed. The 30 s keepalive jobs would fire 3+ times
+    silently before heartbeat_check (90 s gate) marked the row
+    "degraded". The next keepalive then wrote "healthy" because the
+    cached status no longer matched, producing the observed flicker.
+
+    Fix: even on a status match, force a real upsert if the cached
+    timestamp is older than _HEALTH_CACHE_REFRESH_SECONDS.
+
+    This test seeds a STALE cache timestamp (older than the threshold)
+    and confirms write_health_status reaches the DB anyway.
+    """
+    import db
+
+    saved_cache = dict(db._health_status_cache)
+    saved_ts = dict(db._health_status_cache_ts)
+
+    # Seed status = healthy with a timestamp older than the refresh
+    # window, simulating a long quiescent period of identical
+    # keepalive writes.
+    db._health_status_cache["test_svc_stale"] = "healthy"
+    db._health_status_cache_ts["test_svc_stale"] = (
+        # time.monotonic() returns increasing seconds; subtracting
+        # well past the refresh threshold guarantees cache_age >
+        # _HEALTH_CACHE_REFRESH_SECONDS regardless of test scheduling.
+        -1e9
+    )
+
+    write_calls = []
+    try:
+        with patch("db.get_client") as mock_client:
+            mock_table = MagicMock()
+            mock_client.return_value.table.return_value = mock_table
+
+            def capture_upsert(*_a, **_kw):
+                write_calls.append(1)
+                return MagicMock(execute=MagicMock(return_value=MagicMock()))
+
+            mock_table.upsert.side_effect = capture_upsert
+            db.write_health_status("test_svc_stale", "healthy")
+    finally:
+        db._health_status_cache.clear()
+        db._health_status_cache.update(saved_cache)
+        db._health_status_cache_ts.clear()
+        db._health_status_cache_ts.update(saved_ts)
+
+    assert len(write_calls) == 1, (
+        "Stale cache timestamp must force a DB upsert even on identical "
+        "status, otherwise heartbeat_check will mark the service "
+        "degraded after 90 s and the Health page will flicker."
+    )
+
+
+def test_cache_short_circuits_when_fresh_and_status_unchanged():
+    """The performance optimisation must still hold: a fresh cache
+    timestamp + identical status + no kwargs MUST skip the upsert.
+    Otherwise we pay the 14 400 writes/day/service penalty S7-5
+    was designed to avoid."""
+    import time
+    import db
+
+    saved_cache = dict(db._health_status_cache)
+    saved_ts = dict(db._health_status_cache_ts)
+    db._health_status_cache["test_svc_fresh"] = "healthy"
+    db._health_status_cache_ts["test_svc_fresh"] = time.monotonic()
+
+    try:
+        with patch("db.get_client") as mock_client:
+            mock_table = MagicMock()
+            mock_client.return_value.table.return_value = mock_table
+            db.write_health_status("test_svc_fresh", "healthy")
+            mock_table.upsert.assert_not_called()
+    finally:
+        db._health_status_cache.clear()
+        db._health_status_cache.update(saved_cache)
+        db._health_status_cache_ts.clear()
+        db._health_status_cache_ts.update(saved_ts)
+
+
+def test_cache_refresh_threshold_is_below_heartbeat_gate():
+    """The cache refresh window MUST be smaller than the
+    heartbeat_check 90 s gate. If the threshold is ever raised
+    above 90 s the flicker bug returns."""
+    import db
+    assert db._HEALTH_CACHE_REFRESH_SECONDS < 90, (
+        f"_HEALTH_CACHE_REFRESH_SECONDS={db._HEALTH_CACHE_REFRESH_SECONDS} "
+        "must be < 90 (the heartbeat_check staleness gate)"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# data_ingestor keepalive
+# ─────────────────────────────────────────────────────────────────────
+
+def test_data_ingestor_keepalive_writes_healthy():
+    """data_ingestor was previously written exactly once at startup
+    and then never again — guaranteeing it stuck at degraded after
+    90 s. The new keepalive must write healthy on each fire."""
+    m, restore = _load_main_isolated()
+
+    write_calls = []
+
+    def fake_write(service_name, status, **kwargs):
+        write_calls.append((service_name, status))
+        return True
+
+    try:
+        with patch.object(m, "write_health_status", side_effect=fake_write):
+            m.data_ingestor_keepalive()
+    finally:
+        restore()
+
+    assert ("data_ingestor", "healthy") in write_calls, (
+        f"data_ingestor_keepalive must write healthy. Got: {write_calls!r}"
+    )
+
+
+def test_data_ingestor_keepalive_registered_at_30s():
+    """Source-grep guard — confirms the 30 s interval job is wired
+    in on_startup at the same cadence as the engine keepalives."""
+    with open(os.path.join(BACKEND, "main.py"), encoding="utf-8") as f:
+        src = f.read()
+
+    assert "data_ingestor_keepalive" in src, (
+        "data_ingestor_keepalive function must exist"
+    )
+    job_block_start = src.find('id="data_ingestor_keepalive"')
+    assert job_block_start > 0, (
+        "data_ingestor_keepalive must be registered as a scheduler job"
+    )
+    window = src[max(0, job_block_start - 200): job_block_start + 100]
+    assert "seconds=30" in window, (
+        "data_ingestor_keepalive must fire every 30 s "
+        "(matches the other engine keepalives)"
+    )
+    assert 'trigger="interval"' in window, (
+        "data_ingestor_keepalive must use an interval trigger"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Startup flush of stale degraded rows (cleans up rows written by the
+# pre-abaf8db heartbeat_check)
+# ─────────────────────────────────────────────────────────────────────
+
+def _run_flush_with_rows(rows):
+    """Drive _flush_stale_scheduled_service_status() once with a stubbed
+    Supabase select that returns `rows`. Returns the list of
+    (service, status) tuples that write_health_status was called with."""
+    m, restore = _load_main_isolated()
+
+    select_chain = MagicMock()
+    select_chain.execute.return_value = MagicMock(data=rows)
+    eq_chain = MagicMock()
+    eq_chain.execute.return_value = MagicMock(data=rows)
+    in_chain = MagicMock()
+    in_chain.eq.return_value = eq_chain
+    select_table = MagicMock()
+    select_table.in_.return_value = in_chain
+    table_chain = MagicMock()
+    table_chain.select.return_value = select_table
+    db_client = MagicMock()
+    db_client.table.return_value = table_chain
+
+    write_calls = []
+
+    def fake_write(service_name, status, **kwargs):
+        write_calls.append((service_name, status))
+        return True
+
+    try:
+        with patch.object(m, "get_client", return_value=db_client), \
+                patch.object(m, "write_health_status", side_effect=fake_write):
+            m._flush_stale_scheduled_service_status()
+    finally:
+        restore()
+
+    return write_calls
+
+
+def test_flush_flips_degraded_scheduled_rows_to_idle():
+    """The startup flush must reset stale degraded rows on scheduled
+    services so the Health page shows a clean state without waiting
+    for the next agent fire (which can be 12+ hours away for
+    prediction_watchdog outside market hours)."""
+    rows = [
+        {"service_name": "flow_agent", "status": "degraded"},
+        {"service_name": "prediction_watchdog", "status": "degraded"},
+    ]
+    write_calls = _run_flush_with_rows(rows)
+
+    assert ("flow_agent", "idle") in write_calls
+    assert ("prediction_watchdog", "idle") in write_calls
+    assert all(status == "idle" for _, status in write_calls), (
+        f"Flush must only ever write 'idle'. Got: {write_calls!r}"
+    )
+
+
+def test_flush_no_op_when_no_stale_rows():
+    """If the DB has no stale degraded rows on scheduled services,
+    the flush must not write anything."""
+    write_calls = _run_flush_with_rows([])
+    assert write_calls == [], (
+        f"Flush must be a no-op on a clean DB. Got: {write_calls!r}"
+    )
+
+
+def test_flush_function_is_called_at_startup():
+    """Source-grep guard — the flush must run inside on_startup so
+    the cleanup happens on every Railway restart, not just one
+    deploy. Anchors on the call site comment."""
+    with open(os.path.join(BACKEND, "main.py"), encoding="utf-8") as f:
+        src = f.read()
+
+    assert "_flush_stale_scheduled_service_status()" in src, (
+        "Startup flush must be called from on_startup"
+    )
+    on_startup_idx = src.find("async def on_startup")
+    assert on_startup_idx > 0, "on_startup not found in main.py"
+    flush_call_idx = src.find(
+        "_flush_stale_scheduled_service_status()", on_startup_idx
+    )
+    assert flush_call_idx > on_startup_idx, (
+        "Flush call must appear inside on_startup, not just defined "
+        "as a function"
+    )

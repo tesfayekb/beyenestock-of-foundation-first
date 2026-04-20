@@ -1,4 +1,5 @@
 import threading
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -20,6 +21,25 @@ _client_lock = threading.Lock()
 # intentional — the first write after a restart always goes through
 # so monitoring can confirm the new process is alive.
 _health_status_cache: dict = {}
+
+# Time-aware companion to _health_status_cache. Records the
+# monotonic clock value at the moment we last actually upserted a
+# row for each service. Required to fix the cache-vs-heartbeat race
+# (commit fix follows abaf8db): the S7-5 short-circuit, taken on
+# its own, can starve `last_heartbeat_at` for an unbounded amount
+# of time if the status never changes. heartbeat_check then sees
+# a stale heartbeat and writes "degraded" — and the next keepalive
+# fires "healthy" because the cached status changed, producing the
+# observed flicker on the Health page.
+#
+# Fix: even when the status is unchanged, force a real upsert if
+# the last actual write is older than _HEALTH_CACHE_REFRESH_SECONDS.
+# Value is chosen to comfortably refresh `last_heartbeat_at` ahead
+# of the heartbeat_check 90 s gate while still suppressing the bulk
+# of redundant writes from 30 s keepalive jobs (each service writes
+# at most once per 30 s instead of once per ~5 min).
+_health_status_cache_ts: dict = {}
+_HEALTH_CACHE_REFRESH_SECONDS = 30.0
 
 # Belt-and-suspenders: optionally set HTTPX_NO_H2=1 in Railway environment
 # variables. Currently a no-op for httpx 0.28 (it does not honour that
@@ -176,10 +196,11 @@ def write_health_status(service_name: str, status: str, **kwargs) -> bool:
         if status == "healthy" and "last_error_message" not in kwargs:
             payload["last_error_message"] = None
 
-        # S7-5: skip the upsert when the cached status matches the new
-        # status AND the call carries no extra data. This eliminates
-        # ~95% of the keepalive write volume (steady-state "healthy"
-        # heartbeats). Always write through when:
+        # S7-5 (time-aware): skip the upsert when the cached status
+        # matches the new status AND the call carries no extra data
+        # AND the last actual write is fresh enough that
+        # heartbeat_check would still consider the row alive. Always
+        # write through when:
         #   * status changed (the cache miss path),
         #   * status is "error" or "degraded" (operational signal that
         #     must reach the dashboard immediately, even if we already
@@ -187,15 +208,26 @@ def write_health_status(service_name: str, status: str, **kwargs) -> bool:
         #     proves the writer itself is still alive),
         #   * any kwargs are present (latency_ms, last_error_message,
         #     databento_connected, etc. — those carry diagnostic data
-        #     that downstream consumers depend on).
+        #     that downstream consumers depend on),
+        #   * the cached row is older than
+        #     _HEALTH_CACHE_REFRESH_SECONDS — without this bound the
+        #     cache would suppress every steady-state keepalive,
+        #     `last_heartbeat_at` would drift past the heartbeat_check
+        #     90 s gate, and the Health page would flicker between
+        #     "degraded" and "healthy" forever.
         cached_status = _health_status_cache.get(service_name)
+        cached_ts = _health_status_cache_ts.get(service_name, 0.0)
+        cache_age = time.monotonic() - cached_ts
+        cache_is_fresh = cache_age < _HEALTH_CACHE_REFRESH_SECONDS
         if (
             cached_status == status
             and status not in ("error", "degraded")
             and not kwargs
+            and cache_is_fresh
         ):
             return True
         _health_status_cache[service_name] = status
+        _health_status_cache_ts[service_name] = time.monotonic()
 
         # Increment error_count_1h when writing an error status (GLC-006)
         if status == "error":

@@ -166,11 +166,22 @@ def test_structlog_configure_called_once():
 # ── S7-5: write_health_status compare-then-write cache ───────────────
 
 def test_write_health_status_skips_duplicate_healthy():
-    """Same-status 'healthy' write with no kwargs must skip the upsert."""
+    """Same-status 'healthy' write with no kwargs and a fresh
+    cache timestamp must skip the upsert.
+
+    Post-flicker-fix: the cache short-circuit is now also gated
+    on `_health_status_cache_ts` being newer than
+    `_HEALTH_CACHE_REFRESH_SECONDS`, so the test must seed both
+    caches to exercise the skip path (the original behaviour
+    before the time-aware bound was added).
+    """
+    import time
     import db
 
     saved_cache = dict(db._health_status_cache)
+    saved_ts = dict(db._health_status_cache_ts)
     db._health_status_cache["test_service_skip"] = "healthy"
+    db._health_status_cache_ts["test_service_skip"] = time.monotonic()
 
     try:
         with patch("db.get_client") as mock_get_client:
@@ -182,6 +193,8 @@ def test_write_health_status_skips_duplicate_healthy():
     finally:
         db._health_status_cache.clear()
         db._health_status_cache.update(saved_cache)
+        db._health_status_cache_ts.clear()
+        db._health_status_cache_ts.update(saved_ts)
 
 
 def test_write_health_status_writes_on_status_change():
