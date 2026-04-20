@@ -1160,17 +1160,25 @@ columns ARE, and line up with what `prediction_engine` actually emits.
 
 ---
 
-### 12L — D1 Daily Outcome Loop Drift Alert
+### 12L — D1 Daily Outcome Loop Drift Alert ✅ COMPLETE (2026-04-20, db4c9d9)
 **Priority: LOW — extends existing label_prediction_outcomes**
 **Auto-activates:** immediately
 
-- [ ] In `backend/model_retraining.py`, after `label_prediction_outcomes()` runs:
+- [x] In `backend/model_retraining.py`, after `label_prediction_outcomes()` runs:
       Compute rolling 10-day directional accuracy from `outcome_correct` column
       If accuracy drops > 5pp from 30-day baseline: write `model_drift_alert=1` to Redis (TTL 86400)
       Log `drift_alert_fired` with current_accuracy and baseline_accuracy
-- [ ] In `backend/main.py` EOD job: if `model_drift_alert` key exists in Redis:
+- [x] In `backend/main.py` EOD job: if `model_drift_alert` key exists in Redis:
       Send alert via `alerting.py` with drift details
-- [ ] Test: accuracy injected below threshold → drift alert fires and alert sent
+- [x] Test: accuracy injected below threshold → drift alert fires and alert sent
+
+**Notes on the shipped scaffold (db4c9d9):**
+- `check_prediction_drift(redis_client)` implemented in `backend/model_retraining.py`; both 10d and 30d windows require ≥ 10 labeled rows (from `trading_prediction_outputs` with `outcome_correct IS NOT NULL` and `no_trade_signal = False`) before a ratio is computed. Below that gate, returns `checked=False` without touching Redis.
+- On recovery (drop ≤ 5pp) the function also calls `redis.delete("model_drift_alert")` so a single bad day cannot leave dashboards persistently red — not explicitly in the spec but a necessary symmetry for a live alert channel.
+- Uses local `DRIFT_DROP_THRESHOLD = 0.05` (delta in percentage points) to avoid shadowing the pre-existing module-level `DRIFT_THRESHOLD = 0.50` (absolute accuracy floor used by `detect_drift`) — the two constants measure different quantities.
+- Wired into `run_eod_criteria_evaluation` in `backend/main.py` **between** the labeling step and the criteria evaluation step, in its own try/except so failures never cascade. On `alert=True`, calls `alerting.send_alert(level="warning", event="model_drift_detected", detail=...)` using the real three-positional signature in `alerting.py` (the spec's `title=/message=` keywords were adapted per the spec's own instruction to check the real signature).
+- Tests: 6 new cases in `backend/tests/test_prediction_drift.py` covering fire, clear, both insufficient-data gates, fail-open on Supabase exceptions, and an AST-level ROI invariant check that `check_prediction_drift` contains zero Import/ImportFrom/Name/Attribute references to `execution_engine` / `strategy_selector` / `risk_engine` / `trading_cycle`. Backend suite: 672 passed. `tsc --noEmit` clean.
+- ROI invariant: pure observability. No trade decision is modified or gated by the drift check.
 
 **Cursor sessions: 0.5 | Commit tag: feat(learning): D1 daily outcome loop drift alert**
 
