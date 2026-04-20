@@ -398,38 +398,78 @@ def check_daily_drawdown(
     session_id: str,
     current_daily_pnl: float,
     account_value: float,
+    redis_client=None,
 ) -> bool:
     """
-    D-005: if daily P&L / account_value <= -3% → halt session immediately.
+    D-005: if daily P&L / account_value <= halt_threshold → halt session.
     Returns True if halted, False if OK. Never raises.
+
+    12F (Phase C): halt_threshold is read from Redis key
+    `risk:halt_threshold_pct` when present (written by the weekly
+    calibration job once closed_trades >= 100). Falls back to -0.03
+    on missing key, parse failure, or Redis error. Never loosens the
+    halt on read failure — if anything is wrong we use the default.
     """
     try:
         if account_value <= 0:
             return False
         drawdown_pct = current_daily_pnl / account_value
 
-        # HARD-B: WARNING band at -1.5% (approaching the -3% halt).
+        # 12F: adaptive halt threshold. Fall back to the hardcoded -3%
+        # whenever Redis is unavailable, the key is absent, or the value
+        # cannot be parsed. The warning band upper bound also uses this
+        # value so the "approaching halt" relationship stays intact.
+        halt_threshold = -0.03
+        threshold_source = "default"
+        try:
+            _effective_redis = redis_client or _get_redis()
+            raw_threshold = (
+                _effective_redis.get("risk:halt_threshold_pct")
+                if _effective_redis
+                else None
+            )
+            if raw_threshold is not None:
+                parsed = float(raw_threshold)
+                # Defensive clamp: keep within the sane band even if a
+                # bad value leaked into Redis. Matches calibration bounds.
+                if -0.05 <= parsed <= -0.02:
+                    halt_threshold = parsed
+                    threshold_source = "adaptive"
+        except Exception:
+            halt_threshold = -0.03
+            threshold_source = "default"
+
+        logger.debug(
+            "halt_threshold_applied",
+            threshold=halt_threshold,
+            source=threshold_source,
+            daily_pnl=current_daily_pnl,
+            account_value=account_value,
+        )
+
+        # HARD-B: WARNING band at -1.5% (approaching the halt threshold).
         # Purely informational — does NOT influence sizing or halt logic.
         # Sent at most once per trading session via a Redis sentinel
         # so the operator gets one heads-up rather than one per cycle.
-        if -0.03 < drawdown_pct <= -0.015:
+        if halt_threshold < drawdown_pct <= -0.015:
             try:
                 from alerting import send_alert, WARNING
-                redis_client = _get_redis()
+                _alert_redis = redis_client or _get_redis()
                 warning_key = "alert:drawdown_warning_sent_today"
-                if redis_client and not redis_client.get(warning_key):
-                    redis_client.setex(warning_key, 86400, "1")
+                if _alert_redis and not _alert_redis.get(warning_key):
+                    _alert_redis.setex(warning_key, 86400, "1")
                     send_alert(
                         WARNING,
                         "drawdown_warning_approaching_halt",
                         f"Daily drawdown at {drawdown_pct:.2%}. "
-                        f"Halt triggers at -3.0%. Monitor closely. "
+                        f"Halt triggers at {halt_threshold:.2%}. "
+                        f"Monitor closely. "
                         f"Session P&L: ${current_daily_pnl:.2f}.",
                     )
             except Exception:
                 pass  # Never let alerting block risk management
 
-        if drawdown_pct <= -0.03:
+        if drawdown_pct <= halt_threshold:
             update_session(
                 session_id,
                 session_status="halted",

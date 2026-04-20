@@ -305,6 +305,16 @@ def run_weekly_calibration_job() -> None:
     except Exception as exc:
         logger.error("weekly_calibration_job_error", error=str(exc))
 
+    # 12F: Phase C adaptive halt threshold. Runs alongside the existing
+    # weekly calibration but is wrapped in its own try/except so a
+    # failure here never blocks the rest of the calibration summary.
+    try:
+        from calibration_engine import calibrate_halt_threshold
+        halt_result = calibrate_halt_threshold(redis_client)
+        logger.info("weekly_halt_calibration_complete", **halt_result)
+    except Exception as exc:
+        logger.error("weekly_halt_calibration_failed", error=str(exc))
+
 
 def run_weekly_model_performance_job() -> None:
     """Runs every Sunday at 6:30 PM ET (23:30 UTC) — after calibration."""

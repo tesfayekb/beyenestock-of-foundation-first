@@ -106,7 +106,15 @@ def run_trading_cycle(
             return result
 
         daily_pnl = realized_pnl + unrealized_pnl
-        if check_daily_drawdown(session["id"], daily_pnl, account_value):
+        # 12F: pass redis_client so the adaptive halt threshold can be read.
+        # Falls back to the hardcoded -3% inside check_daily_drawdown when
+        # the prediction engine has no redis_client attached.
+        if check_daily_drawdown(
+            session["id"],
+            daily_pnl,
+            account_value,
+            redis_client=getattr(_prediction_engine, "redis_client", None),
+        ):
             result["skipped_reason"] = "daily_drawdown_halt_d005"
             logger.warning(
                 "trading_cycle_skipped", reason="daily_drawdown_halt_d005"

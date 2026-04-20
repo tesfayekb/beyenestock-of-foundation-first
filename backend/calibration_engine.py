@@ -250,3 +250,147 @@ def run_weekly_calibration() -> dict:
     except Exception as e:
         logger.error("weekly_calibration_failed", error=str(e), exc_info=True)
         return {"error": str(e)}
+
+
+# 12F: Phase C adaptive halt threshold
+#
+# Replaces the hardcoded -3% daily halt with a volatility-scaled value
+# computed from real trade history. Formula: halt_at = -2.5 * stddev of
+# daily P&L (as a fraction of account equity).
+#
+# Auto-gates on closed_trades >= 100. Below that, the Redis key is not
+# written and risk_engine.check_daily_drawdown falls back to -0.03.
+_MIN_CLOSED_TRADES_FOR_HALT_CALIBRATION = 100
+_MIN_SESSIONS_FOR_HALT_CALIBRATION = 20
+_HALT_FLOOR = -0.02   # never looser than -2% (closest to 0)
+_HALT_CEILING = -0.05  # never tighter than -5% (most negative)
+_HALT_STDDEV_MULTIPLE = 2.5
+_HALT_DEFAULT_EQUITY = 100_000.0
+
+
+def calibrate_halt_threshold(redis_client) -> dict:
+    """
+    Compute a volatility-scaled daily halt threshold from recent session
+    history and write it to risk:halt_threshold_pct. Never raises — any
+    error returns a dict with the failure reason and leaves the Redis
+    key untouched, which causes risk_engine to fall back to -0.03.
+    """
+    try:
+        import math
+
+        count_result = (
+            get_client()
+            .table("trading_positions")
+            .select("id", count="exact")
+            .eq("status", "closed")
+            .eq("position_mode", "virtual")
+            .execute()
+        )
+        closed_trades = count_result.count or 0
+
+        if closed_trades < _MIN_CLOSED_TRADES_FOR_HALT_CALIBRATION:
+            logger.info(
+                "halt_threshold_calibration_skipped",
+                closed_trades=closed_trades,
+                required=_MIN_CLOSED_TRADES_FOR_HALT_CALIBRATION,
+                fallback=-0.03,
+            )
+            return {
+                "calibrated": False,
+                "closed_trades": closed_trades,
+                "fallback": -0.03,
+            }
+
+        cutoff = (date.today() - timedelta(days=90)).isoformat()
+        sessions_result = (
+            get_client()
+            .table("trading_sessions")
+            .select("session_date, virtual_pnl")
+            .gte("session_date", cutoff)
+            .not_.is_("virtual_pnl", "null")
+            .order("session_date", desc=False)
+            .limit(60)
+            .execute()
+        )
+        sessions = sessions_result.data or []
+
+        if len(sessions) < _MIN_SESSIONS_FOR_HALT_CALIBRATION:
+            logger.info(
+                "halt_threshold_calibration_skipped_insufficient_sessions",
+                session_count=len(sessions),
+                required=_MIN_SESSIONS_FOR_HALT_CALIBRATION,
+            )
+            return {
+                "calibrated": False,
+                "session_count": len(sessions),
+            }
+
+        # Use live equity as the normaliser so stddev is expressed as a
+        # fraction of account value (same units as the halt threshold).
+        account_equity = _HALT_DEFAULT_EQUITY
+        try:
+            raw_equity = redis_client.get("capital:live_equity") if redis_client else None
+            if raw_equity:
+                account_equity = float(raw_equity)
+        except Exception:
+            account_equity = _HALT_DEFAULT_EQUITY
+
+        daily_pnl_fractions = [
+            float(s["virtual_pnl"]) / account_equity
+            for s in sessions
+            if float(s.get("virtual_pnl") or 0) != 0
+        ]
+
+        if len(daily_pnl_fractions) < _MIN_SESSIONS_FOR_HALT_CALIBRATION:
+            return {
+                "calibrated": False,
+                "reason": "insufficient_nonzero_sessions",
+                "nonzero_sessions": len(daily_pnl_fractions),
+            }
+
+        n = len(daily_pnl_fractions)
+        mean_pnl = sum(daily_pnl_fractions) / n
+        variance = sum((x - mean_pnl) ** 2 for x in daily_pnl_fractions) / n
+        stddev = math.sqrt(variance)
+
+        raw_threshold = -(_HALT_STDDEV_MULTIPLE * stddev)
+
+        # Clamp: never looser than floor (-0.02), never tighter than ceiling (-0.05).
+        # Note FLOOR is closer to 0 than CEILING; the max(CEILING, min(FLOOR, x))
+        # sandwich handles both boundaries.
+        threshold = max(_HALT_CEILING, min(_HALT_FLOOR, raw_threshold))
+
+        floor_applied = raw_threshold > _HALT_FLOOR
+        ceiling_applied = raw_threshold < _HALT_CEILING
+
+        if redis_client:
+            redis_client.setex(
+                "risk:halt_threshold_pct",
+                86400 * 8,  # 8 days — survives a weekend without recalibration
+                str(round(threshold, 6)),
+            )
+
+        logger.info(
+            "halt_threshold_calibrated",
+            threshold=round(threshold, 4),
+            raw_threshold=round(raw_threshold, 4),
+            stddev=round(stddev, 4),
+            sessions_used=n,
+            closed_trades=closed_trades,
+            floor_applied=floor_applied,
+            ceiling_applied=ceiling_applied,
+        )
+        return {
+            "calibrated": True,
+            "threshold": round(threshold, 4),
+            "raw_threshold": round(raw_threshold, 4),
+            "stddev": round(stddev, 4),
+            "sessions_used": n,
+            "closed_trades": closed_trades,
+            "floor_applied": floor_applied,
+            "ceiling_applied": ceiling_applied,
+        }
+
+    except Exception as exc:
+        logger.error("halt_threshold_calibration_failed", error=str(exc))
+        return {"calibrated": False, "error": str(exc)}
