@@ -320,6 +320,88 @@ class ExecutionEngine:
                 )
                 return None
 
+            # 12K: Loop 2 meta-label scoring.
+            #
+            # Activation contract:
+            #   * No pkl file → ENTIRE block falls through immediately.
+            #     Zero change to any trade decision until
+            #     train_meta_label_model() has produced the file AND
+            #     an operator has deployed it.
+            #   * Fail-open: ANY exception inside this block lets the
+            #     trade proceed with its pre-meta contracts count.
+            #     The meta-label model is observability + soft gating,
+            #     never a hard blocker on an inference error.
+            #
+            # Feature order MUST stay in lockstep with
+            # model_retraining.train_meta_label_model()'s feature matrix
+            # construction. A drift between the two silently corrupts
+            # every score the model produces.
+            #
+            # Decision thresholds (from the 12K spec):
+            #   score < 0.55  → skip trade (early return None)
+            #   0.55 ≤ s < 0.75 → normal sizing, contracts unchanged
+            #   score ≥ 0.75  → boost contracts by 1.5× (integer
+            #     truncation) with a hard 2× ceiling. The 2× ceiling
+            #     is belt-and-suspenders today (1.5× can never exceed
+            #     2×) but documents intent if the boost factor is ever
+            #     raised, and keeps the upstream Kelly/RCS sizing
+            #     contract bounded to a known multiple.
+            try:
+                from pathlib import Path
+                _model_path = (
+                    Path(__file__).parent / "models" / "meta_label_v1.pkl"
+                )
+                if _model_path.exists():
+                    import pickle
+                    import numpy as np
+                    with open(_model_path, "rb") as _f:
+                        _meta_model = pickle.load(_f)
+
+                    _pred = prediction or {}
+                    _feat = np.array([[
+                        float(_pred.get("confidence") or 0),
+                        float(_pred.get("vvix_z_score") or 0),
+                        float(_pred.get("gex_confidence") or 0),
+                        float(_pred.get("cv_stress_score") or 0),
+                        float(_pred.get("vix") or 18.0),
+                        1.0 if _pred.get("signal_weak") else 0.0,
+                        float(_pred.get("prior_session_return") or 0),
+                        float(_pred.get("vix_term_ratio") or 1.0),
+                        float(_pred.get("spx_momentum_4h") or 0),
+                        float(_pred.get("gex_flip_proximity") or 0),
+                    ]])
+                    _score = float(_meta_model.predict_proba(_feat)[0][1])
+
+                    if _score < 0.55:
+                        logger.info(
+                            "meta_label_trade_skipped",
+                            score=round(_score, 3),
+                            strategy=signal.get("strategy_type"),
+                        )
+                        return None
+                    elif _score >= 0.75:
+                        _orig = int(signal.get("contracts") or 0)
+                        if _orig > 0:
+                            _boosted = min(
+                                _orig * 2,
+                                max(_orig, int(_orig * 1.5)),
+                            )
+                            if _boosted != _orig:
+                                signal = {**signal, "contracts": _boosted}
+                                contracts = _boosted
+                                logger.info(
+                                    "meta_label_sizing_boosted",
+                                    score=round(_score, 3),
+                                    original=_orig,
+                                    boosted=_boosted,
+                                    cap_multiple=2,
+                                )
+            except Exception as _meta_exc:
+                logger.warning(
+                    "meta_label_scoring_failed_fail_open",
+                    error=str(_meta_exc),
+                )
+
             strategy_type = signal.get("strategy_type", "unknown")
             fill = self._simulate_fill(
                 signal.get("target_credit"), strategy_type

@@ -351,6 +351,20 @@ def run_weekly_calibration_job() -> None:
     except Exception as exc:
         logger.error("weekly_earnings_model_failed", error=str(exc))
 
+    # 12K: Loop 2 meta-label model scaffold. Self-gates on
+    # closed_trades >= 100 AND labeled_rows >= 100. Below either
+    # threshold no pkl is written, so the execution-side scoring
+    # block in open_virtual_position remains a pure pass-through.
+    # Wrapped in its own try/except so any failure here never
+    # blocks downstream calibration steps (pattern shared with
+    # every other block in this job).
+    try:
+        from model_retraining import train_meta_label_model
+        meta_result = train_meta_label_model(redis_client)
+        logger.info("weekly_meta_label_complete", **meta_result)
+    except Exception as exc:
+        logger.error("weekly_meta_label_failed", error=str(exc))
+
 
 def run_weekly_model_performance_job() -> None:
     """Runs every Sunday at 6:30 PM ET (23:30 UTC) — after calibration."""

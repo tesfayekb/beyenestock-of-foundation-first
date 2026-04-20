@@ -580,3 +580,206 @@ def run_weekly_model_performance() -> dict:
             "weekly_model_performance_failed", error=str(e), exc_info=True
         )
         return {"error": str(e)}
+
+
+# ── 12K: Loop 2 meta-label model scaffold ────────────────────────────
+#
+# Purpose: learn which SPECIFIC trade setups actually win, not just
+# which regimes win. Feature set mirrors the columns persisted by
+# prediction_engine.run_cycle (Phase A scaffold from 12H), so training
+# can proceed the moment we have 100+ labeled prediction rows.
+#
+# ROI contract:
+#   * Gates on closed_trades >= 100. Below that → no file written.
+#   * Trained model only affects live trading via the scoring block
+#     in execution_engine.open_virtual_position(). That block is
+#     itself pkl-gated, so before this function has ever produced a
+#     file the entire path is a pure pass-through.
+#   * Never raises: a failure here must never abort the weekly
+#     calibration chain.
+
+MIN_CLOSED_TRADES_FOR_META_LABEL = 100
+MIN_LABELED_ROWS_FOR_META_LABEL = 100
+
+
+def train_meta_label_model(redis_client=None) -> dict:
+    """
+    Loop 2: train a meta-label model to predict whether a specific
+    trade setup will win — not just which regime wins.
+
+    Features (must stay in lockstep with execution_engine.open_virtual_position):
+      confidence, vvix_z_score, gex_confidence, cv_stress_score, vix,
+      signal_weak, prior_session_return, vix_term_ratio,
+      spx_momentum_4h, gex_flip_proximity.
+
+    Target: outcome_correct (labeled by label_prediction_outcomes).
+
+    Auto-gates on closed_trades >= 100 AND labeled_rows >= 100.
+    Output: backend/models/meta_label_v1.pkl
+    Falls back gracefully when lightgbm not installed. Never raises.
+    """
+    try:
+        from pathlib import Path
+
+        # Gate 1: need 100+ closed labeled trades before a meta-label
+        # model is even worth training.
+        count_result = (
+            get_client()
+            .table("trading_positions")
+            .select("id", count="exact")
+            .eq("status", "closed")
+            .eq("position_mode", "virtual")
+            .execute()
+        )
+        closed_trades = count_result.count or 0
+
+        if closed_trades < MIN_CLOSED_TRADES_FOR_META_LABEL:
+            logger.info(
+                "meta_label_training_skipped",
+                closed_trades=closed_trades,
+                required=MIN_CLOSED_TRADES_FOR_META_LABEL,
+            )
+            return {
+                "trained": False,
+                "closed_trades": closed_trades,
+                "required": MIN_CLOSED_TRADES_FOR_META_LABEL,
+            }
+
+        # Gate 2: fetch labeled predictions. `.order("predicted_at")`
+        # is load-bearing — the 80/20 split below is explicitly
+        # walk-forward ("train on earliest 80%, validate on most
+        # recent 20%"), so the rows MUST come back in chronological
+        # order. Without ordering, PostgREST returns insertion-order
+        # at best and arbitrary planner-order at worst, which leaks
+        # future information into training and makes val_accuracy /
+        # val_auc meaningless.
+        result = (
+            get_client()
+            .table("trading_prediction_outputs")
+            .select(
+                "outcome_correct, confidence, vvix_z_score, gex_confidence, "
+                "cv_stress_score, vix, signal_weak, prior_session_return, "
+                "vix_term_ratio, spx_momentum_4h, gex_flip_proximity, "
+                "predicted_at"
+            )
+            .not_.is_("outcome_correct", "null")
+            .eq("no_trade_signal", False)
+            .order("predicted_at")
+            .execute()
+        )
+        rows = result.data or []
+
+        if len(rows) < MIN_LABELED_ROWS_FOR_META_LABEL:
+            return {
+                "trained": False,
+                "labeled_rows": len(rows),
+                "required": MIN_LABELED_ROWS_FOR_META_LABEL,
+                "reason": "insufficient_labeled_rows",
+            }
+
+        # Build feature matrix. Defaults mirror the inference-side
+        # fallbacks in execution_engine so the model sees the same
+        # domain values at train time and at predict time.
+        features = []
+        labels = []
+        for r in rows:
+            try:
+                feat = [
+                    float(r.get("confidence") or 0),
+                    float(r.get("vvix_z_score") or 0),
+                    float(r.get("gex_confidence") or 0),
+                    float(r.get("cv_stress_score") or 0),
+                    float(r.get("vix") or 18.0),
+                    1.0 if r.get("signal_weak") else 0.0,
+                    float(r.get("prior_session_return") or 0),
+                    float(r.get("vix_term_ratio") or 1.0),
+                    float(r.get("spx_momentum_4h") or 0),
+                    float(r.get("gex_flip_proximity") or 0),
+                ]
+                features.append(feat)
+                labels.append(1 if r.get("outcome_correct") else 0)
+            except Exception:
+                continue
+
+        if len(features) < MIN_LABELED_ROWS_FOR_META_LABEL:
+            return {
+                "trained": False,
+                "valid_rows": len(features),
+                "reason": "insufficient_valid_rows",
+            }
+
+        try:
+            import lightgbm as lgb
+            import numpy as np
+            import pickle
+
+            X = np.array(features)
+            y = np.array(labels)
+
+            # Walk-forward split — honest only because the upstream
+            # query is now .order("predicted_at").
+            split = int(len(X) * 0.8)
+            X_train, X_val = X[:split], X[split:]
+            y_train, y_val = y[:split], y[split:]
+
+            model = lgb.LGBMClassifier(
+                n_estimators=100,
+                learning_rate=0.05,
+                max_depth=4,
+                random_state=42,
+                verbose=-1,
+            )
+            model.fit(X_train, y_train)
+
+            val_preds = model.predict(X_val)
+            val_acc = float(np.mean(val_preds == y_val))
+
+            # Log AUC alongside accuracy. AUC is strictly more
+            # informative for a binary classifier that drives a
+            # probability-threshold gate (0.55 / 0.75 in the
+            # execution-side scoring block) — accuracy collapses
+            # calibration information that the thresholds are
+            # sensitive to. Treated as observability only; training
+            # still succeeds even when AUC cannot be computed (e.g.
+            # single-class holdout fold).
+            val_auc = None
+            try:
+                if len(set(y_val.tolist())) > 1:
+                    from sklearn.metrics import roc_auc_score
+                    val_proba = model.predict_proba(X_val)[:, 1]
+                    val_auc = float(round(roc_auc_score(y_val, val_proba), 3))
+            except Exception as auc_exc:
+                logger.info(
+                    "meta_label_auc_skipped",
+                    reason=str(auc_exc),
+                )
+
+            model_path = Path(__file__).parent / "models" / "meta_label_v1.pkl"
+            model_path.parent.mkdir(exist_ok=True)
+            with open(model_path, "wb") as f:
+                pickle.dump(model, f)
+
+            logger.info(
+                "meta_label_model_trained",
+                val_accuracy=round(val_acc, 3),
+                val_auc=val_auc,
+                training_rows=len(X_train),
+                val_rows=len(X_val),
+                model_path=str(model_path),
+            )
+            return {
+                "trained": True,
+                "val_accuracy": round(val_acc, 3),
+                "val_auc": val_auc,
+                "training_rows": len(X_train),
+                "val_rows": len(X_val),
+                "closed_trades": closed_trades,
+            }
+
+        except ImportError:
+            logger.warning("meta_label_lightgbm_not_installed")
+            return {"trained": False, "reason": "lightgbm_not_installed"}
+
+    except Exception as exc:
+        logger.error("meta_label_training_failed", error=str(exc))
+        return {"trained": False, "error": str(exc)}
