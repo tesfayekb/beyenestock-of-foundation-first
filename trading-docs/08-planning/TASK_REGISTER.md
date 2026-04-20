@@ -519,4 +519,135 @@ See Section 8 sprint table for per-session commits.
 | UNUSUAL_WHALES_API_KEY | ✅ Added (validity unconfirmed) |
 
 ---
+
+## SECTION 10 — PROFIT MAXIMIZATION ROADMAP
+
+Full specification: `trading-docs/08-planning/archive/profit-maximization-roadmap-v2.md`
+Phases are sequenced — do not skip ahead. Each phase gates on the prior.
+
+---
+
+### Phase 0 — Remove Active ROI Suppressors
+**Gate:** Complete before Phase A. Paper data will be cleaner.
+**Expected lift: +8-13pp annual return**
+
+- [ ] P0.1 — Fix commission model: $0.65 → $0.35 per leg (Tradier standard rate)
+- [x] P0.2 — Entry floor at 9:35 AM ET (done in S13 T1-2)
+- [ ] P0.3 — Fix signal_weak threshold: 0.10 → 0.05 (reduces no-trade false positives)
+- [ ] P0.4 — IV/RV no-trade filter: skip when IV < realized vol (premium too thin)
+- [x] P0.5 — Event-day size override: 40% on FOMC/CPI/NFP (built)
+- [x] P0.6 — Partial exit at 25% profit (built in S4)
+
+---
+
+### Phase A — LightGBM Direction Model + Real HMM Regime
+**Gate:** 30+ paper trading sessions with labeled outcomes
+**Expected annual return: 18-26%**
+
+- [x] A1 — Real accuracy measurement via outcome_correct (done in S15 T2-1)
+- [ ] A2 — Historical data download: OptionsDX SPX 0DTE chains 2022-2026 (~$50/mo)
+        Optional but adds +3-5pp. Enables GEX feature reconstruction in training.
+- [ ] A3 — Train LightGBM direction model
+        Replaces hardcoded probability lookup tables with real ML model.
+        Features: VVIX z-score, GEX confidence, SPX momentum (5m/30m/1h/4h),
+        VIX term ratio, breadth, IV rank, time-of-day, day-of-week, prior session return.
+        Requires: 90+ labeled sessions. Target: ≥58% directional accuracy on holdout.
+- [ ] A4 — Train real HMM regime classifier (parallel with A3)
+        Replace VVIX z-score if/else with trained 6-state Gaussian HMM.
+        Fit on SPX daily log-returns + VIX daily change 2010-2026.
+        States: quiet_bullish, quiet_bearish, trending, volatile, event, crisis.
+- [ ] A5 — Kelly-fractional sizing (after A3 deployed and calibrated)
+        Replace fixed risk_pct with f* = (edge / odds) from LightGBM probability.
+        Do NOT build before A3 — current tables are not well-calibrated.
+
+---
+
+### Phase B — Complete the Prediction Engine
+**Gate:** Phase A validated (LightGBM running 30+ days)
+**Expected annual return: 20-28%**
+
+- [ ] B1 — Expand to 93 features
+        Add: VWAP distance, morning range, gap fill probability, overnight futures,
+        cross-asset signals (bonds/dollar/VIX futures), options microstructure
+        (put/call ratio by strike, unusual flow score), GEX flip zone proximity,
+        earnings proximity score.
+- [ ] B2 — Dynamic spread width optimizer
+        Width = f(IV rank, VIX, time-to-expiry). Higher IV → wider wings.
+- [ ] B3 — Asymmetric iron condor wing optimizer
+        Skew put/call wings based on GEX asymmetry ratio.
+- [ ] B4 — Width-aware stop-loss (depends on B2)
+        Stop-loss = f(spread width, IV at entry) not fixed 150%.
+
+---
+
+### Phase C — Execution Quality
+**Gate:** Phase B validated
+**Expected annual return: 22-30%**
+
+- [ ] C1 — OCO bracket orders
+        Submit take-profit and stop-loss as OCO on Tradier at entry.
+        Reduces exit slippage 30-50%. Does NOT require walk-the-book.
+        Use realized fill price from Tradier — not predicted price.
+- [ ] C2 — Walk-the-book entry simulation
+        Replace random.gauss() slippage noise with depth-aware model.
+        Model: bid_ask_spread × f(size, time_of_day, IV).
+- [ ] C3 — Predictive slippage model
+        Gate: 200+ observations in trading_calibration_log (GLC-011).
+        Train LightGBM regression on {VIX, time-of-day, contracts, OTM distance, IV rank}.
+        Replaces STATIC_SLIPPAGE_BY_STRATEGY dict.
+
+---
+
+### Phase D — Learning Engine
+**Gate:** After Phase C, runs alongside live trading. Compounds continuously.
+**Expected annual return: 26-34%**
+
+- [ ] D1 — Daily outcome loop (4:15 PM ET)
+        Label predictions with realized SPX outcomes.
+        Isotonic recalibration on probability outputs.
+        Drift z-test: alert if 10-day accuracy drops >5pp.
+- [ ] D2 — Weekly champion/challenger retrain (Sunday 6 PM ET)
+        Retrain LightGBM on rolling 90-day labeled window.
+        Compare challenger vs champion on 30-day holdout.
+        Swap only if challenger wins by ≥1pp. Keep prior as emergency fallback.
+- [ ] D3 — Regime × Strategy performance matrix
+        Running P&L by strategy × regime. Auto-reduce allocation 25% if any
+        strategy loses 3 consecutive sessions in a regime. Updates daily.
+        New file: backend/strategy_performance_matrix.py
+- [ ] D4 — Counterfactual Engine
+        Post-session: simulate alternate entries (±15 min), alternate widths,
+        and skipped trades (including halt days and no-trade days).
+        Identifies systematic improvements without new risk.
+        Feeds feature importance into weekly retrain (D2).
+        Gate: 30+ closed sessions. Build: ~2 Cursor sessions.
+- [ ] D5 — Intraday micro-calibration (every 2 hours)
+        Check if morning prediction consistent with current GEX state.
+        If regime shifted, emit advisory (human decides, not forced exit).
+        Update signal_weak threshold dynamically from intraday realized vol.
+
+---
+
+### Phase E — Sizing Ramp + Multi-Instrument
+**Gate:** milestone-gated, cannot be rushed.
+
+- [ ] E1 — Phase 2 sizing advance
+        Gate: 45 live days + Sharpe ≥1.2 rolling 45-day
+        Core: 0.5% → 1.0% | Satellite: 0.25% → 0.5%
+- [ ] E2 — Phase 3 sizing advance
+        Gate: 90 live days + Sharpe ≥1.5 rolling 60-day
+        Core: 1.0% → 1.5% | Satellite: 0.5% → 0.75%
+- [ ] E3 — Multi-instrument expansion
+        Gate: 120 live days + stable performance
+        XSP (mini-SPX), NDX, RUT — all Section 1256 tax treatment.
+- [ ] E4 — Daily 0DTE Tuesday/Thursday expansion
+        Gate: 90 live days + historical validation on Tue/Thu liquidity.
+        Validate bid/ask spreads and open interest on OptionsDX data first.
+
+---
+
+### Already Tracked in Section 9 (cross-reference)
+- Phase C Adaptive Halt Threshold — after 100 real closed trades
+- Phase 5B Earnings Learning Loop — after 50+ earnings trades
+
+---
 *Task Register v1.0 — April 2026 — tesfayekb*
