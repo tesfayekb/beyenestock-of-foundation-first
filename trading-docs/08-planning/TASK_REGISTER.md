@@ -1399,32 +1399,55 @@ Full diagnostic report: produced by Cursor agent on 2026-04-20.
 
 ### Batch 2 — Cleanup and Observability (ship together, after Batch 1)
 
-- [ ] **B2-1 — Sync sizing phase to Supabase** (`backend/calibration_engine.py`)
-      When evaluate_sizing_phase() advances the phase, it writes Redis only.
-      ConfigPage.tsx reads sizing_phase from trading_operator_config (Supabase) — never updated.
-      Operator UI shows stale phase indefinitely after auto-advance.
-      Fix: also upsert trading_operator_config.sizing_phase on every advance.
+- [x] **B2-1 — Sync sizing phase to Supabase** COMPLETE (2026-04-20, 41bb1ab)
+      Implemented `_sync_sizing_phase(redis_client, new_phase)` in
+      `backend/calibration_engine.py`. Called from both E1 and E2 advance
+      branches. Two parallel fail-open writes:
+        * Redis audit key `capital:sizing_phase_advanced_at` ←
+          `"<phase>|<iso_timestamp>"` with matching 1-year TTL.
+        * Supabase `trading_operator_config.sizing_phase` via service-role
+          `.update()` with a `sizing_phase >= 0` filter (single-tenant,
+          user_id-agnostic bulk update — table has UNIQUE(user_id) with
+          exactly one row in practice, and no scheduler-time user context).
+      Neither sync failure blocks the primary `capital:sizing_phase` write.
+      Logs `sizing_phase_synced` with phase + rows_updated for observability.
 
-- [ ] **B2-2 — Rename inline `_safe_float` → `_read_float_key`** (`backend/prediction_engine.py`)
-      Module-level _safe_float(value, default) and an inline _safe_float(key, default)
-      with a different signature coexist in the same function — name collision risk.
-      Fix: rename inline helper. Purely defensive, zero behaviour change.
+- [x] **B2-2 — Rename inline `_safe_float` → `_read_float_key`** COMPLETE (2026-04-20, 41bb1ab)
+      Renamed the inline helper inside `run_cycle()` in
+      `backend/prediction_engine.py` (signature: key, default) to
+      `_read_float_key`. Module-level `_safe_float(value, default)` is
+      now the only function by that name in the file. Five call sites
+      updated. Pure defensive rename; zero behaviour change.
 
-- [ ] **B2-3 — Add TODO to `drawdown_block` counter** (`backend/main.py`)
-      `drawdown_block` is in butterfly_gate_daily_stats reasons list but has no writer
-      anywhere in the codebase — reads 0 forever. Keep as placeholder, add comment.
-      Fix: add `# TODO: wire drawdown_block counter in execution_engine` comment.
+- [x] **B2-3 — Add TODO to `drawdown_block` counter** COMPLETE (2026-04-20, 41bb1ab)
+      Added inline comment on the `"drawdown_block"` entry of the
+      butterfly_gate_daily_stats reasons list in `backend/main.py`:
+      `TODO (Section 13 Batch 2): wire writer in execution_engine when
+      same-strategy drawdown gate fires`. Kept in the list so the counter
+      surfaces (as 0) in EOD stats without a schema change once the
+      writer ships. Regression guard `test_drawdown_block_in_reasons_list`
+      prevents accidental removal.
 
-- [ ] **B2-4 — Document phase 4 as manual-only** (`src/pages/admin/trading/ConfigPage.tsx`)
-      Phase 4 exists in _RISK_PCT and the UI but is never reached by auto-advance (max=3).
-      Operator reading only the UI would expect auto-advance to handle it.
-      Fix: add comment in ConfigPage.tsx that phase 4 requires manual activation.
+- [x] **B2-4 — Document phase 4 as manual-only** COMPLETE (2026-04-20, 41bb1ab)
+      `src/pages/admin/trading/ConfigPage.tsx`:
+        * Extended `SIZING_PHASES` with `manualOnly?: boolean` flag.
+        * Phase 4 description: "Never reached by auto-advance — requires
+          operator action in trading_operator_config."
+        * Added a "manual" badge next to the Phase 4 label with a tooltip.
+        * Added a leading comment documenting that MAX_PHASE is capped at
+          3 in the backend auto-advance.
+      Also refreshed phase 2 + 3 descriptions to match the Batch 1
+      `_RISK_PCT` ladder (0.75/0.375 and 1.0/0.5) — pure observability
+      fix; the stale phase 2 copy was otherwise misleading post-Batch-1.
 
-- [ ] **B2-5 — Return None from _annualised_sharpe on negative mean** (`backend/calibration_engine.py`)
-      Currently returns 0.0 when mean_pnl <= 0. This is correct for the gate logic
-      (0 < 1.2 → no advance) but the payload shows "sharpe": 0.0 which is
-      indistinguishable from a genuinely computed very-bad Sharpe.
-      Fix: return None and add "reason": "negative_mean_pnl" to the payload. 2 lines.
+- [x] **B2-5 — Return None from _annualised_sharpe on negative mean** COMPLETE (2026-04-20, 41bb1ab)
+      `_annualised_sharpe` in `backend/calibration_engine.py` now returns
+      `None` (not 0.0) when mean P&L is non-positive. Downstream gate
+      check `sharpe is not None and sharpe >= gate` already short-circuits
+      correctly on None — no gate logic change. The return payload from
+      `evaluate_sizing_phase` distinguishes `E1_negative_mean_pnl` from
+      `E1_sharpe_below_gate` (and symmetric for E2) so structured logs
+      separate "cohort is losing" from "cohort is just low-Sharpe".
 
 **Batch 2 commit tag:** `chore(section-13): observability + cleanup fixes`
 
@@ -1446,7 +1469,7 @@ Full diagnostic report: produced by Cursor agent on 2026-04-20.
 ### Status
 
 - [x] Batch 1 shipped (2026-04-20, fc64840)
-- [ ] Batch 2 shipped
+- [x] Batch 2 shipped (2026-04-20, 41bb1ab)
 
 *Section 13 opened: 2026-04-20 | Owner: tesfayekb*
 
