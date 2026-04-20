@@ -1184,19 +1184,32 @@ columns ARE, and line up with what `prediction_engine` actually emits.
 
 ---
 
-### 12M — D2 Weekly Champion/Challenger Retrain Scaffold
-**Priority: LOW — scaffold now, activates when LightGBM model exists (12H)**
-**Auto-activates when:** `backend/models/lgbm_direction_v1.pkl` exists
+### 12M — D2 Weekly Champion/Challenger Retrain Scaffold ✅ COMPLETE (2026-04-20, 12cffd7)
+**Priority: LOW — scaffold now, activates when meta-label model exists (12K)**
+**Auto-activates when:** `backend/models/meta_label_v1.pkl` exists (see deviations below)
 
-- [ ] New job in `backend/main.py` Sunday 6 PM ET: `run_weekly_retrain_job()`
-- [ ] In `backend/model_retraining.py`, add `run_champion_challenger()`:
-      Load champion from `backend/models/lgbm_direction_v1.pkl`
-      Retrain challenger on rolling 90-day labeled window
-      Compare on 30-day holdout: swap if challenger wins by >= 1pp
-      Keep prior as `lgbm_direction_v0.pkl` emergency fallback
+- [x] New job in `backend/main.py` Sunday 6 PM ET: added as a dedicated block inside the existing `run_weekly_calibration_job` — runs immediately after `train_meta_label_model` so the champion read here is always the most recently trained v1.
+- [x] In `backend/model_retraining.py`, add `run_meta_label_champion_challenger()`:
+      Load champion from `backend/models/meta_label_v1.pkl`
+      Retrain challenger on rolling 90-day labeled window from `trading_prediction_outputs`
+      Compare on 30-day walk-forward holdout: swap if challenger wins by >= 1pp
+      Keep prior as `meta_label_v0.pkl` emergency fallback (shutil.copy runs BEFORE pickle.dump so a dump crash never loses both files)
       Log `model_swapped` or `model_retained` with accuracy delta
-      Auto-gate: skip gracefully if no model file exists
-- [ ] Test: challenger wins by 2pp → swap; wins by 0.5pp → no swap; no model → skip
+      Auto-gate: skip gracefully if no champion pkl, if lightgbm unavailable, if <50 labeled rows in the 90d window, or if the 30/10 train/holdout split legs fall below their floors
+- [x] Test: 8 cases in `backend/tests/test_champion_challenger.py` covering no-model pass-through, both insufficiency gates (data / split), swap (2pp improvement with v1→v0 backup assertion), retain-losing (-1pp), retain-below-threshold (0.5pp with 200-row holdout), fail-open on Supabase exceptions, and a walk-forward ordering invariant (`.order("predicted_at")` must be in the query).
+
+**Deviations from the literal spec (operator-approved Option A, 2026-04-20):**
+1. **Filename.** Spec said `lgbm_direction_v1.pkl`; the directional model that `prediction_engine.py:71` actually loads is `direction_lgbm_v1.pkl` (token order). Gating on the spec's path would never fire in production.
+2. **Feature space.** Spec's challenger trains on the 10-column Phase-A live set (`confidence, vvix_z_score, gex_confidence, cv_stress_score, vix, signal_weak, prior_session_return, vix_term_ratio, spx_momentum_4h, gex_flip_proximity`). The directional champion was trained on the 25-column bar-engineered `FEATURE_COLS` list in `backend/scripts/train_direction_model.py`. A cross-space comparison either crashes on `.predict()` shape mismatch or silently padded/truncates, producing meaningless accuracy numbers to base a swap on.
+3. **Label space.** Directional champion predicts `"bull"/"bear"` strings; spec's challenger predicts `{0, 1} outcome_correct`. `preds == y_hold` would always be False, champion_acc pinned at 0, and the directional model would be replaced with a trade-outcome classifier on the first Sunday run.
+4. **Target model.** Retargeted at `meta_label_v1.pkl` (written by 12K's `train_meta_label_model`). Feature set, target, and label space all match natively — the comparison is valid by construction. A real champion/challenger for the directional model belongs in a Phase-A3 follow-up that retrains from `backend/data/historical/` parquet data, not from `trading_prediction_outputs`.
+
+**Invariants pinned by tests:**
+- v1→v0 backup ordering (safety rail — dump-after-copy; assertion on `mock_copy.call_args`).
+- Walk-forward `.order("predicted_at")` (prevents future-leak via PostgREST's default arbitrary ordering).
+- No Supabase query when champion pkl is absent (cheap-scaffold property).
+- Fail-open dict rather than propagation on any exception.
+- Current production state remains pure pass-through (`meta_label_v1.pkl` does not yet exist).
 
 **Cursor sessions: 1 | Commit tag: feat(learning): D2 champion-challenger retrain scaffold**
 
