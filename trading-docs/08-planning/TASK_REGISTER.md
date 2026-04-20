@@ -520,7 +520,7 @@ See Section 8 sprint table for per-session commits.
 
 ---
 
-## SECTION 10 — PROFIT MAXIMIZATION ROADMAP
+## SECTION 11 — PROFIT MAXIMIZATION ROADMAP
 
 Full specification: `trading-docs/08-planning/archive/profit-maximization-roadmap-v2.md`
 Phases are sequenced — do not skip ahead. Each phase gates on the prior.
