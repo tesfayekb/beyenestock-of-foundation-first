@@ -718,30 +718,43 @@ def run_position_monitor() -> dict:
                     if ok:
                         closed += 1
                         # P-day butterfly safety sprint (Opus 4.7 review
-                        # 2026-04-20): when a credit structure hits the
-                        # full 150% credit stop, set a Redis flag that
-                        # prevents the same strategy from opening again
-                        # for the rest of the trading day. 8h TTL covers
-                        # market hours + evening. strategy_selector
+                        # 2026-04-20, recalibrated in follow-up commit):
+                        # when an iron_butterfly hits the full 150%
+                        # credit stop, set a 2h-TTL Redis flag that
+                        # prevents butterfly from opening again until
+                        # the cool-down elapses. strategy_selector
                         # reads this flag via butterfly_forbidden logic.
-                        # Never block position close due to flag write
-                        # failure — the stop itself is what matters.
+                        #
+                        # Only written for iron_butterfly — the reader
+                        # only checks strategy_failed_today:iron_butterfly:
+                        # <date>, so writing the flag for iron_condor /
+                        # put_credit_spread / call_credit_spread stop-outs
+                        # wastes Redis writes and muddies observability.
+                        #
+                        # 2h TTL (was 8h): one stop-out triggers a
+                        # cooldown, not a full-day lockout — lets
+                        # afternoon pins re-open butterfly after a
+                        # morning noise stop. Never block position
+                        # close due to flag write failure — the stop
+                        # itself is what matters.
                         try:
-                            redis_client = _get_redis()
-                            if redis_client is not None:
-                                today = date.today().isoformat()
-                                strategy = pos.get("strategy_type", "unknown")
-                                redis_client.setex(
-                                    f"strategy_failed_today:{strategy}:{today}",
-                                    28800,  # 8 hours
-                                    "1",
-                                )
-                                logger.info(
-                                    "strategy_failed_today_flag_set",
-                                    strategy=strategy,
-                                    date=today,
-                                    pos_id=pos["id"],
-                                )
+                            strategy = pos.get("strategy_type", "unknown")
+                            if strategy == "iron_butterfly":
+                                redis_client = _get_redis()
+                                if redis_client is not None:
+                                    today = date.today().isoformat()
+                                    redis_client.setex(
+                                        f"strategy_failed_today:{strategy}:{today}",
+                                        7200,  # 2 hours
+                                        "1",
+                                    )
+                                    logger.info(
+                                        "strategy_failed_today_flag_set",
+                                        strategy=strategy,
+                                        date=today,
+                                        pos_id=pos["id"],
+                                        ttl_s=7200,
+                                    )
                         except Exception as flag_exc:
                             logger.warning(
                                 "strategy_failed_today_flag_write_failed",

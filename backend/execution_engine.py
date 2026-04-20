@@ -137,11 +137,14 @@ class ExecutionEngine:
                     error=str(cap_exc),
                 )
 
-            # P-day butterfly safety sprint (Opus 4.7 review 2026-04-20):
-            # prevent piling into a failing thesis. If any already-open
-            # position of the same strategy is at >= 50% of its max loss,
-            # block new entries in that strategy. The regime clearly
-            # isn't working — compounding the same bet makes it worse.
+            # P-day butterfly safety sprint (Opus 4.7 review 2026-04-20,
+            # recalibrated in follow-up commit): prevent piling into a
+            # failing thesis. If any already-open position of the same
+            # strategy is at >= 75% of its max loss, block new entries
+            # in that strategy. A position at 50% of max loss still has
+            # half the stop-loss distance remaining and may be recovering;
+            # 75% is a genuine "about to stop out" signal where adding
+            # another entry to the same thesis is reckless.
             #
             # Max loss math must match position_monitor.py L526 exactly:
             #   max_profit = abs(entry_credit) * contracts * 100
@@ -168,7 +171,7 @@ class ExecutionEngine:
                         pnl = float(p.get("current_pnl") or 0)
                         pos_contracts = int(p.get("contracts") or 1)
                         max_loss = abs(entry) * 1.5 * pos_contracts * 100
-                        if max_loss > 0 and abs(pnl) >= max_loss * 0.50 and pnl < 0:
+                        if max_loss > 0 and abs(pnl) >= max_loss * 0.75 and pnl < 0:
                             logger.info(
                                 "open_position_blocked_same_strategy_drawdown",
                                 strategy=strategy_type_new,

@@ -554,7 +554,7 @@ class StrategySelector:
           CHANGE 1: short-circuit only when regime == "pin_range"
           CHANGE 3: block when strategy_failed_today:iron_butterfly flag set
           CHANGE 4: require GEX concentration >= 25% at top wall strike
-          CHANGE 5: restrict to 12:00-15:15 ET window
+          CHANGE 5: restrict to 12:00-15:40 ET window
         Any failed safety gate sets `butterfly_forbidden`, which both
         blocks the pin-override short-circuit AND strips iron_butterfly
         from REGIME_STRATEGY_MAP fallthrough candidates. Other strategies
@@ -565,20 +565,25 @@ class StrategySelector:
             butterfly_forbidden = False
             forbidden_reason: Optional[str] = None
 
-            # CHANGE 5: time-of-day gate — butterfly only safe 12:00-15:15 ET.
-            # Morning is too volatile for short-gamma; after 3:15 there
-            # isn't enough theta left to make the risk/reward work.
+            # CHANGE 5: time-of-day gate — butterfly only safe 12:00-15:40 ET.
+            # Morning (pre-12:00) is too volatile for short-gamma — the
+            # pin has not yet demonstrated stability. Original sprint cut
+            # at 3:15 PM, but the final 25 minutes of 0DTE is peak theta
+            # decay and the highest-EV hold window when the wall is
+            # intact — the 3:40 end gives back that window while still
+            # leaving a 5-minute buffer before the D-010 3:45 PM
+            # hard-close backstop runs.
             try:
                 from datetime import datetime as _dt
                 from zoneinfo import ZoneInfo as _ZI
                 now_et = _dt.now(_ZI("America/New_York"))
                 time_minutes = now_et.hour * 60 + now_et.minute
                 butterfly_start = 12 * 60           # 12:00 PM ET
-                butterfly_end = 15 * 60 + 15        # 3:15 PM ET
+                butterfly_end = 15 * 60 + 40        # 3:40 PM ET
                 if time_minutes < butterfly_start or time_minutes > butterfly_end:
                     butterfly_forbidden = True
                     forbidden_reason = (
-                        f"time_gate_outside_12_1515_et_"
+                        f"time_gate_outside_12_1540_et_"
                         f"{now_et.hour:02d}{now_et.minute:02d}"
                     )
             except Exception:

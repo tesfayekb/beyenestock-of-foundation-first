@@ -117,8 +117,29 @@ def test_butterfly_blocked_before_noon(monkeypatch):
     assert "put_credit_spread" in result
 
 
-def test_butterfly_blocked_after_315pm(monkeypatch):
-    """After 15:15 ET butterfly is forbidden; fallthrough strips it."""
+def test_butterfly_blocked_after_340pm(monkeypatch):
+    """After 15:40 ET butterfly is forbidden; fallthrough strips it.
+
+    Recalibrated in follow-up commit — the original sprint cut at 15:15
+    but the 15:15-15:40 window is peak 0DTE theta decay and the highest-EV
+    hold when the wall is intact, so the end was pushed to 15:40 (5min
+    buffer before the D-010 3:45 PM hard-close backstop). This test
+    now verifies blocking resumes just after the new 3:40 boundary."""
+    selector = _make_selector(_pin_day_redis(
+        **{"gex:confidence": b"0.8"}
+    ))
+    _patch_et_time(monkeypatch, 15, 45)
+
+    result = selector._stage1_regime_gate("pin_range", True)
+
+    assert "iron_butterfly" not in result
+    assert "iron_condor" in result
+
+
+def test_butterfly_allowed_at_330pm(monkeypatch):
+    """15:30 ET is inside the new window (between 15:15 and 15:40) —
+    regression guard ensuring the afternoon window expansion actually
+    let peak-theta trades through. Prior sprint blocked this."""
     selector = _make_selector(_pin_day_redis(
         **{"gex:confidence": b"0.8"}
     ))
@@ -126,8 +147,7 @@ def test_butterfly_blocked_after_315pm(monkeypatch):
 
     result = selector._stage1_regime_gate("pin_range", True)
 
-    assert "iron_butterfly" not in result
-    assert "iron_condor" in result
+    assert result == ["iron_butterfly"]
 
 
 # ── CHANGE 4: GEX concentration ───────────────────────────────────────
@@ -271,15 +291,19 @@ def _fake_exec_client_with_open_positions(open_positions: list):
 
 
 def test_same_strategy_drawdown_blocks_entry():
-    """An open iron_butterfly at 60% of max loss must block a new
+    """An open iron_butterfly at >= 75% of max loss must block a new
     iron_butterfly entry. max_loss = abs(entry_credit) * 1.5 * contracts * 100
     matching position_monitor's stop-loss math exactly.
+
+    Recalibrated in follow-up commit — threshold 0.50 was too aggressive
+    (a position still has 50% of stop-loss distance remaining and may be
+    recovering); 0.75 flags positions that are genuinely about to stop out.
 
     entry_credit = 1.30, contracts = 2:
         max_profit = 1.30 * 2 * 100   = $260
         max_loss   = max_profit * 1.5 = $390
-        block threshold = max_loss * 0.50 = $195
-    current_pnl = -240 → abs(240) >= 195 → block.
+        block threshold = max_loss * 0.75 = $292.50
+    current_pnl = -300 → abs(300) >= 292.50 → block.
     """
     from execution_engine import ExecutionEngine
 
@@ -287,7 +311,7 @@ def test_same_strategy_drawdown_blocks_entry():
     engine.LEGS_BY_STRATEGY = ExecutionEngine.LEGS_BY_STRATEGY
 
     existing = [{
-        "current_pnl": -240.0,
+        "current_pnl": -300.0,
         "entry_credit": 1.30,
         "contracts": 2,
     }]
@@ -365,5 +389,108 @@ def test_same_strategy_drawdown_allows_entry():
 
     assert result is not None, (
         "open_virtual_position should NOT block when existing position "
-        "is well below the 50% drawdown threshold"
+        "is well below the 75% drawdown threshold"
     )
+
+
+# ── CHANGE 3 writer recalibration: flag is butterfly-only, 2h TTL ────
+
+def _losing_credit_position(strategy: str, pos_id: str = "pos-1") -> dict:
+    """Shape a losing credit position that will trigger the 150% stop.
+      entry_credit=1.00, contracts=1  → max_profit=$100, max_loss=-$150
+      current_pnl=-200                 → past the stop
+    """
+    return {
+        "id": pos_id,
+        "strategy_type": strategy,
+        "position_type": "credit",
+        "status": "open",
+        "entry_at": "2026-04-21T14:00:00Z",
+        "entry_credit": 1.00,
+        "contracts": 1,
+        "session_id": "sess-1",
+        "current_pnl": -200.0,
+        "current_cv_stress": 0.0,
+        "partial_exit_done": False,
+    }
+
+
+def _run_monitor_with_position(pos: dict):
+    """Run position_monitor.run_position_monitor with a single mocked
+    open position and return (mock_redis, mock_engine) for assertion."""
+    import position_monitor as pm
+
+    mock_engine = MagicMock()
+    mock_engine.close_virtual_position.return_value = True
+
+    mock_redis = MagicMock()
+
+    with patch("position_monitor.get_open_positions", return_value=[pos]), \
+            patch("position_monitor._get_engine", return_value=mock_engine), \
+            patch("position_monitor._get_redis", return_value=mock_redis), \
+            patch("position_monitor.write_health_status"):
+        pm.run_position_monitor()
+
+    return mock_redis, mock_engine
+
+
+def test_strategy_failed_flag_only_written_for_butterfly():
+    """iron_condor stop-out must NOT write strategy_failed_today.
+
+    The reader in strategy_selector only checks
+    strategy_failed_today:iron_butterfly:<date>, so writing the flag for
+    other credit strategies wastes Redis writes and muddies observability.
+    """
+    mock_redis, mock_engine = _run_monitor_with_position(
+        _losing_credit_position("iron_condor")
+    )
+
+    # The stop-loss must have fired (sanity check — if not, the test is
+    # not actually exercising the flag-write branch).
+    mock_engine.close_virtual_position.assert_called_once()
+    kwargs = mock_engine.close_virtual_position.call_args.kwargs
+    assert kwargs["exit_reason"] == "stop_loss_150pct_credit"
+
+    flag_writes = [
+        c for c in mock_redis.setex.call_args_list
+        if c.args and str(c.args[0]).startswith("strategy_failed_today:")
+    ]
+    assert flag_writes == [], (
+        f"iron_condor stop-out must NOT write strategy_failed_today flag; "
+        f"got: {flag_writes}"
+    )
+
+
+def test_strategy_failed_flag_2h_ttl():
+    """iron_butterfly stop-out writes the flag with 2-hour TTL (7200s).
+
+    Recalibrated in follow-up commit — original sprint used an 8h TTL
+    which turned a single stop-out into a full-day lockout. 2h lets the
+    afternoon pin re-open butterfly after a morning noise stop-out.
+    """
+    from datetime import date
+
+    mock_redis, mock_engine = _run_monitor_with_position(
+        _losing_credit_position("iron_butterfly")
+    )
+
+    mock_engine.close_virtual_position.assert_called_once()
+    kwargs = mock_engine.close_virtual_position.call_args.kwargs
+    assert kwargs["exit_reason"] == "stop_loss_150pct_credit"
+
+    flag_writes = [
+        c for c in mock_redis.setex.call_args_list
+        if c.args and str(c.args[0]).startswith("strategy_failed_today:")
+    ]
+    assert len(flag_writes) == 1, (
+        f"expected exactly 1 strategy_failed_today flag write, "
+        f"got {len(flag_writes)}: {flag_writes}"
+    )
+
+    key, ttl, value = flag_writes[0].args
+    today = date.today().isoformat()
+    assert key == f"strategy_failed_today:iron_butterfly:{today}"
+    assert ttl == 7200, (
+        f"expected 2h TTL (7200s), got {ttl}s — recalibration regressed"
+    )
+    assert value == "1"
