@@ -836,19 +836,33 @@ to `iron_condor` and persists the choice to
 Currently hardcoded: -3% daily halt. Should be 2.5 × daily_pnl_stddev from real history.
 Prevents false halts on volatile-but-profitable days.
 
-- [ ] In `backend/calibration_engine.py`, add `calibrate_halt_threshold()`:
-      Query last 60 closed sessions, compute daily P&L stddev
-      `halt_threshold = -2.5 * daily_pnl_stddev`
-      Floor: never looser than -2% | Ceiling: never tighter than -5%
-      Write to Redis `risk:halt_threshold_pct` with 86400s TTL
-      Auto-gate: only writes when `closed_trades >= 100`
-- [ ] In `backend/risk_engine.py` `check_daily_drawdown()`:
-      Read `risk:halt_threshold_pct` from Redis, fallback to -0.03 if absent
-      Log `halt_threshold_source=adaptive|default`
-- [ ] Add to existing weekly calibration job (already runs Sunday 6 PM ET)
-- [ ] Test: with 100 trades stddev=0.8% → threshold=-2.0% (floor applied)
+- [x] In `backend/calibration_engine.py`, add `calibrate_halt_threshold()`:
+      Queries last 60 non-null `virtual_pnl` sessions (90-day window),
+      normalises each by `capital:live_equity` from Redis (falls back to
+      $100k), computes population stddev, `halt_threshold = -2.5 * stddev`.
+      Floor -0.02 / ceiling -0.05 clamp. Writes Redis
+      `risk:halt_threshold_pct` with 8-day TTL (survives a weekend).
+      Auto-gates on `closed_trades >= 100` AND `nonzero_sessions >= 20`.
+- [x] In `backend/risk_engine.py` `check_daily_drawdown()`:
+      Added optional `redis_client=None` param. Reads
+      `risk:halt_threshold_pct`, defensively clamps to [-0.05, -0.02]
+      before use, falls back to -0.03 on absent key / parse error /
+      Redis error. Warning band upper bound also uses the adaptive
+      threshold so the "approaching halt" relationship stays intact.
+      Logs `halt_threshold_applied` with `source=adaptive|default`.
+- [x] `backend/trading_cycle.py` now passes `redis_client` through to
+      `check_daily_drawdown` (sourced from the prediction engine).
+- [x] Added to `run_weekly_calibration_job` in `backend/main.py` —
+      runs alongside existing slippage/CV_stress/touch calibration.
+- [x] Tests (`backend/tests/test_adaptive_halt_threshold.py`): 10 cases
+      covering <100 trades gate, <20 sessions gate, happy path
+      (stddev=0.01 → -0.025), floor clamp (stddev=0.002 → -0.02),
+      ceiling clamp (stddev=0.03 → -0.05), adaptive read, default
+      fallback, fail-open on Redis error, halt fires at adaptive
+      threshold, halt does not fire below threshold.
 
 **Cursor sessions: 1 | Commit tag: feat(risk): adaptive halt threshold Phase C**
+**Status: SHIPPED `6271d5b` — 2026-04-20 | 10 new tests, suite 625 passed.**
 
 ---
 
