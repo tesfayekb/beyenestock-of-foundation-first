@@ -15,6 +15,132 @@ from strategy_selector import STATIC_SLIPPAGE_BY_STRATEGY
 logger = get_logger("execution_engine")
 
 
+def _submit_oco_bracket(
+    signal: dict,
+    fill: dict,
+    position_id: str,
+) -> Optional[str]:
+    """
+    Submit an OCO bracket order to Tradier for real-capital positions.
+    Returns the Tradier order ID on success, None on any failure.
+    Fail-open: never raises.
+
+    ###################################################################
+    #  SCAFFOLD ONLY -- DO NOT SET OCO_BRACKET_ENABLED=TRUE WITHOUT   #
+    #  ADDRESSING EVERY MUST-FIX BELOW.                               #
+    #                                                                 #
+    #  The code below builds a bracket payload that is KNOWN to be    #
+    #  wrong for most of our strategies. The dual TRADIER_SANDBOX /   #
+    #  OCO_BRACKET_ENABLED guard in the caller keeps this function    #
+    #  dormant until these are fixed. Submitting it against a real    #
+    #  Tradier account today will produce rejected orders at best,    #
+    #  unintended fills at worst.                                     #
+    #                                                                 #
+    #  MUST FIX before flipping OCO_BRACKET_ENABLED=true:             #
+    #                                                                 #
+    #  1. SIDE INFERENCE                                              #
+    #     '"side": "buy_to_close"' hardcoded below is correct only    #
+    #     for credit strategies (credit spreads, iron_condor,         #
+    #     iron_butterfly). Debit strategies (long_*, debit_*_spread,  #
+    #     long_straddle, calendar_spread) were opened with            #
+    #     buy_to_open and must close with sell_to_close. Infer from   #
+    #     strategy_type or fill["signed_fill"] sign.                  #
+    #                                                                 #
+    #  2. TP/SL MATH (DEBIT STRATEGIES)                               #
+    #     tp/sl below compute 'entry_credit * 0.60' and               #
+    #     'entry_credit * 2.50' -- correct for credits but INVERTED   #
+    #     for debits. For a $1.50 long call, close at $0.90 is a      #
+    #     40% loss not a 40% profit. Branch on strategy_type.         #
+    #                                                                 #
+    #  3. MULTI-LEG CLOSE ORDER SHAPE                                 #
+    #     Tradier 'class: bracket' on a single 'symbol: SPX' cannot   #
+    #     close a 2-to-4-leg spread. SPX is an index -- Tradier       #
+    #     rejects it for option close orders outright. Multi-leg      #
+    #     closes require 'class: multileg' with per-leg OCC symbols   #
+    #     (e.g. SPXW241220P05000000) built from short_strike /        #
+    #     long_strike / expiry_date on the position. See              #
+    #     backend/strike_selector.py for OCC symbol construction.     #
+    #                                                                 #
+    #  4. SANDBOX VERIFICATION                                        #
+    #     Once 1-3 are addressed, validate the order shape in the     #
+    #     Tradier sandbox account first with OCO_BRACKET_ENABLED=true #
+    #     and TRADIER_SANDBOX=true. Only after a full round-trip      #
+    #     there (submit -> fill -> cancel) should production enable   #
+    #     it. The dual-flag guard below is precisely what makes       #
+    #     that staged rollout possible.                                #
+    ###################################################################
+    """
+    try:
+        import config
+        import requests
+
+        account_id = getattr(config, "TRADIER_ACCOUNT_ID", None)
+        api_key = getattr(config, "TRADIER_API_KEY", None)
+        if not account_id or not api_key:
+            logger.warning("oco_bracket_missing_credentials")
+            return None
+
+        entry_credit = abs(float(fill.get("signed_fill") or 0))
+        if entry_credit <= 0:
+            return None
+
+        tp_debit = round(entry_credit * (1 - 0.40), 2)   # buy back at 40% profit
+        sl_debit = round(entry_credit * (1 + 1.50), 2)   # buy back at 150% loss
+
+        # Tradier bracket order — see MUST-FIX #3 above re: multi-leg shape.
+        payload = {
+            "class": "bracket",
+            "symbol": signal.get("instrument", "SPX"),
+            "side": "buy_to_close",
+            "quantity": str(signal.get("contracts", 1)),
+            "type": "limit",
+            "duration": "day",
+            "price": str(tp_debit),
+            "stop": str(sl_debit),
+            "tag": f"mm_{position_id[:8]}",
+        }
+
+        # Base URL pattern mirrors gex_engine / position_monitor:
+        # sandbox host for TRADIER_SANDBOX=true, prod host otherwise.
+        # OCO submission is additionally gated on OCO_BRACKET_ENABLED,
+        # but keeping the URL branch here means the sandbox test plan
+        # in MUST-FIX #4 can exercise the prod/sandbox split cleanly.
+        base_url = (
+            "https://sandbox.tradier.com"
+            if getattr(config, "TRADIER_SANDBOX", True)
+            else "https://api.tradier.com"
+        )
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        resp = requests.post(
+            f"{base_url}/v1/accounts/{account_id}/orders",
+            data=payload,
+            headers=headers,
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            order_data = resp.json()
+            order_id = str(order_data.get("order", {}).get("id", ""))
+            if order_id:
+                return order_id
+            logger.warning("oco_bracket_no_order_id", response=resp.text[:200])
+            return None
+        else:
+            logger.warning(
+                "oco_bracket_api_error",
+                status=resp.status_code,
+                body=resp.text[:200],
+            )
+            return None
+
+    except Exception as exc:
+        logger.warning("oco_bracket_exception", error=str(exc))
+        return None
+
+
 class ExecutionEngine:
 
     # Legs per strategy (entry leg count × 2 sides = total commissions)
@@ -312,6 +438,52 @@ class ExecutionEngine:
             )
             created_row = result.data[0] if result.data else position
             position_id = created_row.get("id")
+
+            # 12I (C1): OCO bracket order for real-capital mode only.
+            #
+            # DUAL-GUARD: submission requires BOTH
+            #   (1) TRADIER_SANDBOX=False  — real-capital environment
+            #   (2) OCO_BRACKET_ENABLED=True — operator has separately
+            #       acknowledged the MUST-FIX items in the docstring of
+            #       _submit_oco_bracket and validated the order shape.
+            #
+            # In paper/sandbox mode, or in any real-capital deploy that
+            # has not yet flipped the second switch, this block is a
+            # no-op. position_monitor continues to manage exits via P&L
+            # polling unchanged. The outer try/except ensures an OCO
+            # failure can NEVER fail a position open — the Supabase row
+            # above has already been written.
+            if position_id:
+                try:
+                    import config as _cfg
+                    _sandbox = getattr(_cfg, "TRADIER_SANDBOX", True)
+                    _oco_on = getattr(_cfg, "OCO_BRACKET_ENABLED", False)
+                    if (not _sandbox) and _oco_on:
+                        _oco_id = _submit_oco_bracket(
+                            signal, fill, position_id
+                        )
+                        if _oco_id:
+                            get_client().table(
+                                "trading_positions"
+                            ).update(
+                                {"oco_order_id": _oco_id}
+                            ).eq("id", position_id).execute()
+                            logger.info(
+                                "oco_bracket_submitted",
+                                position_id=position_id,
+                                oco_id=_oco_id,
+                            )
+                        else:
+                            logger.info(
+                                "oco_bracket_skipped_or_failed",
+                                position_id=position_id,
+                            )
+                except Exception as oco_exc:
+                    # Never fail a position open due to OCO failure.
+                    logger.warning(
+                        "oco_bracket_outer_failed",
+                        error=str(oco_exc),
+                    )
 
             write_audit_log(
                 action="trading.virtual_position_opened",

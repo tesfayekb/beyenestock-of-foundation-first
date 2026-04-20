@@ -709,6 +709,16 @@ def run_position_monitor() -> dict:
                 # (tighter than prior 200% — reduces avg loss from ~$296 to ~$222)
                 # B3: 150% stop loss (was 200%) — tighter stop reduces
                 # avg loss from ~$296 to ~$222 per contract
+                #
+                # TODO 12I: when oco_order_id is set on a position, the
+                # OCO bracket has been submitted to Tradier. In a future
+                # enhancement, check OCO fill status via Tradier
+                # GET /v1/accounts/{id}/orders/{oco_order_id} instead of
+                # relying solely on P&L polling to avoid duplicate
+                # exits. Current behaviour: P&L polling continues
+                # regardless of OCO presence (safe — the first exit
+                # wins, second close attempt is a no-op because
+                # close_virtual_position gates on status='open').
                 stop_loss_threshold = -(max_profit * 1.5)
                 if current_pnl <= stop_loss_threshold:
                     ok = engine.close_virtual_position(

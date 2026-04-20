@@ -44,6 +44,26 @@ else:
     TRADIER_SANDBOX = _tradier_sandbox_raw.lower() == "true"
 POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
 
+# 12I (C1): OCO bracket order submission to Tradier.
+#
+# Defaults to False. The scaffold in execution_engine._submit_oco_bracket
+# is a C1 stub only — it does NOT yet construct a valid Tradier multileg
+# close order for spread positions, does NOT infer sell_to_close vs
+# buy_to_close from strategy direction, and does NOT compute correct
+# TP/SL prices for debit strategies. See the docstring on
+# `_submit_oco_bracket` for the full MUST-FIX list.
+#
+# Flipping TRADIER_SANDBOX=false is therefore NOT sufficient to activate
+# OCO brackets — OCO_BRACKET_ENABLED=true is a deliberate second switch
+# the operator must set only after the MUST-FIX items are addressed and
+# the order shape has been validated against the Tradier sandbox account.
+#
+# When either switch is False, virtual position management in
+# position_monitor continues to handle exits exclusively via P&L polling
+# — the existing behaviour is unchanged.
+_oco_enabled_raw = os.getenv("OCO_BRACKET_ENABLED", "false")
+OCO_BRACKET_ENABLED = _oco_enabled_raw.lower() == "true"
+
 # Phase 2A: Economic Intelligence Layer (all optional — system works without them)
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
