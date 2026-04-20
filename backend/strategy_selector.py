@@ -547,12 +547,106 @@ class StrategySelector:
         Phase 2B: When strategy:iron_butterfly:enabled=true and SPX is
         within 0.3% of the GEX wall (pin day), short-circuit to
         iron_butterfly — pin-day market making produces highest EV here.
+
+        P-day butterfly safety sprint (6 gates) — reviewed by Opus 4.7
+        after 2026-04-20 live losses (3 iron butterflies, all stopped out
+        as GEX wall drifted 80pts intraday):
+          CHANGE 1: short-circuit only when regime == "pin_range"
+          CHANGE 3: block when strategy_failed_today:iron_butterfly flag set
+          CHANGE 4: require GEX concentration >= 25% at top wall strike
+          CHANGE 5: restrict to 12:00-15:15 ET window
+        Any failed safety gate sets `butterfly_forbidden`, which both
+        blocks the pin-override short-circuit AND strips iron_butterfly
+        from REGIME_STRATEGY_MAP fallthrough candidates. Other strategies
+        (iron_condor, put_credit_spread) remain available on fallthrough.
         """
         try:
-            # Phase 2B: Gamma pin override (feature-flagged, default OFF)
+            # ==== butterfly safety gates (apply universally) ====
+            butterfly_forbidden = False
+            forbidden_reason: Optional[str] = None
+
+            # CHANGE 5: time-of-day gate — butterfly only safe 12:00-15:15 ET.
+            # Morning is too volatile for short-gamma; after 3:15 there
+            # isn't enough theta left to make the risk/reward work.
             try:
-                if self._check_feature_flag(
-                    "strategy:iron_butterfly:enabled", default=False
+                from datetime import datetime as _dt
+                from zoneinfo import ZoneInfo as _ZI
+                now_et = _dt.now(_ZI("America/New_York"))
+                time_minutes = now_et.hour * 60 + now_et.minute
+                butterfly_start = 12 * 60           # 12:00 PM ET
+                butterfly_end = 15 * 60 + 15        # 3:15 PM ET
+                if time_minutes < butterfly_start or time_minutes > butterfly_end:
+                    butterfly_forbidden = True
+                    forbidden_reason = (
+                        f"time_gate_outside_12_1515_et_"
+                        f"{now_et.hour:02d}{now_et.minute:02d}"
+                    )
+            except Exception:
+                pass  # fail open on time-check error
+
+            # CHANGE 3: strategy_failed_today flag — position_monitor
+            # writes this 8h-TTL key when a butterfly hits the 150%
+            # credit stop. One full stop-out ends butterfly for the day.
+            if not butterfly_forbidden:
+                try:
+                    from datetime import date as _date
+                    today = _date.today().isoformat()
+                    failed_key = f"strategy_failed_today:iron_butterfly:{today}"
+                    if self.redis_client and self.redis_client.get(failed_key):
+                        butterfly_forbidden = True
+                        forbidden_reason = "strategy_failed_today"
+                except Exception:
+                    pass  # fail open on flag-check error
+
+            # CHANGE 4: GEX wall concentration — require >= 25% of
+            # positive gamma mass at the top strike. Spread gamma across
+            # many strikes = weak/false pin; real pins concentrate.
+            if not butterfly_forbidden:
+                try:
+                    import json as _json
+                    by_strike_raw = (
+                        self.redis_client.get("gex:by_strike")
+                        if self.redis_client else None
+                    )
+                    if by_strike_raw:
+                        by_strike = _json.loads(by_strike_raw)
+                        positives = [
+                            float(v) for v in by_strike.values()
+                            if float(v) > 0
+                        ]
+                        if positives:
+                            total_positive_gex = sum(positives)
+                            top_gex = max(positives)
+                            wall_concentration = (
+                                top_gex / total_positive_gex
+                                if total_positive_gex > 0 else 0.0
+                            )
+                            if wall_concentration < 0.25:
+                                butterfly_forbidden = True
+                                forbidden_reason = (
+                                    f"low_concentration_"
+                                    f"{wall_concentration:.3f}"
+                                )
+                except Exception:
+                    pass  # fail open on concentration-check error
+
+            if butterfly_forbidden:
+                logger.info(
+                    "butterfly_forbidden",
+                    reason=forbidden_reason,
+                    regime=regime,
+                )
+
+            # Phase 2B: Gamma pin override (feature-flagged, default OFF).
+            # CHANGE 1: short-circuit requires regime == "pin_range"
+            # (previously bypassed the regime classifier entirely).
+            try:
+                if (
+                    not butterfly_forbidden
+                    and regime == "pin_range"
+                    and self._check_feature_flag(
+                        "strategy:iron_butterfly:enabled", default=False
+                    )
                 ):
                     nearest_wall_raw = (
                         self.redis_client.get("gex:nearest_wall")
@@ -588,7 +682,16 @@ class StrategySelector:
                 pass  # Fall through to normal regime map on any pin error
 
             # Normal regime-based selection
-            candidates = list(REGIME_STRATEGY_MAP.get(regime, ["put_credit_spread"]))
+            candidates = list(
+                REGIME_STRATEGY_MAP.get(regime, ["put_credit_spread"])
+            )
+
+            # Option B: when any butterfly safety gate failed, strip
+            # iron_butterfly from the fallthrough candidate list too.
+            # iron_condor and put_credit_spread stay available.
+            if butterfly_forbidden and "iron_butterfly" in candidates:
+                candidates = [s for s in candidates if s != "iron_butterfly"]
+
             if time_gate_result == "long_gamma_only":
                 candidates = [s for s in candidates if s in LONG_GAMMA_STRATEGIES]
             return candidates

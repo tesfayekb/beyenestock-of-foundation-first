@@ -77,35 +77,70 @@ def test_ai_hint_ignored_when_flag_off():
     assert ordered[0] == "iron_condor"
 
 
-def test_gamma_pin_returns_butterfly():
-    """Iron butterfly fires when SPX is within 0.3% of GEX wall."""
-    from strategy_selector import StrategySelector
-    selector = StrategySelector.__new__(StrategySelector)
-    mock_redis = MagicMock()
-    mock_redis.get.side_effect = lambda k: {
+def _pin_day_redis(**overrides):
+    """Shared helper — returns a MagicMock redis client with sensible
+    defaults for the post P-day-sprint butterfly gates. Callers override
+    per-test. High GEX concentration (top strike holds 50% of positive
+    gamma mass) is the default so the concentration gate passes.
+    """
+    import json as _json
+    defaults = {
         "strategy:iron_butterfly:enabled": b"true",
         "gex:nearest_wall": b"5200.0",
         "gex:confidence": b"0.5",
         "tradier:quotes:SPX": b'{"last": 5200.0}',
-    }.get(k)
-    selector.redis_client = mock_redis
+        "gex:by_strike": _json.dumps({
+            "5200": 5000.0,    # top strike: 50% concentration
+            "5195": 2500.0,
+            "5205": 2500.0,
+        }),
+    }
+    defaults.update(overrides)
+    mock = MagicMock()
+    mock.get.side_effect = lambda k: defaults.get(k)
+    return mock
+
+
+def _patch_et_time(monkeypatch, hour: int, minute: int = 0):
+    """Freeze datetime.now(ZoneInfo('America/New_York')) to a given HH:MM.
+    Patches strategy_selector's local aliases only."""
+    from datetime import datetime as real_dt, timezone as real_tz
+
+    class _FrozenDT(real_dt):
+        @classmethod
+        def now(cls, tz=None):
+            # Compose a fixed date (Tuesday 2026-04-21) with the given ET time
+            base = real_dt(2026, 4, 21, hour, minute, 0, tzinfo=tz)
+            return base
+
+    # strategy_selector imports datetime/ZoneInfo lazily inside the function,
+    # so we patch the datetime module attribute. zoneinfo is used literally.
+    import datetime as dt_module
+    monkeypatch.setattr(dt_module, "datetime", _FrozenDT)
+
+
+def test_gamma_pin_returns_butterfly(monkeypatch):
+    """Iron butterfly fires when SPX is within 0.3% of GEX wall,
+    regime is pin_range, time is 13:00 ET, and concentration is high."""
+    from strategy_selector import StrategySelector
+    selector = StrategySelector.__new__(StrategySelector)
+    selector.redis_client = _pin_day_redis()
+    _patch_et_time(monkeypatch, 13, 0)
 
     result = selector._stage1_regime_gate("pin_range", True)
     assert result == ["iron_butterfly"]
 
 
-def test_gamma_pin_skipped_when_far_from_wall():
-    """Iron butterfly does NOT fire when SPX is far from GEX wall."""
+def test_gamma_pin_skipped_when_far_from_wall(monkeypatch):
+    """Iron butterfly short-circuit does NOT fire when SPX is far from
+    GEX wall, and butterfly remains available via REGIME_STRATEGY_MAP
+    fallthrough because no safety gate tripped."""
     from strategy_selector import StrategySelector
     selector = StrategySelector.__new__(StrategySelector)
-    mock_redis = MagicMock()
-    mock_redis.get.side_effect = lambda k: {
-        "strategy:iron_butterfly:enabled": b"true",
-        "gex:nearest_wall": b"5100.0",  # 1.9% away from 5200
-        "gex:confidence": b"0.5",
-        "tradier:quotes:SPX": b'{"last": 5200.0}',
-    }.get(k)
-    selector.redis_client = mock_redis
+    selector.redis_client = _pin_day_redis(
+        **{"gex:nearest_wall": b"5100.0"}  # 1.9% away from 5200
+    )
+    _patch_et_time(monkeypatch, 13, 0)
 
     result = selector._stage1_regime_gate("pin_range", True)
     # Returns regime-based candidates (multiple), not the pin short-circuit

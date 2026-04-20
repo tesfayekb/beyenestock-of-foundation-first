@@ -137,6 +137,52 @@ class ExecutionEngine:
                     error=str(cap_exc),
                 )
 
+            # P-day butterfly safety sprint (Opus 4.7 review 2026-04-20):
+            # prevent piling into a failing thesis. If any already-open
+            # position of the same strategy is at >= 50% of its max loss,
+            # block new entries in that strategy. The regime clearly
+            # isn't working — compounding the same bet makes it worse.
+            #
+            # Max loss math must match position_monitor.py L526 exactly:
+            #   max_profit = abs(entry_credit) * contracts * 100
+            #   stop_loss_threshold = -(max_profit * 1.5)
+            # so max_loss = abs(entry) * 1.5 * contracts * 100 (dollars).
+            # current_pnl is stored in total dollars (same units).
+            #
+            # Fail OPEN on query error — a transient Supabase blip must
+            # not block trading. Regime/frequency caps are the backstops.
+            try:
+                strategy_type_new = signal.get("strategy_type", "")
+                if strategy_type_new:
+                    open_same = (
+                        get_client()
+                        .table("trading_positions")
+                        .select("current_pnl, entry_credit, contracts")
+                        .eq("session_id", session["id"])
+                        .eq("strategy_type", strategy_type_new)
+                        .in_("status", ["open", "partial"])
+                        .execute()
+                    )
+                    for p in (open_same.data or []):
+                        entry = float(p.get("entry_credit") or 0)
+                        pnl = float(p.get("current_pnl") or 0)
+                        pos_contracts = int(p.get("contracts") or 1)
+                        max_loss = abs(entry) * 1.5 * pos_contracts * 100
+                        if max_loss > 0 and abs(pnl) >= max_loss * 0.50 and pnl < 0:
+                            logger.info(
+                                "open_position_blocked_same_strategy_drawdown",
+                                strategy=strategy_type_new,
+                                existing_pnl=round(pnl, 2),
+                                max_loss=round(max_loss, 2),
+                                pct_of_max_loss=round(abs(pnl) / max_loss, 3),
+                            )
+                            return None
+            except Exception as drawdown_exc:
+                logger.warning(
+                    "same_strategy_drawdown_check_failed",
+                    error=str(drawdown_exc),
+                )
+
             contracts = signal.get("contracts", 0)
             if contracts <= 0:
                 logger.warning(
