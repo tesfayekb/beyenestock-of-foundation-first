@@ -237,9 +237,22 @@ def run_position_monitor_job() -> None:
 
 
 def run_mark_to_market_job() -> None:
-    """Runs every minute during market hours — prices open positions."""
+    """Runs every minute during market hours — prices open positions.
+
+    T0-5: when redis_client is unavailable we MUST surface the failure
+    on the health page. The previous silent return left operators with
+    no visibility that MTM was down — stops and TPs were running on
+    stale P&L for as long as Redis stayed disconnected.
+    """
     try:
         if redis_client is None:
+            write_health_status(
+                "execution_engine",
+                "error",
+                last_error_message=(
+                    "MTM skipped: redis_client unavailable"
+                ),
+            )
             return
         result = run_mark_to_market(redis_client)
         if result.get("errors", 0) > 0:

@@ -558,9 +558,21 @@ def run_position_monitor() -> dict:
                     and contracts >= 3
                 ):
                     try:
+                        # T0-6: capture original contracts BEFORE any
+                        # mutation so the audit log records the right
+                        # value. The previous code wrote
+                        # "original_contracts": contracts AFTER
+                        # contracts had been overwritten with
+                        # remaining_contracts — corrupting the audit
+                        # trail and making partial_pnl reconstruction
+                        # impossible from logs alone.
+                        original_contracts_for_audit = contracts
                         partial_contracts = max(1, int(contracts * 0.30))
                         remaining_contracts = contracts - partial_contracts
-                        # Book partial P&L proportionally
+                        # Book partial P&L proportionally — uses the
+                        # ORIGINAL contracts denominator, which is
+                        # still correct here since the mutation below
+                        # has not yet happened.
                         partial_pnl = round(
                             current_pnl * (partial_contracts / contracts), 4
                         )
@@ -572,13 +584,19 @@ def run_position_monitor() -> dict:
                         # D-019 fix: update local contracts so subsequent exit checks
                         # use the correct remaining count, not the original stale value
                         contracts = remaining_contracts
-                        # Write audit log for partial exit
+                        # Write audit log for partial exit BEFORE the
+                        # T0-6 rescale below — pct_max_profit must be
+                        # the ratio at the moment we triggered the
+                        # partial exit (full-size current_pnl over
+                        # full-size max_profit), not the post-rescale
+                        # ratio.
                         write_audit_log(
                             action="trading.partial_exit_25pct",
                             target_type="trading_positions",
                             target_id=str(pos["id"]),
                             metadata={
-                                "original_contracts": contracts,
+                                "original_contracts":
+                                    original_contracts_for_audit,
                                 "partial_contracts_closed": partial_contracts,
                                 "remaining_contracts": remaining_contracts,
                                 "partial_pnl": partial_pnl,
@@ -587,6 +605,18 @@ def run_position_monitor() -> dict:
                                 ),
                                 "strategy_type": strategy_type,
                             },
+                        )
+                        # T0-6: rescale current_pnl to the remaining
+                        # position size. The 40% TP and 150% SL checks
+                        # below compare current_pnl against max_profit;
+                        # max_profit is recomputed from the new
+                        # (smaller) contracts but current_pnl was
+                        # built from the full-size MTM read. Without
+                        # rescaling, the very next tick fires a false
+                        # TP for winners and never fires SL for losers.
+                        current_pnl = current_pnl * (
+                            remaining_contracts
+                            / (remaining_contracts + partial_contracts)
                         )
                         logger.info(
                             "partial_exit_fired",

@@ -102,6 +102,41 @@ class ExecutionEngine:
                 )
                 return None
 
+            # T0-7: enforce a hard cap on concurrent open positions.
+            # Without this, multiple cycles on the same correlated
+            # signal can stack into 4-5 overlapping positions on the
+            # same direction — turning a sized-as-isolated trade into
+            # a leveraged directional bet. count="exact" populates
+            # .count (not .data) on the Supabase response.
+            #
+            # Fail OPEN on count-query failure: a transient Supabase
+            # blip must not block trading entirely. The drawdown halt
+            # remains the last line of defense.
+            MAX_OPEN_POSITIONS = 3
+            try:
+                open_count_result = (
+                    get_client()
+                    .table("trading_positions")
+                    .select("id", count="exact")
+                    .eq("session_id", session["id"])
+                    .in_("status", ["open", "partial"])
+                    .execute()
+                )
+                open_count = open_count_result.count or 0
+                if open_count >= MAX_OPEN_POSITIONS:
+                    logger.info(
+                        "open_virtual_position_cap_reached",
+                        open_count=open_count,
+                        max_allowed=MAX_OPEN_POSITIONS,
+                        strategy=signal.get("strategy_type"),
+                    )
+                    return None
+            except Exception as cap_exc:
+                logger.warning(
+                    "open_position_cap_check_failed",
+                    error=str(cap_exc),
+                )
+
             contracts = signal.get("contracts", 0)
             if contracts <= 0:
                 logger.warning(
@@ -319,8 +354,34 @@ class ExecutionEngine:
                         mtm_value = entry_credit - (current_pnl_mtm / (contracts_count * 100))
                         exit_credit = round(max(0.01, mtm_value), 4)
                 else:
-                    # No MTM data available — use 50% as last resort
-                    exit_credit = round(entry_credit * 0.50, 4)
+                    # T2-7: refuse to close without a real price.
+                    # The previous 50% guess corrupted realized P&L,
+                    # Kelly inputs, and the feedback-loop training
+                    # data. Better to leave the position open — the
+                    # next MTM cycle will price it properly, or the
+                    # 2:30/3:45 time-stop jobs will close it cleanly.
+                    # Mark as pending_close so EOD reconciliation
+                    # picks it up. The pending_close write is best
+                    # effort: the important thing is the False return,
+                    # which signals the caller (position_monitor /
+                    # time-stop jobs) that this attempt failed.
+                    logger.error(
+                        "close_virtual_position_no_price_available",
+                        position_id=position_id,
+                        strategy_type=strategy_type,
+                        exit_reason=exit_reason,
+                    )
+                    try:
+                        get_client().table("trading_positions").update({
+                            "signal_status": "pending_close",
+                        }).eq("id", position_id).execute()
+                    except Exception as pc_exc:
+                        logger.warning(
+                            "pending_close_mark_failed",
+                            position_id=position_id,
+                            error=str(pc_exc),
+                        )
+                    return False
 
             # D-019: check execution quality and track degradation
             if session_id:

@@ -155,6 +155,65 @@ def compute_kelly_multiplier(
         return 1.0  # Never break position sizing
 
 
+def _apply_sizing_gates(
+    base_risk_pct: float,
+    regime_agreement: bool,
+    consecutive_losses_today: int,
+    allocation_tier: str,
+) -> Tuple[float, Optional[str]]:
+    """T0-3: shared D-021 / D-022 / D-004 gate logic.
+
+    Extracted so EVERY strategy branch — including the long_straddle
+    and calendar_spread early-return paths — runs through the same
+    safety gates. Previously straddle/calendar bypassed all three on
+    event days and could get full sizing while the rest of the book
+    was in capital-preservation mode.
+
+    Returns (effective_risk_pct, size_reduction_reason).
+    Same math, same constants, same log lines as the original
+    inline block in compute_position_size().
+    """
+    risk_pct = base_risk_pct
+    reason: Optional[str] = None
+
+    # D-021: regime disagreement -> 50% size reduction.
+    if not regime_agreement:
+        risk_pct *= 0.50
+        reason = "regime_disagreement_d021"
+        logger.info(
+            "position_size_reduced_regime_disagreement",
+            original_pct=risk_pct * 2,
+            reduced_pct=risk_pct,
+        )
+
+    # D-022: 3+ consecutive losses -> additional 50% reduction.
+    if consecutive_losses_today >= 3:
+        risk_pct *= 0.50
+        d022_reason = "capital_preservation_d022"
+        reason = f"{reason}+{d022_reason}" if reason else d022_reason
+        logger.info(
+            "position_size_reduced_capital_preservation",
+            consecutive_losses=consecutive_losses_today,
+            reduced_pct=risk_pct,
+        )
+
+    # D-004: RCS-dynamic allocation tier (danger -> 0).
+    TIER_MULTIPLIERS = {
+        "full":      1.0,
+        "moderate":  0.70,
+        "low":       0.40,
+        "pre_event": 0.20,
+        "danger":    0.0,
+    }
+    tier_mult = TIER_MULTIPLIERS.get(allocation_tier, 1.0)
+    if tier_mult < 1.0:
+        risk_pct *= tier_mult
+        tier_reason = f"allocation_tier_{allocation_tier}_d004"
+        reason = f"{reason}+{tier_reason}" if reason else tier_reason
+
+    return risk_pct, reason
+
+
 def compute_position_size(
     account_value: float,
     spread_width: float,
@@ -183,14 +242,31 @@ def compute_position_size(
         # Must run BEFORE the spread_width <= 0 guard below.
         if strategy_type == "long_straddle":
             straddle_cost_per_contract = 400.0  # $4.00 × 100 = typical SPX 0DTE
-            straddle_risk_pct = _DEBIT_RISK_PCT.get("long_straddle", 0.0025)
-            max_risk_dollars = account_value * straddle_risk_pct
-            contracts = max(1, int(max_risk_dollars / straddle_cost_per_contract))
+            base_risk_pct = _DEBIT_RISK_PCT.get("long_straddle", 0.0025)
+
+            # T0-3: run through D-021 / D-022 / D-004 gates (was bypassed).
+            # On event days a straddle could previously get full sizing
+            # while the rest of the book was in capital-preservation mode.
+            effective_risk_pct, reduction_reason = _apply_sizing_gates(
+                base_risk_pct,
+                regime_agreement,
+                consecutive_losses_today,
+                allocation_tier,
+            )
+
+            max_risk_dollars = account_value * effective_risk_pct
+            contracts = max(
+                1, int(max_risk_dollars / straddle_cost_per_contract)
+            )
+            # Danger tier (effective_risk_pct == 0) overrides the
+            # max(1, ...) floor so we genuinely refuse to enter.
+            if effective_risk_pct == 0.0:
+                contracts = 0
             return {
                 "contracts": contracts,
-                "risk_pct": straddle_risk_pct,
+                "risk_pct": round(effective_risk_pct, 6),
                 "stressed_loss_per_contract": straddle_cost_per_contract,
-                "size_reduction_reason": None,
+                "size_reduction_reason": reduction_reason,
             }
 
         # Phase 3C: Calendar spread sizing — cost-based, not spread-based.
@@ -199,14 +275,27 @@ def compute_position_size(
         # guard since calendar spread reports spread_width=0.
         if strategy_type == "calendar_spread":
             calendar_cost_per_contract = 150.0
-            calendar_risk_pct = _DEBIT_RISK_PCT.get("calendar_spread", 0.003)
-            max_risk_dollars = account_value * calendar_risk_pct
-            contracts = max(1, int(max_risk_dollars / calendar_cost_per_contract))
+            base_risk_pct = _DEBIT_RISK_PCT.get("calendar_spread", 0.003)
+
+            # T0-3: same gate pattern as straddle.
+            effective_risk_pct, reduction_reason = _apply_sizing_gates(
+                base_risk_pct,
+                regime_agreement,
+                consecutive_losses_today,
+                allocation_tier,
+            )
+
+            max_risk_dollars = account_value * effective_risk_pct
+            contracts = max(
+                1, int(max_risk_dollars / calendar_cost_per_contract)
+            )
+            if effective_risk_pct == 0.0:
+                contracts = 0
             return {
                 "contracts": contracts,
-                "risk_pct": calendar_risk_pct,
+                "risk_pct": round(effective_risk_pct, 6),
                 "stressed_loss_per_contract": calendar_cost_per_contract,
-                "size_reduction_reason": None,
+                "size_reduction_reason": reduction_reason,
             }
 
         if spread_width <= 0:
@@ -234,54 +323,26 @@ def compute_position_size(
                 risk_pct=risk_pct,
             )
 
-        # D-021: regime disagreement → 50% size reduction
-        if not regime_agreement:
-            risk_pct *= 0.50
-            size_reduction_reason = "regime_disagreement_d021"
-            logger.info(
-                "position_size_reduced_regime_disagreement",
-                original_pct=risk_pct * 2,
-                reduced_pct=risk_pct,
-            )
+        # T0-3: D-021 / D-022 / D-004 gates now flow through the same
+        # _apply_sizing_gates helper that the straddle / calendar
+        # branches use. Single source of truth, no duplicate logic to
+        # drift out of sync.
+        risk_pct, size_reduction_reason = _apply_sizing_gates(
+            risk_pct,
+            regime_agreement,
+            consecutive_losses_today,
+            allocation_tier,
+        )
 
-        # D-022: 3+ consecutive losses → additional 50% reduction
-        if consecutive_losses_today >= 3:
-            risk_pct *= 0.50
-            reason_d022 = "capital_preservation_d022"
-            size_reduction_reason = (
-                f"{size_reduction_reason}+{reason_d022}"
-                if size_reduction_reason
-                else reason_d022
-            )
-            logger.info(
-                "position_size_reduced_capital_preservation",
-                consecutive_losses=consecutive_losses_today,
-                reduced_pct=risk_pct,
-            )
-
-        # D-004: RCS-dynamic allocation via allocation_tier
-        TIER_MULTIPLIERS = {
-            "full":      1.0,
-            "moderate":  0.70,
-            "low":       0.40,
-            "pre_event": 0.20,
-            "danger":    0.0,
-        }
-        tier_mult = TIER_MULTIPLIERS.get(allocation_tier, 1.0)
-        if tier_mult < 1.0:
-            risk_pct *= tier_mult
-            tier_reason = f"allocation_tier_{allocation_tier}_d004"
-            size_reduction_reason = (
-                f"{size_reduction_reason}+{tier_reason}"
-                if size_reduction_reason else tier_reason
-            )
-            if tier_mult == 0.0:
-                return {
-                    "contracts": 0,
-                    "risk_pct": 0.0,
-                    "stressed_loss_per_contract": 0.0,
-                    "size_reduction_reason": tier_reason,
-                }
+        # D-004 danger short-circuit preserved exactly as before:
+        # zero out contracts so we never even attempt the entry.
+        if allocation_tier == "danger":
+            return {
+                "contracts": 0,
+                "risk_pct": 0.0,
+                "stressed_loss_per_contract": 0.0,
+                "size_reduction_reason": "allocation_tier_danger_d004",
+            }
 
         # B4: Kelly-adjusted sizing
         if kelly_multiplier != 1.0:
