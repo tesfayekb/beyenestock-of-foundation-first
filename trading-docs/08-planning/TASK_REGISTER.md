@@ -1521,11 +1521,21 @@ Panels to include:
 #### UI-2 — Backend endpoint (`GET /trading/learning-stats`)
 **New FastAPI endpoint to serve all observability data to the Learning Dashboard**
 
-- [ ] Add `GET /trading/learning-stats` to `backend/main.py`
-      Reads all Redis keys listed in UI-1 in a single handler
-      Returns JSON with all values + warmup states
-      Requires `RAILWAY_ADMIN_KEY` authentication (same as other admin endpoints)
-      Fail-open: missing Redis keys return null/default, never 500
+- [x] **UI-2 COMPLETE** (2026-04-20, 709a3db) — `GET /admin/trading/learning-stats`
+      Reads all Redis keys listed in UI-1 in a single handler.
+      Returns JSON with all values + warmup states.
+      Requires `RAILWAY_ADMIN_KEY` authentication (via `Depends(_require_admin_key)` — same as other admin endpoints).
+      Fail-open: missing Redis keys return null/default, never 500.
+      Path deviation from the doc: real route is `/admin/trading/learning-stats`
+      (not `/trading/learning-stats`) to stay consistent with the six other
+      admin GETs and keep RAILWAY_ADMIN_KEY gating uniform. UI-1 fetch calls
+      must target `/admin/trading/learning-stats`.
+      Field deviation: `realized_vol_daily_days` renamed to
+      `realized_vol_last_date` — polygon_feed only persists the last EOD date
+      string (not a sample count). UI infers warmth from `realized_vol_20d`
+      non-null, which proxies the writer's `daily_len >= 5` gate.
+      +9 tests in `backend/tests/test_learning_stats_endpoint.py` covering
+      shape contract, iv/rv math, fail-open, and auth enforcement.
 
 ---
 
@@ -1565,9 +1575,10 @@ No panel affects any trade decision — pure read-only observability.
   Defer: needs real strategy_hint data per no-trade cycle before fixing is meaningful.
   Revisit after 30+ sessions of counterfactual data exists.
 
-- **Item 11** — No UI surfaces for 12A–12L observability data (realized vol, butterfly
-  counters, matrix cell values, drift alert banner, sizing phase ribbon).
-  Defer: separate UI sprint after paper trading validates the data is meaningful.
+- **Item 11** — ~~No UI surfaces for 12A–12L observability data~~
+  **Now planned — see UI Observability Sprint above.** Phase 1 (UI-2 backend
+  endpoint) shipped 2026-04-20 in commit `709a3db`; Phase 2 frontend panels
+  (UI-1, UI-3, UI-4) queued as the next code commit in the same sprint.
 
 ---
 
