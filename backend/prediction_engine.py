@@ -714,6 +714,70 @@ class PredictionEngine:
 
         return False, None
 
+    def _compute_phase_a_features(
+        self,
+        spx_price: Optional[float],
+        gex_flip_zone: Optional[float],
+    ) -> dict:
+        """
+        12H Phase A: compute the five additional LightGBM features that
+        are persisted on every prediction cycle.
+
+        Fail-open convention:
+          - prior_session_return, spx_momentum_4h, earnings_proximity_score:
+            default to 0.0 when their Redis key is absent. Those keys are
+            set to the literal string "0" during warmup and normal flat
+            sessions, so 0 is a valid domain value — not a missing signal.
+          - vix_term_ratio, gex_flip_proximity: return None when either
+            input is missing or malformed. These signals are either
+            well-defined or not at all; persisting a fabricated value
+            (e.g. 1.0 or 0) would teach the future model a phantom signal
+            during any feed gap, corrupting walk-forward backtests.
+            LightGBM handles NULL natively via its own missing-split.
+        """
+        prior_session_return = _safe_float(
+            self._read_redis("polygon:spx:prior_day_return", None), 0.0
+        )
+        spx_momentum_4h = _safe_float(
+            self._read_redis("polygon:spx:return_4h", None), 0.0
+        )
+        earnings_proximity_score = _safe_float(
+            self._read_redis("calendar:earnings_proximity_score", None),
+            0.0,
+        )
+
+        vix_raw = self._read_redis("polygon:vix:current", None)
+        vix9d_raw = self._read_redis("polygon:vix9d:current", None)
+        vix_term_ratio: Optional[float] = None
+        if vix_raw is not None and vix9d_raw is not None:
+            try:
+                v_cur = float(vix_raw)
+                v_9d = float(vix9d_raw)
+                if v_cur > 0:
+                    vix_term_ratio = round(v_9d / v_cur, 4)
+            except (ValueError, TypeError):
+                vix_term_ratio = None
+
+        gex_flip_proximity: Optional[float] = None
+        if (
+            gex_flip_zone is not None
+            and spx_price is not None
+            and spx_price > 0
+        ):
+            gex_flip_proximity = round(
+                abs(gex_flip_zone - spx_price) / spx_price, 6
+            )
+
+        return {
+            "prior_session_return": round(prior_session_return, 6),
+            "vix_term_ratio": vix_term_ratio,
+            "spx_momentum_4h": round(spx_momentum_4h, 6),
+            "gex_flip_proximity": gex_flip_proximity,
+            "earnings_proximity_score": round(
+                earnings_proximity_score, 4
+            ),
+        }
+
     def run_cycle(self) -> Optional[dict]:
         """Run one prediction cycle. Writes to trading_prediction_outputs."""
         try:
@@ -834,6 +898,25 @@ class PredictionEngine:
                 no_trade = True
                 no_trade_reason = "direction_signal_weak"
 
+            # ── 12H (Phase A): additional LightGBM features ─────────────
+            # Persist five extra features to trading_prediction_outputs
+            # now, so by the time we have 90+ labeled sessions (auto-gate
+            # in train_direction_model.py) we already have a full column
+            # of training data — no backfill needed. Logic lives in
+            # _compute_phase_a_features() to keep run_cycle() readable
+            # and the new feature surface independently unit-testable.
+            #
+            # NOTE: `_safe_float` below is the INLINE helper defined at
+            # the top of this try-block (signature: key, default). The
+            # module-level `_safe_float` at the top of the file has a
+            # different signature (value, default) and is shadowed here.
+            spx_price = self._get_spx_price()
+            vix_live = _safe_float("polygon:vix:current", 18.0)
+            phase_a_features = self._compute_phase_a_features(
+                spx_price=spx_price,
+                gex_flip_zone=gex_flip_zone,
+            )
+
             output = {
                 "session_id": session["id"],
                 "predicted_at": datetime.now(timezone.utc).isoformat(),
@@ -844,23 +927,22 @@ class PredictionEngine:
                 "gex_confidence": round(gex_confidence, 4),
                 **cv_data,
                 **regime_data,
-                # placeholders until real price feed in Phase 2B
-                "spx_price": self._get_spx_price(),
+                "spx_price": spx_price,
                 # S4 / E-5: prefer the live VIX from polygon_feed
                 # (polygon:vix:current). Falls back to 18.0 only when
                 # Redis is empty or the value is malformed — the prior
                 # hardcode meant every persisted prediction row
                 # reported a constant VIX regardless of actual market
                 # state, breaking downstream backtests and analytics.
-                "vix": _safe_float(
-                    self._read_redis("polygon:vix:current", None), 18.0
-                ),
+                "vix": vix_live,
                 "vvix": vvix,
                 "vvix_z_score": round(vvix_z, 3),
                 "no_trade_signal": no_trade,
                 "no_trade_reason": no_trade_reason,
                 "capital_preservation_mode": cap_pres,
                 "execution_degraded": False,
+                # 12H Phase A features (see _compute_phase_a_features).
+                **phase_a_features,
             }
 
             result = (

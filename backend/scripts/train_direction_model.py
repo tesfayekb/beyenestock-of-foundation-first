@@ -37,6 +37,53 @@ HOLDOUT_START = "2025-01-01"
 
 MIN_ACCURACY_GATE = 0.52  # Binary classifier: >50% = better than random
 
+# 12H Phase A auto-gate: hold off training until the live system has
+# produced 90 distinct labeled sessions in trading_prediction_outputs
+# (outcome_correct IS NOT NULL). Below this threshold LightGBM would
+# overfit the few dozen rows we have and never generalise, so the
+# script exits with `insufficient_data` rather than writing a weak
+# model file.
+MIN_LABELED_SESSIONS_FOR_TRAINING = 90
+
+
+# -- Auto-gate: labeled-sessions threshold ------------------------------------
+
+def count_labeled_sessions() -> int:
+    """
+    Count distinct sessions in trading_prediction_outputs that have at
+    least one labeled prediction (outcome_correct IS NOT NULL).
+
+    Fails CLOSED on any Supabase / credential error (returns 0) so the
+    gate prevents training when we cannot confirm we have enough data.
+    The alternative — failing open — would let a silent credential
+    outage write a model trained on a tiny mock or empty pool.
+    """
+    try:
+        from db import get_client
+
+        res = (
+            get_client()
+            .table("trading_prediction_outputs")
+            .select("session_id")
+            .not_.is_("outcome_correct", "null")
+            .limit(10000)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        return len({r["session_id"] for r in rows if r.get("session_id")})
+    except Exception as exc:
+        print(f"  WARNING: labeled-session count query failed: {exc}")
+        return 0
+
+
+def check_labeled_sessions_gate() -> tuple:
+    """
+    Return (count, passed). Caller must exit(0) cleanly when passed is
+    False so a scheduled training job doesn't look like a failure.
+    """
+    n = count_labeled_sessions()
+    return n, n >= MIN_LABELED_SESSIONS_FOR_TRAINING
+
 
 # -- Data Loading --------------------------------------------------------------
 
@@ -405,6 +452,23 @@ def main() -> None:
     print("=" * 60)
     print("Phase A3: Train LightGBM Direction Model")
     print("=" * 60)
+
+    # 12H auto-gate — skip training if we don't yet have 90 labeled
+    # sessions. Exits with status 0 (not an error) so the scheduled
+    # weekly job doesn't page on-call when we're simply still in the
+    # data-collection window.
+    n_labeled, gate_passed = check_labeled_sessions_gate()
+    if not gate_passed:
+        print(
+            f"\ninsufficient_data: {n_labeled} labeled sessions "
+            f"(need {MIN_LABELED_SESSIONS_FOR_TRAINING}). "
+            "Exiting cleanly — no model written."
+        )
+        sys.exit(0)
+    print(
+        f"  Labeled sessions: {n_labeled} "
+        f"(>= {MIN_LABELED_SESSIONS_FOR_TRAINING} required)"
+    )
 
     spx5, vix, vvix, vix9d = load_data()
     df = engineer_features(spx5, vix, vvix, vix9d)
