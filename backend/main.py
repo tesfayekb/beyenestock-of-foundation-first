@@ -207,6 +207,39 @@ def run_eod_criteria_evaluation() -> None:
     except Exception as exc:
         logger.error("eod_criteria_evaluation_error", error=str(exc))
 
+    # 12B: butterfly gate daily stats. Pulls the per-reason block counters
+    # written by strategy_selector._stage1_regime_gate and emits a single
+    # structured log line per trading day. Feeds 12G threshold tuning with
+    # empirical data — after ~2 weeks we can query logs for the blocked/
+    # allowed distribution and recalibrate concentration/time/distance
+    # thresholds against real outcomes. "drawdown_block" and "wall_unstable"
+    # are placeholders for future counters (execution_engine drawdown gate
+    # + 12C wall stability) and will read 0 until those writers ship.
+    try:
+        from datetime import date as _bdate
+        _btoday = _bdate.today().isoformat()
+        reasons = [
+            "regime_mismatch",
+            "failed_today",
+            "time_gate",
+            "low_concentration",
+            "drawdown_block",
+            "wall_unstable",
+        ]
+        stats: dict = {}
+        if redis_client is not None:
+            for r in reasons:
+                val = redis_client.get(f"butterfly:blocked:{r}:{_btoday}")
+                stats[r] = int(val) if val else 0
+            allowed = redis_client.get(f"butterfly:allowed:{_btoday}")
+            stats["allowed"] = int(allowed) if allowed else 0
+        logger.info("butterfly_gate_daily_stats", date=_btoday, **stats)
+    except Exception as stats_exc:
+        logger.warning(
+            "butterfly_gate_daily_stats_failed",
+            error=str(stats_exc),
+        )
+
 
 def run_weekly_calibration_job() -> None:
     """Runs every Sunday at 6 PM ET (23:00 UTC)."""

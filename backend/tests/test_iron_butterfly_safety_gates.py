@@ -708,3 +708,142 @@ def test_ai_hint_fail_open_when_redis_unavailable(monkeypatch):
         "Redis error must not trigger the block log — fail-open means "
         "the hint proceeds unblocked"
     )
+
+
+# ── 12B: butterfly gate instrumentation counters ──────────────────────
+# Pure observability — every gate outcome must increment a Redis counter
+# keyed by reason (or "allowed") with a 7-day TTL. These tests lock in:
+#   * correct key format `butterfly:blocked:{reason}:{YYYY-MM-DD}`
+#   * incr + expire call pair (counter + TTL refresh)
+#   * fail-open semantics when Redis is unavailable (no trading impact)
+
+def _instrumentation_redis(**extra_get_values):
+    """Mock redis that tracks incr/expire calls while serving configurable
+    get() responses for the surrounding gate logic. Separate from
+    _pin_day_redis because the instrumentation tests care about
+    side_effect record-keeping, not the pin-day fixture values."""
+    mock = MagicMock()
+    base = {
+        "strategy:iron_butterfly:enabled": b"true",
+        "gex:nearest_wall": b"5200.0",
+        "gex:confidence": b"0.5",
+        "tradier:quotes:SPX": b'{"last": 5200.0}',
+        "gex:by_strike": json.dumps({
+            "5200": 5000.0,
+            "5195": 2500.0,
+            "5205": 2500.0,
+        }),
+    }
+    base.update(extra_get_values)
+    mock.get.side_effect = lambda k: base.get(k)
+    return mock
+
+
+def test_butterfly_counter_incremented_on_block(monkeypatch):
+    """A blocked cycle (here: regime_mismatch — regime != pin_range) must
+    increment `butterfly:blocked:regime_mismatch:{today}` with a 7-day
+    TTL. This is the empirical data stream that feeds 12G threshold
+    tuning — any regression would blind the recalibration pipeline."""
+    from datetime import date
+
+    mock_redis = _instrumentation_redis()
+    selector = _make_selector(mock_redis)
+    # Freeze to a pin-window time so the TIME gate is NOT the reason —
+    # we want the regime_mismatch counter to fire cleanly.
+    _patch_et_time(monkeypatch, 13, 0)
+
+    selector._stage1_regime_gate("volatile_bearish", True)
+
+    today = date.today().isoformat()
+    expected_key = f"butterfly:blocked:regime_mismatch:{today}"
+
+    incr_calls = [
+        c for c in mock_redis.incr.call_args_list
+        if c.args and c.args[0] == expected_key
+    ]
+    assert len(incr_calls) == 1, (
+        f"expected exactly one incr on {expected_key}, "
+        f"got {mock_redis.incr.call_args_list}"
+    )
+
+    # Expire must be called on the same key with 7-day TTL (86400 * 7).
+    expire_calls = [
+        c for c in mock_redis.expire.call_args_list
+        if c.args and c.args[0] == expected_key
+    ]
+    assert len(expire_calls) == 1
+    assert expire_calls[0].args[1] == 86400 * 7, (
+        f"expected 7-day TTL, got {expire_calls[0].args[1]}s"
+    )
+
+    # And the "allowed" counter must NOT fire on the same cycle.
+    allowed_key = f"butterfly:allowed:{today}"
+    assert not any(
+        c.args and c.args[0] == allowed_key
+        for c in mock_redis.incr.call_args_list
+    ), "allowed counter must not fire on a blocked cycle"
+
+
+def test_butterfly_counter_incremented_on_allow(monkeypatch):
+    """A clean pin-day cycle (all gates pass, regime == pin_range) must
+    increment `butterfly:allowed:{today}` — NOT a blocked counter. This
+    is the denominator for gate-effectiveness ratios in 12G."""
+    from datetime import date
+
+    mock_redis = _instrumentation_redis(
+        **{"gex:confidence": b"0.8"}  # ensures pin-override can fire
+    )
+    selector = _make_selector(mock_redis)
+    _patch_et_time(monkeypatch, 13, 0)
+
+    selector._stage1_regime_gate("pin_range", True)
+
+    today = date.today().isoformat()
+    allowed_key = f"butterfly:allowed:{today}"
+
+    incr_calls = [
+        c for c in mock_redis.incr.call_args_list
+        if c.args and c.args[0] == allowed_key
+    ]
+    assert len(incr_calls) == 1, (
+        f"expected exactly one incr on {allowed_key}, "
+        f"got incr calls={mock_redis.incr.call_args_list}"
+    )
+
+    expire_calls = [
+        c for c in mock_redis.expire.call_args_list
+        if c.args and c.args[0] == allowed_key
+    ]
+    assert len(expire_calls) == 1
+    assert expire_calls[0].args[1] == 86400 * 7
+
+    # No blocked counter should fire on the allowed path.
+    blocked_calls = [
+        c for c in mock_redis.incr.call_args_list
+        if c.args and str(c.args[0]).startswith("butterfly:blocked:")
+    ]
+    assert blocked_calls == [], (
+        f"no blocked counter must fire on an allowed cycle; "
+        f"got {blocked_calls}"
+    )
+
+
+def test_butterfly_counter_fail_open(monkeypatch):
+    """Redis incr/expire raising must NOT affect gate logic or bubble up.
+    Instrumentation is strictly advisory — every counter call is inside
+    a try/except pass. Regression here would mean a Redis outage could
+    crash strategy selection."""
+    mock_redis = _instrumentation_redis()
+    mock_redis.incr.side_effect = ConnectionError("simulated Redis outage")
+    mock_redis.expire.side_effect = ConnectionError("simulated Redis outage")
+
+    selector = _make_selector(mock_redis)
+    _patch_et_time(monkeypatch, 13, 0)
+
+    # Must not raise, despite Redis incr/expire blowing up.
+    result = selector._stage1_regime_gate("volatile_bearish", True)
+
+    # Gate logic unchanged — regime map for volatile_bearish still wins.
+    assert result == ["debit_put_spread", "long_put"], (
+        "instrumentation failure must not distort gate output"
+    )

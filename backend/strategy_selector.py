@@ -564,6 +564,13 @@ class StrategySelector:
             # ==== butterfly safety gates (apply universally) ====
             butterfly_forbidden = False
             forbidden_reason: Optional[str] = None
+            # 12B instrumentation: stable machine-readable counter label
+            # for the single reason this cycle's butterfly was blocked.
+            # Paired with `butterfly:blocked:{reason}:{today}` / `butterfly:
+            # allowed:{today}` Redis counters written below — provides the
+            # empirical data needed by 12G threshold tuning (~2 weeks of
+            # daily increments). Pure observability, no gate logic change.
+            butterfly_block_reason: Optional[str] = None
 
             # CHANGE 5: time-of-day gate — butterfly only safe 12:00-15:40 ET.
             # Morning (pre-12:00) is too volatile for short-gamma — the
@@ -582,6 +589,7 @@ class StrategySelector:
                 butterfly_end = 15 * 60 + 40        # 3:40 PM ET
                 if time_minutes < butterfly_start or time_minutes > butterfly_end:
                     butterfly_forbidden = True
+                    butterfly_block_reason = "time_gate"  # 12B
                     forbidden_reason = (
                         f"time_gate_outside_12_1540_et_"
                         f"{now_et.hour:02d}{now_et.minute:02d}"
@@ -599,6 +607,7 @@ class StrategySelector:
                     failed_key = f"strategy_failed_today:iron_butterfly:{today}"
                     if self.redis_client and self.redis_client.get(failed_key):
                         butterfly_forbidden = True
+                        butterfly_block_reason = "failed_today"  # 12B
                         forbidden_reason = "strategy_failed_today"
                 except Exception:
                     pass  # fail open on flag-check error
@@ -628,6 +637,7 @@ class StrategySelector:
                             )
                             if wall_concentration < 0.25:
                                 butterfly_forbidden = True
+                                butterfly_block_reason = "low_concentration"  # 12B
                                 forbidden_reason = (
                                     f"low_concentration_"
                                     f"{wall_concentration:.3f}"
@@ -641,6 +651,37 @@ class StrategySelector:
                     reason=forbidden_reason,
                     regime=regime,
                 )
+
+            # 12B: regime_mismatch is a counter-only signal. iron_butterfly
+            # appears only in REGIME_STRATEGY_MAP["pin_range"], so the
+            # pin-override short-circuit on line ~651 already requires
+            # regime == "pin_range" AND non-pin regimes' candidate lists
+            # don't contain butterfly — stripping it would be a no-op.
+            # We deliberately do NOT set butterfly_forbidden here (would
+            # spam the forbidden log every non-pin cycle); we only tag
+            # the counter reason so 12G threshold tuning can see how
+            # often butterfly was prevented by regime vs. other gates.
+            if butterfly_block_reason is None and regime != "pin_range":
+                butterfly_block_reason = "regime_mismatch"
+
+            # 12B: daily gate-outcome counter. 7-day TTL keeps today plus
+            # the recent window queryable for EOD stats + trend checks,
+            # then auto-cleans. Fail-open: instrumentation must never
+            # impact trading if Redis hiccups.
+            try:
+                from datetime import date as _bdate
+                _btoday = _bdate.today().isoformat()
+                if butterfly_block_reason:
+                    _counter_key = (
+                        f"butterfly:blocked:{butterfly_block_reason}:{_btoday}"
+                    )
+                else:
+                    _counter_key = f"butterfly:allowed:{_btoday}"
+                if self.redis_client:
+                    self.redis_client.incr(_counter_key)
+                    self.redis_client.expire(_counter_key, 86400 * 7)
+            except Exception:
+                pass  # never affect trading due to instrumentation failure
 
             # Phase 2B: Gamma pin override (feature-flagged, default OFF).
             # CHANGE 1: short-circuit requires regime == "pin_range"
