@@ -183,6 +183,123 @@ def label_prediction_outcomes(target_date: Optional[date] = None) -> dict:
         return {**summary, "errors": summary["errors"] + 1}
 
 
+def check_prediction_drift(redis_client) -> dict:
+    """
+    12L (D1): pure-observability drift alert.
+
+    Fires when rolling 10-day directional accuracy drops > 5pp
+    below the 30-day baseline. Writes a `model_drift_alert` key
+    to Redis (TTL 86400s) that operators / dashboards can poll;
+    clears the same key when accuracy recovers.
+
+    ROI contract: NEVER affects trade decisions. No imports from
+    execution_engine / strategy_selector / risk_engine /
+    trading_cycle (enforced by test_drift_check_does_not_affect_trades).
+    Never raises — any exception returns an error payload.
+
+    Gate: both the 10-day and 30-day windows must carry at least
+    10 labeled predictions (`outcome_correct IS NOT NULL` on
+    real trade signals) before a meaningful ratio can be computed.
+    Below that gate we return checked=False without touching Redis.
+
+    Accepts `redis_client` as a parameter (not a module-level
+    import) so tests can inject a mock and so a None redis_client
+    at the call site surfaces cleanly through the outer try/except
+    instead of silently failing.
+    """
+    try:
+        today = date.today()
+        day10_cutoff = (today - timedelta(days=10)).isoformat()
+        day30_cutoff = (today - timedelta(days=30)).isoformat()
+
+        def _accuracy_for_window(cutoff_iso_date: str):
+            result = (
+                get_client()
+                .table("trading_prediction_outputs")
+                .select("outcome_correct")
+                .not_.is_("outcome_correct", "null")
+                .eq("no_trade_signal", False)
+                .gte(
+                    "predicted_at",
+                    f"{cutoff_iso_date}T00:00:00+00:00",
+                )
+                .execute()
+            )
+            rows = result.data or []
+            if len(rows) < 10:
+                return None, len(rows)
+            correct = sum(1 for r in rows if r.get("outcome_correct"))
+            return round(correct / len(rows), 4), len(rows)
+
+        acc_10d, count_10d = _accuracy_for_window(day10_cutoff)
+        acc_30d, count_30d = _accuracy_for_window(day30_cutoff)
+
+        if acc_10d is None or acc_30d is None:
+            logger.info(
+                "drift_check_skipped_insufficient_data",
+                count_10d=count_10d,
+                count_30d=count_30d,
+                required=10,
+            )
+            return {
+                "checked": False,
+                "reason": "insufficient_data",
+                "count_10d": count_10d,
+                "count_30d": count_30d,
+            }
+
+        # DRIFT_DROP_THRESHOLD is deliberately distinct from the
+        # module-level DRIFT_THRESHOLD (0.50 absolute accuracy used
+        # by detect_drift). This one is a delta in percentage points
+        # between the rolling and baseline windows — a different
+        # quantity — and sharing a name would confuse readers of
+        # both call sites.
+        DRIFT_DROP_THRESHOLD = 0.05
+        drop = acc_30d - acc_10d
+
+        if drop > DRIFT_DROP_THRESHOLD:
+            redis_client.setex("model_drift_alert", 86400, "1")
+            logger.warning(
+                "drift_alert_fired",
+                acc_10d=acc_10d,
+                acc_30d=acc_30d,
+                drop=round(drop, 4),
+                threshold=DRIFT_DROP_THRESHOLD,
+            )
+            return {
+                "alert": True,
+                "acc_10d": acc_10d,
+                "acc_30d": acc_30d,
+                "drop": round(drop, 4),
+                "count_10d": count_10d,
+                "count_30d": count_30d,
+            }
+
+        # Clear any stale alert — recovery branch.
+        try:
+            redis_client.delete("model_drift_alert")
+        except Exception:
+            pass
+        logger.info(
+            "drift_check_clean",
+            acc_10d=acc_10d,
+            acc_30d=acc_30d,
+            drop=round(drop, 4),
+        )
+        return {
+            "alert": False,
+            "acc_10d": acc_10d,
+            "acc_30d": acc_30d,
+            "drop": round(drop, 4),
+            "count_10d": count_10d,
+            "count_30d": count_30d,
+        }
+
+    except Exception as exc:
+        logger.error("drift_check_failed", error=str(exc))
+        return {"checked": False, "error": str(exc)}
+
+
 def compute_directional_accuracy(days: int = 20) -> dict:
     """
     Compute directional prediction accuracy over the last N days.

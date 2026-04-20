@@ -256,6 +256,44 @@ def run_eod_criteria_evaluation() -> None:
         logger.error("eod_outcome_labeling_error", error=str(label_exc))
         # Continue to criteria evaluation even if labeling fails
 
+    # 12L (D1): drift alert. Pure observability — runs after labeling
+    # has populated outcome_correct for today, compares rolling 10-day
+    # vs 30-day directional accuracy, and fires an email alert (plus
+    # a Redis `model_drift_alert` key that dashboards can poll) when
+    # the short window drops > 5pp below the 30-day baseline. Isolated
+    # try/except so any failure here never blocks criteria evaluation.
+    # Never affects any trade decision by design — see ROI contract
+    # in check_prediction_drift's docstring.
+    try:
+        from model_retraining import check_prediction_drift
+        drift_result = check_prediction_drift(redis_client)
+        logger.info("drift_check_complete", **drift_result)
+        if drift_result.get("alert"):
+            try:
+                # alerting.send_alert signature: (level, event, detail,
+                # *, _blocking=False). Event = short identifier for
+                # email subject; detail = operator-facing context.
+                from alerting import send_alert
+                send_alert(
+                    level="warning",
+                    event="model_drift_detected",
+                    detail=(
+                        f"10-day accuracy "
+                        f"{drift_result.get('acc_10d', 0):.1%} dropped "
+                        f"{drift_result.get('drop', 0):.1%} below "
+                        f"30-day baseline "
+                        f"{drift_result.get('acc_30d', 0):.1%}. "
+                        f"Review recent predictions."
+                    ),
+                )
+            except Exception as alert_exc:
+                logger.warning(
+                    "drift_alert_send_failed",
+                    error=str(alert_exc),
+                )
+    except Exception as drift_exc:
+        logger.error("drift_check_job_failed", error=str(drift_exc))
+
     try:
         # Step 2: Evaluate criteria (GLC-001/002 now have labeled data)
         summary = run_criteria_evaluation()
