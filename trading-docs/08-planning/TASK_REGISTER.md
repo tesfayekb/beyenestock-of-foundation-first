@@ -1346,42 +1346,54 @@ Full diagnostic report: produced by Cursor agent on 2026-04-20.
 
 ### Batch 1 — ROI-Positive Fixes (ship together)
 
-- [ ] **B1-1 — Fix `_RISK_PCT` phase ladder** (`backend/risk_engine.py`)
+- [x] **B1-1 — Fix `_RISK_PCT` phase ladder** (`backend/risk_engine.py`) ✅ COMPLETE (2026-04-20, fc64840)
       Phase 1 and 2 have identical values — E1 auto-advance (12N) is a no-op on sizing.
       Fix: `2: {"core": 0.0075, "satellite": 0.00375}` — +50% at E1, 2× at E2.
       Phase 1 UNCHANGED (0.005/0.0025). Test: assert phase1 ≠ phase2 ≠ phase3.
 
-- [ ] **B1-2 — Fix 12A EOD gate from 19 → 21 UTC** (`backend/polygon_feed.py`)
+- [x] **B1-2 — Fix 12A EOD gate from 19 → 21 UTC** (`backend/polygon_feed.py`) ✅ COMPLETE (2026-04-20, fc64840)
       Both VIX daily history AND SPX daily return gates use `now.hour >= 19` (= 3 PM ET).
       True NYSE close is 4 PM ET = 20:00 UTC (EDT) / 21:00 UTC (EST).
       Fix: change BOTH `now.hour >= 19` occurrences to `now.hour >= 21`.
       Ensures close-to-close daily returns, not mid-afternoon samples.
       VIX and SPX must stay in sync — both change together.
 
-- [ ] **B1-3 — Add `earnings_proximity_score` writer** (`backend_agents/economic_calendar.py`)
+- [x] **B1-3 — Add `earnings_proximity_score` writer** (`backend_agents/economic_calendar.py`) ✅ COMPLETE (2026-04-20, fc64840)
       `calendar:earnings_proximity_score` Redis key is READ by prediction_engine but
       NEVER WRITTEN anywhere. Every prediction row has 0.0 permanently — phantom feature.
-      Fix: in `write_intel_to_redis()`, compute and write score = min(1.0, max(0, 1 - days_to_next_earnings/5))
-      based on upcoming earnings in the calendar intel. TTL 86400. Fail-open.
+      Shipped Option B (full gradient): extended `_fetch_major_earnings()` to query a
+      5-day window and annotate each event with `date` + `days_until`; added
+      `_compute_earnings_proximity_score()` (linear decay 1.0→0.0 across 0..5 days)
+      called from `write_intel_to_redis()`. Independent try/except so an intel-write
+      or proximity-write failure can't cross-contaminate. TTL 86400. Fail-open.
 
-- [ ] **B1-4 — Drop `signal_weak` from 12K/12M feature vectors** (`backend/model_retraining.py`)
+- [x] **B1-4 — Drop `signal_weak` from 12K/12M feature vectors** (`backend/model_retraining.py`, `backend/execution_engine.py`) ✅ COMPLETE (2026-04-20, fc64840)
       `signal_weak` is always False in training (filter: no_trade_signal=False) and
       always False at inference (only reached when no_trade_signal=False).
       Constant column wastes a degree of freedom and adds noise to walk-forward comparison.
-      Fix: remove from SELECT query, feature list, and _row_to_features() in both
-      train_meta_label_model() and run_meta_label_champion_challenger(). 4 lines total.
-      Update feature count comments from "10 features" to "9 features".
+      Fix: remove from SELECT query, feature list, and `_row_to_features()` in both
+      `train_meta_label_model()` and `run_meta_label_champion_challenger()` — AND
+      from the `execution_engine` meta-label inference `_feat` builder so all three
+      sites stay in lockstep at 9 features (otherwise `.predict_proba()` crashes on
+      a shape mismatch once `meta_label_v1.pkl` ships). Feature-count comments updated
+      from "10 features" to "9 features".
 
-- [ ] **B1-5 — Wire feature flags for counterfactual and meta-label** (`backend/counterfactual_engine.py`, `backend/execution_engine.py`)
+- [x] **B1-5 — Wire feature flags for counterfactual and meta-label** (`backend/counterfactual_engine.py`, `backend/execution_engine.py`) ✅ COMPLETE (2026-04-20, fc64840)
       `feedback:counterfactual:enabled` and `model:meta_label:enabled` flags exist in
       the UI but are never read by backend code. Operator has no kill-switch if either
       misbehaves in production without a code deploy.
-      Fix: wrap label_counterfactual_outcomes() top with flag check (fail-open: missing
-      row / read error / exception → feature ENABLED, today's behaviour preserved).
-      Wrap meta-label inference block in execution_engine.py with same flag check.
-      Semantics: flag=false → disabled; flag missing/error → enabled (fail-open).
+      Implemented using the Redis-authoritative pattern that matches
+      `strategy_selector._check_feature_flag` (15+ existing call sites) instead of
+      a fresh Supabase round-trip on the hot path — keeps the operator toggle
+      instantaneous and eliminates the stale-read risk from a failed Redis→Supabase
+      mirror write. `label_counterfactual_outcomes()` short-circuits before any
+      Supabase query when the flag is false; `execution_engine` gates the meta-label
+      inference `if _meta_label_enabled and _model_path.exists():`. Fail-open:
+      missing key / client-None / read error → feature ENABLED (today's behaviour
+      preserved).
 
 **Batch 1 commit tag:** `feat(section-13): ROI fixes — risk ladder, EOD gates, earnings score, feature flags, feature hygiene`
+**Shipped as commit:** `fc64840` on 2026-04-20. Full suite: 718 passed (vs 704 baseline, +14 new tests in `backend/tests/test_section_13_batch_1.py`). `tsc --noEmit`: 0 errors.
 
 ---
 
@@ -1433,7 +1445,7 @@ Full diagnostic report: produced by Cursor agent on 2026-04-20.
 
 ### Status
 
-- [ ] Batch 1 shipped
+- [x] Batch 1 shipped (2026-04-20, fc64840)
 - [ ] Batch 2 shipped
 
 *Section 13 opened: 2026-04-20 | Owner: tesfayekb*
