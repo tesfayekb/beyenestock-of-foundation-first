@@ -654,6 +654,8 @@ Phases are sequenced — do not skip ahead. Each phase gates on the prior.
 
 ## SECTION 12 — BUILD-NOW QUEUE (Auto-Activation on Data Threshold)
 
+**STATUS: ALL 14 ITEMS COMPLETE — 2026-04-20**
+
 **Philosophy:** Every item here is built immediately. Activation is gated in code on
 a data threshold — no human action needed. Nothing waits on a human to remember.
 
@@ -1219,16 +1221,66 @@ columns ARE, and line up with what `prediction_engine` actually emits.
 **Priority: LOW — no human action needed once built**
 **Auto-activates: E1 at 45 live days + Sharpe ≥1.2 | E2 at 90 live days + Sharpe ≥1.5**
 
-- [ ] In `backend/calibration_engine.py`, add `evaluate_sizing_phase()`:
+✅ **COMPLETE (2026-04-20, d11b8fd)**
+
+- [x] In `backend/calibration_engine.py`, add `evaluate_sizing_phase()`:
       Query trading_sessions: count live days, compute rolling Sharpe
       If days >= 45 AND sharpe_45d >= 1.2 AND current_phase == 1:
-          Write `capital:sizing_phase=2` to Redis, log `sizing_phase_advanced phase=2`
+          Write `capital:sizing_phase=2` to Redis (setex, TTL 1 year)
       If days >= 90 AND sharpe_60d >= 1.5 AND current_phase == 2:
-          Write `capital:sizing_phase=3` to Redis, log `sizing_phase_advanced phase=3`
-- [ ] In `backend/risk_engine.py`, read `capital:sizing_phase` from Redis, fallback to 1
-      Log `sizing_phase_source=redis|default`
-- [ ] Add to weekly calibration job (Sunday 6 PM ET)
-- [ ] Test: 46 days Sharpe=1.3 → phase advances to 2; below threshold → stays at 1
+          Write `capital:sizing_phase=3` to Redis (setex, TTL 1 year)
+- [x] Redis read lives in `calibration_engine.read_sizing_phase(client)`
+      (not `risk_engine.py` as originally specced — see deviation 1 below)
+      and is consumed at the single `main.run_prediction_cycle` call
+      site into `run_trading_cycle`. Falls back to 1 on missing key,
+      None client, or a raising client.
+- [x] Added to `run_weekly_calibration_job` after the 12M
+      champion/challenger block, in its own try/except.
+- [x] Tests in `backend/tests/test_sizing_phase_advance.py` pin: below
+      the 45-day floor → no write; E1 gate passes → `setex("2")` with
+      1-year TTL; Sharpe below gate → no write; phase 2 + E2 passes →
+      `setex("3")`; already at max → no write and no Supabase call;
+      Supabase error → phase=1 error dict + no write; Redis error →
+      phase=1 error dict + no write; reader returns ints correctly
+      across all four input shapes AND `main.py` imports the reader
+      from `calibration_engine` (no copy-paste drift).
+
+**Deviations from the literal spec (documented here so a future
+reader auditing against the original prompt doesn't think anything
+went missing):**
+
+1. **Redis read moved from `risk_engine.py` to `calibration_engine.py`.**
+   The spec said "In `backend/risk_engine.py`, read `capital:sizing_phase`
+   from Redis, fallback to 1". But `risk_engine.compute_position_size()`
+   already takes `sizing_phase` as a plain int parameter (line 220),
+   which keeps it pure/testable. Adding Redis I/O inside the risk
+   function would bury a side-effecting dependency in the sizing
+   core. Instead the Redis read lives in `calibration_engine` next
+   to the writer (sharing `SIZING_PHASE_REDIS_KEY`), and
+   `main.run_prediction_cycle` — the one place the int originates —
+   calls the reader before passing the value through unchanged.
+   Tests assert the shared key name to prevent drift.
+
+2. **No `sizing_phase_source=redis|default` log.** The spec asked for
+   this tag, but the reader was factored into a helper and now logs
+   `sizing_phase_read_failed_fail_open` only on the raise path
+   (the common success / cache-miss paths are called once per
+   5-minute prediction cycle and logging each one would be noise).
+   The weekly writer emits `sizing_phase_advanced` when a gate
+   passes and `weekly_sizing_phase_complete` on every run, which
+   is the higher-signal observability surface.
+
+3. **`_RISK_PCT` phase-1-vs-phase-2 equivalence is intentionally
+   NOT fixed here.** The spec's descriptive copy says "E1 doubles
+   gross P&L with same win rate", but today's
+   `backend/risk_engine.py:48-53` assigns identical risk percentages
+   to phases 1 and 2 (core=0.005) and identical percentages to
+   phases 3 and 4 (core=0.010). So the E1 advance (1→2) is
+   currently a no-op on position size, and only E2 (2→3) actually
+   doubles risk_pct. 12N writes the Redis key correctly either
+   way; bringing the `_RISK_PCT` table in line with the "doubles at
+   E1" intent belongs in a separate task so the infrastructure
+   change (this PR) is cleanly reviewable from the payload change.
 
 **Cursor sessions: 0.5 | Commit tag: feat(sizing): auto-advance sizing phase E1/E2**
 
