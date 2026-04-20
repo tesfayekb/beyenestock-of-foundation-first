@@ -726,7 +726,7 @@ A rolling range check over 30 minutes would have blocked all 3 trades.
       samples, fail-open on Redis error, and 12B counter integration.)
 
 **Cursor sessions: 1 | Commit tag: feat(butterfly): GEX wall stability 30-min rolling gate**
-**Status: SHIPPED `acccfd7` — 2026-04-16 | 8 new tests, suite 598 passed.**
+**Status: SHIPPED `acccfd7` — 2026-04-20 | 8 new tests, suite 598 passed.**
 
 ---
 
@@ -775,18 +775,57 @@ A rolling range check over 30 minutes would have blocked all 3 trades.
 **Priority: HIGH — collect from day 1, report activates at 30 sessions**
 **Auto-activates reporting when:** `closed_sessions >= 30`
 
-- [ ] New file: `backend/counterfactual_engine.py`
-- [ ] Post-session job (4:25 PM ET): for each `no_trade_signal=True` prediction row:
+- [x] New file: `backend/counterfactual_engine.py`
+      (`_fetch_spx_price_after_signal`, `_simulate_pnl`,
+      `label_counterfactual_outcomes`, `generate_weekly_summary`,
+      `run_counterfactual_job`. Pure observability — never reads
+      into a trading-decision path.)
+- [x] Post-session job (4:25 PM ET): for each `no_trade_signal=True` prediction row:
       Fetch SPX price 30 min after signal (same as label_prediction_outcomes)
       Simulate what P&L would have been if trade had opened
       Write `counterfactual_pnl` to `trading_prediction_outputs` table
-- [ ] Also simulate halt-day blocked cycles
-- [ ] Weekly report: `counterfactual_summary` — top 3 missed opportunities
+      (SPX fetch mirrors `model_retraining.label_prediction_outcomes`
+      exactly — Polygon I:SPX 1-min aggregate at t+30, same API key
+      path, same failure-as-skip semantics. Scheduler TZ is
+      `America/New_York` so `hour=16, minute=25` is wall-clock 4:25
+      PM ET across DST; the spec's `hour=20` would have fired at
+      8 PM ET.)
+- [~] Also simulate halt-day blocked cycles
+      (Deferred: halt-day cycles don't produce
+      `trading_prediction_outputs` rows — they short-circuit earlier.
+      Needs a separate data source to simulate cleanly; filed as
+      12E follow-up rather than fabricating halt-day rows here.)
+- [x] Weekly report: `counterfactual_summary` — top 3 missed opportunities
       Only emit report when `closed_sessions >= 30`. Collect data from day 1.
-- [ ] Migration: `ALTER TABLE trading_prediction_outputs ADD COLUMN IF NOT EXISTS counterfactual_pnl NUMERIC(10,2)`
-- [ ] Test: no_trade row gets counterfactual_pnl populated after job runs
+      (Sundays at 6:30 PM ET — self-gates on
+      `closed_sessions >= 30` inside `generate_weekly_summary`,
+      returning None and logging
+      `counterfactual_summary_skipped_insufficient_data` below that.)
+- [x] Migration: `ALTER TABLE trading_prediction_outputs ADD COLUMN IF NOT EXISTS counterfactual_pnl NUMERIC(10,2)`
+      (`supabase/migrations/20260421_add_counterfactual_pnl.sql` —
+      adds `counterfactual_pnl`, `counterfactual_strategy`,
+      `counterfactual_simulated_at` + partial index on
+      `(predicted_at DESC) WHERE no_trade_signal=true AND
+      counterfactual_pnl IS NULL` so the daily labeler query stays
+      cheap as the table grows. Operator deploys the migration via
+      the normal Supabase pipeline.)
+- [x] Test: no_trade row gets counterfactual_pnl populated after job runs
+      (9 tests in `backend/tests/test_counterfactual_engine.py`:
+      3 simulate-math cases, 2 skip paths (missing entry / missing
+      exit), 1 write-payload shape check, 2 weekly-summary cases
+      (below/above the 30-session gate), and 1 fail-open test
+      covering a Supabase outage.)
+
+Spec deviations flagged before implementation: Polygon fetch vs the
+spec's next-row Supabase proxy (went with the INSTRUCTION "mirror
+label_prediction_outcomes exactly" over the contradictory example
+code); `strategy_hint` dropped from the SELECT because the column
+does not exist on `trading_prediction_outputs` — simulation defaults
+to `iron_condor` and persists the choice to
+`counterfactual_strategy` for future re-simulation.
 
 **Cursor sessions: 2 | Commit tag: feat(learning): counterfactual engine D4**
+**Status: SHIPPED `2400e98` — 2026-04-20 | 9 new tests, suite 615 passed.**
 
 ---
 
