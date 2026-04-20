@@ -470,10 +470,15 @@ def _run_economic_calendar_job() -> None:
     try:
         import sys
         import os
-        sys.path.insert(
-            0,
-            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        # Use absolute path resolved at call time to avoid Railway path
+        # issues where __file__ may be relative and cwd may differ from
+        # /app/backend. os.path.abspath normalizes "backend/../backend_agents"
+        # to "/app/backend_agents" regardless of how Python was launched.
+        _AGENTS_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents")
         )
+        if _AGENTS_PATH not in sys.path:
+            sys.path.insert(0, _AGENTS_PATH)
         from economic_calendar import (
             get_todays_market_intelligence, write_intel_to_redis
         )
@@ -595,10 +600,12 @@ def _run_earnings_scan_job() -> None:
     try:
         import sys
         import os
-        sys.path.insert(
-            0,
-            os.path.join(os.path.dirname(__file__), "..", "backend_earnings"),
+        # Absolute path normalization — see _run_economic_calendar_job.
+        _EARNINGS_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "backend_earnings")
         )
+        if _EARNINGS_PATH not in sys.path:
+            sys.path.insert(0, _EARNINGS_PATH)
         from main_earnings import run_earnings_scan
         result = run_earnings_scan(redis_client)
         write_health_status("earnings_scanner", "healthy")
@@ -618,10 +625,11 @@ def _run_earnings_entry_job() -> None:
             return
         import sys
         import os
-        sys.path.insert(
-            0,
-            os.path.join(os.path.dirname(__file__), "..", "backend_earnings"),
+        _EARNINGS_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "backend_earnings")
         )
+        if _EARNINGS_PATH not in sys.path:
+            sys.path.insert(0, _EARNINGS_PATH)
         from main_earnings import run_earnings_entry
         result = run_earnings_entry(redis_client)
         logger.info("earnings_entry_job_complete", **result)
@@ -636,10 +644,11 @@ def _run_earnings_monitor_job() -> None:
             return
         import sys
         import os
-        sys.path.insert(
-            0,
-            os.path.join(os.path.dirname(__file__), "..", "backend_earnings"),
+        _EARNINGS_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "backend_earnings")
         )
+        if _EARNINGS_PATH not in sys.path:
+            sys.path.insert(0, _EARNINGS_PATH)
         from main_earnings import run_earnings_monitor
         result = run_earnings_monitor(redis_client)
         logger.debug("earnings_monitor_job_complete", **result)
@@ -864,10 +873,11 @@ def pre_market_scan() -> None:
 
         # Phase 2A: Economic intelligence (runs first — highest priority)
         import sys, os
-        sys.path.insert(
-            0,
-            os.path.join(os.path.dirname(__file__), "..", "backend_agents"),
+        _AGENTS_PATH = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "backend_agents")
         )
+        if _AGENTS_PATH not in sys.path:
+            sys.path.insert(0, _AGENTS_PATH)
         from economic_calendar import (
             get_todays_market_intelligence, write_intel_to_redis
         )

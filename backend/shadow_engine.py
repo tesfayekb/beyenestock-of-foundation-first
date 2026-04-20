@@ -122,7 +122,31 @@ def _compute_rule_based_prediction(redis_client) -> Optional[dict]:
         vvix_z       = float(raw_vvix_z)
         gex_net      = float(raw_gex_net)
         gex_conf     = float(raw_gex_conf)
-        spx_price    = float(raw_spx) if raw_spx else 5200.0
+        # Bug-fix: tradier:quotes:SPX is a JSON string written by
+        # tradier_feed ({"last":..., "bid":..., "ask":..., ...}),
+        # not a plain float. Previous code did float(raw_spx) which
+        # crashed with "could not convert string to float" every
+        # shadow cycle during live trading. Mirrors the canonical
+        # parser at prediction_engine._get_spx_price().
+        try:
+            import json as _json
+            if raw_spx:
+                spx_data = _json.loads(raw_spx)
+                if isinstance(spx_data, dict):
+                    spx_price = float(
+                        spx_data.get("last")
+                        or spx_data.get("ask")
+                        or spx_data.get("bid")
+                        or 5200.0
+                    )
+                else:
+                    # Defensive fallback: someone wrote a plain numeric
+                    # (e.g. legacy cache) — accept it rather than crash.
+                    spx_price = float(raw_spx)
+            else:
+                spx_price = 5200.0
+        except (ValueError, TypeError, _json.JSONDecodeError):
+            spx_price = 5200.0
         flip_zone    = float(raw_flip_zone)
         nearest_wall = float(raw_wall) if raw_wall else 0.0
 
