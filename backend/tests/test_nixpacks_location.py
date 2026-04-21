@@ -54,6 +54,34 @@ def test_nixpacks_not_inside_backend():
     )
 
 
+def test_nixpacks_forces_python_provider():
+    """The root-level nixpacks.toml MUST declare `providers = ["python"]`
+    at the top level so Nixpacks skips auto-detection. Without this,
+    the frontend `package.json` at the repo root causes Nixpacks to
+    detect the project as Node and attempt to build with bun/npm
+    instead of pip — the Python backend never boots.
+
+    Uses a whitespace-tolerant regex (not a literal string search) so
+    this still passes if someone reformats the file with extra spaces
+    around `=` or uses single-quoted strings in TOML (both valid).
+    """
+    import re
+    root_nixpacks = os.path.join(REPO_ROOT, "nixpacks.toml")
+    with open(root_nixpacks, "r", encoding="utf-8") as f:
+        contents = f.read()
+    pattern = re.compile(
+        r'^\s*providers\s*=\s*\[\s*["\']python["\']\s*\]\s*$',
+        re.MULTILINE,
+    )
+    assert pattern.search(contents), (
+        "nixpacks.toml must declare `providers = [\"python\"]` at the "
+        "top level to force the Python provider and skip Node/Bun "
+        "auto-detection. Without this line, the frontend package.json "
+        "at the repo root causes Nixpacks to build a Node image and "
+        "the Python backend never starts."
+    )
+
+
 def test_nixpacks_install_references_backend_requirements():
     """The install command in the root-level nixpacks.toml MUST
     reference 'backend/requirements.txt' (not 'requirements.txt'),
