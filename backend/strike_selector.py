@@ -17,16 +17,24 @@ from logger import get_logger
 
 logger = get_logger("strike_selector")
 
-# Default spread width in points when GEX wall is not available
-DEFAULT_SPREAD_WIDTH = 5.0  # Used when VIX is unavailable
+# Default spread width in points when VIX is unavailable. Sized for
+# SPX at ~7000 price levels (normal-vol regime default).
+DEFAULT_SPREAD_WIDTH = 15.0
 
-# VIX-regime spread width table
-# Wider spreads in high-vol regimes: more premium for same delta
+# VIX-regime spread width table.
+# Calibrated for SPX at ~7000 — a 1-sigma daily SPX move at VIX 19
+# is ~84 points, so 5-point wings (the pre-2026-04-20 value) got
+# blown through on any normal intraday move. The new values keep the
+# short-to-long "hot zone" wide enough to survive a ~0.25-sigma move
+# without pinning max loss, while staying narrow enough that the
+# $100k paper account can still produce contracts >= 1 at Phase 1
+# core allocation. Any increase here must be matched by a review of
+# _RISK_PCT in risk_engine.py — see commit history 2026-04-20.
 VIX_SPREAD_WIDTH_TABLE = [
-    (15.0, 2.50),   # VIX < 15: tight, low-premium environment
-    (20.0, 5.00),   # VIX 15-20: normal
-    (30.0, 7.50),   # VIX 20-30: elevated vol
-    (float("inf"), 10.00),  # VIX > 30: high stress, maximum premium
+    (15.0, 10.00),          # VIX < 15: quiet regime
+    (20.0, 15.00),          # VIX 15-20: normal regime (today's band)
+    (30.0, 20.00),          # VIX 20-30: elevated vol
+    (float("inf"), 30.00),  # VIX > 30: high stress / crisis
 ]
 
 
@@ -41,7 +49,7 @@ def get_dynamic_spread_width(vix_level: float) -> float:
     for threshold, width in VIX_SPREAD_WIDTH_TABLE:
         if vix_level < threshold:
             return width
-    return 10.00
+    return 30.00
 
 # Target deltas by strategy
 # 16 delta ≈ 1 standard deviation away (credit spread standard)
