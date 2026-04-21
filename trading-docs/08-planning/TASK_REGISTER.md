@@ -1627,6 +1627,25 @@ No panel affects any trade decision — pure read-only observability.
   `get-learning-stats` Supabase Edge proxy) shipped 2026-04-20 in
   commit `0149877`. UI Observability Sprint fully closed.
 
+- **Item 12** — `VIX_SPREAD_WIDTH_TABLE` may be under-scaled for current
+  SPX price levels.
+  `backend/strike_selector.py::get_dynamic_spread_width` returns `5.0`
+  for VIX 15–20 (the current regime). At SPX ~7100 a 5-point wing is
+  ~0.07% of spot, which is narrower than the historical calibration
+  band assumed when the table was written. Surfaced during the 2026-
+  04-20 T0-7 floor diagnosis (see commit `167d7cd`). Behaviour is
+  correct per the table, but the table itself should be re-calibrated
+  against recent SPX volatility and expected move data before the next
+  VIX spike.
+  Defer rationale: not blocking trades — the T0-7 floor fix unblocks
+  sizing at the current width, and a wider spread would mechanically
+  increase `stressed_loss_per_contract`, which could re-introduce the
+  contracts=0 path if done without re-tuning `_RISK_PCT` in lockstep.
+  Must be treated as a paired change: spread table ↔ risk_pct ladder.
+  Revisit: once 10+ sessions of trade data exist under the loosened
+  floor, with explicit regression tests spanning the VIX 15/20/25/30/40
+  rows.
+
 ---
 
 ### Status
@@ -1634,6 +1653,7 @@ No panel affects any trade decision — pure read-only observability.
 - [x] Batch 1 shipped (2026-04-20, fc64840)
 - [x] Batch 2 shipped (2026-04-20, 41bb1ab)
 - [x] UI Observability Sprint shipped (2026-04-20, 709a3db + 0149877)
+- [x] T0-7 floor unblock shipped (2026-04-20, 167d7cd)
 
 *Section 13 opened: 2026-04-20 | Owner: tesfayekb*
 
