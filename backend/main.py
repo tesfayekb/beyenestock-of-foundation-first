@@ -555,13 +555,15 @@ def run_emergency_backstop_job() -> None:
         if result.get("triggered"):
             write_health_status(
                 "emergency_backstop", "degraded",
-                error=f"Backstop closed {result['closed']} stuck positions",
+                last_error_message=(
+                    f"Backstop closed {result['closed']} stuck positions"
+                ),
             )
         else:
             write_health_status("emergency_backstop", "healthy")
         logger.info("emergency_backstop_job_done", **result)
     except Exception as exc:
-        write_health_status("emergency_backstop", "error", error=str(exc))
+        write_health_status("emergency_backstop", "error", last_error_message=str(exc))
         logger.error("emergency_backstop_job_error", error=str(exc))
 
 
@@ -580,12 +582,14 @@ def run_prediction_watchdog_job() -> None:
         if result.get("status") == "triggered":
             write_health_status(
                 "prediction_watchdog", "error",
-                error=f"Engine silent {result.get('age_minutes')}min",
+                last_error_message=(
+                    f"Engine silent {result.get('age_minutes')}min"
+                ),
             )
         else:
             write_health_status("prediction_watchdog", "healthy")
     except Exception as exc:
-        write_health_status("prediction_watchdog", "error", error=str(exc))
+        write_health_status("prediction_watchdog", "error", last_error_message=str(exc))
         logger.error("prediction_watchdog_job_error", error=str(exc))
 
 
@@ -599,7 +603,7 @@ def run_eod_reconciliation_job() -> None:
         if result.get("mismatches", 0) > 0:
             write_health_status(
                 "position_reconciliation", "degraded",
-                error=(
+                last_error_message=(
                     f"{result['mismatches']} stale positions found and closed"
                 ),
             )
@@ -607,7 +611,7 @@ def run_eod_reconciliation_job() -> None:
             write_health_status("position_reconciliation", "healthy")
         logger.info("eod_reconciliation_job_done", **result)
     except Exception as exc:
-        write_health_status("position_reconciliation", "error", error=str(exc))
+        write_health_status("position_reconciliation", "error", last_error_message=str(exc))
         logger.error("eod_reconciliation_job_error", error=str(exc))
 
 
@@ -723,7 +727,7 @@ def _run_economic_calendar_job() -> None:
         logger.info("economic_calendar_job_complete",
                     classification=intel.get("day_classification"))
     except Exception as exc:
-        write_health_status("economic_calendar", "error", error=str(exc))
+        write_health_status("economic_calendar", "error", last_error_message=str(exc))
         logger.error("economic_calendar_job_failed", error=str(exc))
 
 
@@ -741,7 +745,7 @@ def _run_macro_agent_job() -> None:
             run_macro_agent(redis_client)
         write_health_status("macro_agent", "healthy")
     except Exception as exc:
-        write_health_status("macro_agent", "error", error=str(exc))
+        write_health_status("macro_agent", "error", last_error_message=str(exc))
         logger.error("macro_agent_job_failed", error=str(exc))
 
 
@@ -765,7 +769,7 @@ def _run_synthesis_agent_job() -> None:
             run_synthesis_agent(redis_client)
         write_health_status("synthesis_agent", "healthy")
     except Exception as exc:
-        write_health_status("synthesis_agent", "error", error=str(exc))
+        write_health_status("synthesis_agent", "error", last_error_message=str(exc))
         logger.error("synthesis_agent_job_failed", error=str(exc))
 
 
@@ -783,7 +787,7 @@ def _run_surprise_detector_job() -> None:
             run_surprise_detector(redis_client)
         write_health_status("surprise_detector", "healthy")
     except Exception as exc:
-        write_health_status("surprise_detector", "error", error=str(exc))
+        write_health_status("surprise_detector", "error", last_error_message=str(exc))
         logger.error("surprise_detector_job_failed", error=str(exc))
 
 
@@ -807,7 +811,7 @@ def _run_flow_agent_job() -> None:
             run_flow_agent(redis_client)
         write_health_status("flow_agent", "healthy")
     except Exception as exc:
-        write_health_status("flow_agent", "error", error=str(exc))
+        write_health_status("flow_agent", "error", last_error_message=str(exc))
         logger.error("flow_agent_job_failed", error=str(exc))
 
 
@@ -830,7 +834,7 @@ def _run_sentiment_agent_job() -> None:
             run_sentiment_agent(redis_client)
         write_health_status("sentiment_agent", "healthy")
     except Exception as exc:
-        write_health_status("sentiment_agent", "error", error=str(exc))
+        write_health_status("sentiment_agent", "error", last_error_message=str(exc))
         logger.error("sentiment_agent_job_failed", error=str(exc))
 
 
@@ -862,7 +866,7 @@ def _run_earnings_scan_job() -> None:
             event_count=result.get("count", 0),
         )
     except Exception as exc:
-        write_health_status("earnings_scanner", "error", error=str(exc))
+        write_health_status("earnings_scanner", "error", last_error_message=str(exc))
         logger.error("earnings_scan_job_failed", error=str(exc))
 
 
@@ -1089,7 +1093,7 @@ def _run_feedback_agent_job() -> None:
             pass
 
     except Exception as exc:
-        write_health_status("feedback_agent", "error", error=str(exc))
+        write_health_status("feedback_agent", "error", last_error_message=str(exc))
         logger.error("feedback_agent_job_failed", error=str(exc))
 
 
