@@ -5,8 +5,9 @@
  * Session history, rolling model accuracy, and drift status.
  */
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart2 } from 'lucide-react';
+import { AlertTriangle, BarChart2 } from 'lucide-react';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { LoadingSkeleton } from '@/components/dashboard/LoadingSkeleton';
@@ -16,6 +17,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { formatPnl } from '@/lib/format-pnl';
+import { useLearningStatsBanner } from '@/hooks/trading/useLearningStats';
+import { ROUTES } from '@/config/routes';
 
 interface TradingSessionSummaryRow {
   session_date: string;
@@ -242,6 +245,68 @@ export default function TradingPerformancePage() {
     refetchIntervalInBackground: false,
   });
 
+  // Section 13 UI-3: live model-drift banner. Uses the Edge-function
+  // proxy to Railway (same hook as War Room). Separate from the
+  // `modelPerf.drift_status` read above — that one is the historical
+  // session-level drift stored in trading_model_performance, while
+  // this one is the live 10-day rolling alert computed in Redis.
+  const { data: learningStats } = useLearningStatsBanner();
+
+  // Section 13 UI-4: missed-opportunity summary. Aggregates
+  // counterfactual P&L on no-trade cycles over the last 7 days.
+  // `counterfactual_pnl` is not yet in the generated Supabase types
+  // (column added in migration 20260421_add_counterfactual_pnl.sql),
+  // so the row shape is widened manually below. Same pattern as
+  // useFeatureFlags' cast-to-`never` on trading_feature_flags.
+  const { data: counterfactualData } = useQuery<
+    Array<{ no_trade_reason: string | null; counterfactual_pnl: number | null }>
+  >({
+    queryKey: ['counterfactual-summary'],
+    queryFn: async () => {
+      const sevenDaysAgoIso = new Date(
+        Date.now() - 7 * 24 * 60 * 60 * 1000
+      ).toISOString();
+      const { data: rows, error: err } = await supabase
+        .from('trading_prediction_outputs')
+        .select('no_trade_reason, counterfactual_pnl')
+        .eq('no_trade_signal', true)
+        .not('counterfactual_pnl', 'is', null)
+        .gte('predicted_at', sevenDaysAgoIso);
+      if (err) throw err;
+      return ((rows ?? []) as unknown) as Array<{
+        no_trade_reason: string | null;
+        counterfactual_pnl: number | null;
+      }>;
+    },
+    refetchInterval: 300_000,
+    refetchIntervalInBackground: false,
+  });
+
+  const missedOpportunities = useMemo(() => {
+    if (!counterfactualData?.length) return [] as Array<{
+      reason: string;
+      count: number;
+      avg: number;
+      total: number;
+    }>;
+    const byReason: Record<string, { count: number; total: number }> = {};
+    for (const row of counterfactualData) {
+      const r = row.no_trade_reason ?? 'unknown';
+      if (!byReason[r]) byReason[r] = { count: 0, total: 0 };
+      byReason[r].count += 1;
+      byReason[r].total += row.counterfactual_pnl ?? 0;
+    }
+    return Object.entries(byReason)
+      .map(([reason, { count, total }]) => ({
+        reason,
+        count,
+        avg: count > 0 ? total / count : 0,
+        total,
+      }))
+      .sort((a, b) => Math.abs(b.total) - Math.abs(a.total))
+      .slice(0, 3);
+  }, [counterfactualData]);
+
   const isLoading = sessionsLoading || modelLoading;
   const hasError = sessionsError ?? modelError;
 
@@ -303,6 +368,26 @@ export default function TradingPerformancePage() {
         title="Performance"
         subtitle="Rolling metrics and model accuracy"
       />
+
+      {/* Section 13 UI-3: live model-drift banner. Labeled "Live
+          model drift" so it is clearly distinct from the
+          session-level "Historical session drift" shown in the Model
+          Performance card's Drift Status badge below. */}
+      {learningStats?.model_drift_alert ? (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>
+            <strong>Live model drift detected.</strong> 10-day
+            rolling prediction accuracy has dropped relative to the
+            60-day baseline. Review the{' '}
+            <Link to={ROUTES.TRADING_LEARNING} className="underline">
+              Learning Dashboard
+            </Link>{' '}
+            for details. (Separate from Historical session drift
+            below.)
+          </span>
+        </div>
+      ) : null}
 
       {/* Section 1 — Session summary stat cards */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
@@ -545,6 +630,75 @@ export default function TradingPerformancePage() {
 
       {/* Section 4 — Strategy Breakdown (Phase 4C) */}
       <StrategyBreakdownCard />
+
+      {/* Section 5 — Missed Opportunities (Section 13 UI-4). Reads
+          counterfactual P&L on no-trade cycles from the last 7 days
+          and groups by no_trade_reason. Empty state during warmup. */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium">
+            Missed Opportunities (This Week)
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Simulated P&amp;L on no-trade cycles, grouped by reason.
+            Activates once the counterfactual engine has labeled
+            ~30 sessions of no-trade data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {missedOpportunities.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">
+              No counterfactual data yet — collecting from no-trade
+              cycles.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {missedOpportunities.map(({ reason, count, avg, total }) => {
+                const totalPnl = formatPnl(total);
+                const avgPnl = formatPnl(avg);
+                return (
+                  <div
+                    key={reason}
+                    className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm"
+                  >
+                    <span className="capitalize text-muted-foreground">
+                      {reason.replace(/_/g, ' ')}
+                    </span>
+                    <div className="flex items-center gap-6 text-right">
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          cycles
+                        </p>
+                        <p className="font-mono text-sm">{count}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          avg
+                        </p>
+                        <p
+                          className={`font-mono text-sm ${avgPnl.className}`}
+                        >
+                          {avgPnl.text}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          total
+                        </p>
+                        <p
+                          className={`font-mono text-sm font-semibold ${totalPnl.className}`}
+                        >
+                          {totalPnl.text}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

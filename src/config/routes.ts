@@ -57,4 +57,9 @@ export const ROUTES = {
   TRADING_ACTIVATION: '/trading/activation',
   TRADING_AB_COMPARISON: '/trading/ab-comparison',
   TRADING_EARNINGS: '/trading/earnings',
+  // Section 13 UI-1: observability dashboard. Sits under /trading/*
+  // (not /admin/trading/*) to match the Phase 4C convention used by
+  // every other sidebar entry — the /admin/trading/* constants above
+  // exist only for legacy redirects.
+  TRADING_LEARNING: '/trading/learning',
 } as const;

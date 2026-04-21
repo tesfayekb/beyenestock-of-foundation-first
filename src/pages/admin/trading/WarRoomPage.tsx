@@ -11,6 +11,7 @@ import { formatDistanceToNow } from 'date-fns';
 import {
   Activity,
   AlertCircle,
+  AlertTriangle,
   Brain,
   CheckCircle,
   Minus,
@@ -39,6 +40,7 @@ import {
   useTradeIntelligence,
   isBriefStale,
 } from '@/hooks/trading/useTradeIntelligence';
+import { useLearningStatsBanner } from '@/hooks/trading/useLearningStats';
 import { ROUTES } from '@/config/routes';
 import { formatPnl } from '@/lib/format-pnl';
 
@@ -115,6 +117,12 @@ export default function TradingWarRoomPage() {
   const { serviceMap, isLoading: healthLoading } = useTradingSystemHealth();
 
   const { data: intel } = useTradeIntelligence();
+
+  // Section 13 UI-3: live model-drift banner. Fetched via the
+  // get-learning-stats Supabase Edge proxy — same hook used by the
+  // Learning Dashboard. Refresh is slower (120s) than the main page
+  // polling to keep this advisory, not noisy.
+  const { data: learningStats } = useLearningStatsBanner();
 
   const isLoading = sessionLoading || predictionLoading || positionsLoading || healthLoading;
   const hasError = sessionError ?? predictionError;
@@ -216,6 +224,22 @@ export default function TradingWarRoomPage() {
           />
         </div>
       </div>
+
+      {/* Section 13 UI-3: live model-drift banner */}
+      {learningStats?.model_drift_alert ? (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>
+            <strong>Live model drift detected.</strong> 10-day
+            prediction accuracy has dropped relative to the 60-day
+            baseline. Review the{' '}
+            <Link to={ROUTES.TRADING_LEARNING} className="underline">
+              Learning Dashboard
+            </Link>{' '}
+            before the next cycle.
+          </span>
+        </div>
+      ) : null}
 
       {/* Top row: stat cards */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">

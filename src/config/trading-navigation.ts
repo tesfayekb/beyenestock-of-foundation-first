@@ -13,6 +13,7 @@ import {
   Layers,
   GitCompare,
   CalendarClock,
+  GraduationCap,
 } from 'lucide-react';
 import type { NavSection } from './navigation.types';
 import { ROUTES } from './routes';
@@ -48,6 +49,17 @@ export const tradingNavigation: NavSection[] = [
         title: 'Performance',
         url: ROUTES.TRADING_PERFORMANCE,
         icon: BarChart2,
+        permission: 'trading.view',
+      },
+      {
+        // Section 13 UI-1: observability dashboard for operators —
+        // IV/RV ratio, butterfly gates, strategy matrix, drift alert,
+        // sizing phase, halt threshold, calibrated butterfly thresholds.
+        // Uses GraduationCap so it's visually distinct from the
+        // AI Intelligence "Brain" icon below.
+        title: 'Learning',
+        url: ROUTES.TRADING_LEARNING,
+        icon: GraduationCap,
         permission: 'trading.view',
       },
       {
