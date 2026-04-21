@@ -55,14 +55,30 @@ def test_risk_pct_phase_ladder_distinct():
     assert _RISK_PCT[2]["satellite"] != _RISK_PCT[3]["satellite"]
 
 
-def test_risk_pct_phase1_unchanged():
-    """Phase 1 is the active paper-trading tier — must stay at the
-    original 0.5% core / 0.25% satellite so Batch 1 is ROI-neutral
-    for everyone who hasn't passed the E1 gate yet."""
+def test_risk_pct_phase1_values():
+    """Phase 1 is the active paper-trading tier. Values were doubled
+    from the original 0.5%/0.25% to 1.0%/0.5% on 2026-04-20 as the
+    paired half of the SPX spread-width recalibration — see
+    strike_selector.VIX_SPREAD_WIDTH_TABLE and risk_engine._RISK_PCT
+    comments for the full rationale. The doubling is NOT ROI-neutral;
+    it deliberately increases per-trade risk to match the wider wings.
+
+    This test pins the post-recalibration values so a future refactor
+    cannot silently revert Phase 1 and break the
+    test_core_full_produces_contract_at_all_operating_widths invariant
+    in test_risk_engine.py.
+    """
     from risk_engine import _RISK_PCT
 
-    assert _RISK_PCT[1]["core"] == 0.005
-    assert _RISK_PCT[1]["satellite"] == 0.0025
+    assert _RISK_PCT[1]["core"] == 0.010, (
+        f"Phase 1 core must be 0.010 post 2026-04-20 recalibration, "
+        f"got {_RISK_PCT[1]['core']}. Reverting breaks the "
+        f"core+full hard invariant under the widened SPX wings."
+    )
+    assert _RISK_PCT[1]["satellite"] == 0.0050, (
+        f"Phase 1 satellite must be 0.0050 post 2026-04-20 "
+        f"recalibration, got {_RISK_PCT[1]['satellite']}."
+    )
 
 
 # ── Change 2: EOD gate 19 → 21 UTC ───────────────────────────────────

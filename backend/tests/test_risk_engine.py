@@ -82,12 +82,22 @@ def test_check_trade_frequency_blocked_at_regime_cap():
 
 # ── T0-7: floor-to-1 sizing when budget is ≥ 50% of one contract cost ──────────
 
-def test_minimum_1_contract_when_budget_above_50pct():
+def test_minimum_1_contract_when_budget_above_floor():
     """
-    T0-7: Phase 1 sizing × D-004 moderate reduction (0.70×) on $100k gives
-    $100k × 0.004 × 0.70 = $280 max risk. A width-5 iron butterfly costs
-    $500/contract. int(280/500)=0 previously dropped every single-contract
-    moderate trade. The floor now rounds up to 1 when budget ≥ 50% of cost.
+    T0-7 regression guard — iron_butterfly + moderate at spread_width=5
+    produces 1 contract via the T0-7 floor.
+
+    Post-2026-04-20 recalibration math:
+      risk_pct = _DEBIT_RISK_PCT["iron_butterfly"] = 0.008 (2×)
+      after moderate (0.70×)                      = 0.0056
+      max_risk_dollars = $100k × 0.0056           = $560
+      stressed_loss   = 5.0 × 100                 = $500
+      int(560/500) = 1 → direct calculation (floor not needed)
+
+    At historical values (risk=0.004, width=5, moderate) the floor
+    WAS the reason contracts==1 here; after the recalibration the
+    direct int() gives 1 already, so this test now confirms the
+    stacking order still produces sane results at the old width.
     """
     from risk_engine import compute_position_size
     result = compute_position_size(
@@ -103,11 +113,14 @@ def test_minimum_1_contract_when_budget_above_50pct():
     )
 
 
-def test_zero_contracts_when_budget_below_50pct():
+def test_zero_contracts_when_budget_below_floor():
     """
-    T0-7: The floor must NOT round up when the budget is genuinely too
-    small. $20k × 0.004 × 0.70 = $56. $56/$500 = 0.112 < 0.50 → 0 contracts.
-    Protects tiny accounts from auto-sizing to 1 on huge spreads.
+    T0-7: the floor must NOT round up when the budget is genuinely
+    too small. Protects tiny accounts from auto-sizing to 1 on huge
+    spreads.
+
+    Post-2026-04-20 math: $20k × 0.008 × 0.70 = $112 budget against
+    $500 stressed_loss → ratio 0.224 < 0.30 floor → 0 contracts.
     """
     from risk_engine import compute_position_size
     result = compute_position_size(
@@ -143,41 +156,185 @@ def test_floor_does_not_override_danger_tier():
     assert result["size_reduction_reason"] == "allocation_tier_danger_d004"
 
 
-def test_floor_covers_phase1_satellite_moderate_iron_condor():
+def test_floor_covers_phase1_satellite_moderate_iron_condor_at_old_width():
     """
-    T0-7 (2026-04-20 unblock): the real-world failure from the Railway log
-    at 15:30 UTC was iron_condor as the second trade of the day on a
-    moderate-RCS session. Reproduce the exact scenario and assert the
-    floor now produces 1 contract (was returning 0 before the floor was
-    loosened from 0.50 to 0.30 of stressed loss).
+    T0-7 regression guard — preserves behavior of commit 167d7cd (the
+    original T0-7 floor loosening). Uses the old spread_width=5 so the
+    test remains meaningful as a unit check of the floor logic; this
+    exact scenario cannot arise in production after the 2026-04-20
+    width recalibration (widths are now 10pt minimum).
 
-    Math:
-      base risk_pct = _RISK_PCT[1]["satellite"] = 0.0025
-      after moderate (0.70×)                    = 0.00175
-      max_risk_dollars = $100k × 0.00175        = $175
-      stressed_loss   = spread_width (5.0) × 100 = $500
-      ratio           = 175 / 500               = 0.35
+    Post-recalibration math at spread_width=5:
+      base risk_pct = _RISK_PCT[1]["satellite"] = 0.005 (2× prior)
+      after moderate (0.70×)                    = 0.0035
+      max_risk_dollars = $100k × 0.0035         = $350
+      stressed_loss   = 5.0 × 100               = $500
+      ratio           = 350 / 500               = 0.70
 
-    0.35 < 0.50 → old floor silently dropped to 0 contracts → blocked trade.
-    0.35 ≥ 0.30 → new floor fires → 1 contract.
+    0.70 >> 0.30 floor → still produces 1 contract.
+
+    For the current-widths equivalent (where the floor actually fires
+    at the boundary and tests the 0.30 threshold), see
+    test_floor_covers_sat_full_at_current_width below.
     """
     from risk_engine import compute_position_size
     result = compute_position_size(
         account_value=100_000.0,
         spread_width=5.0,
         sizing_phase=1,
-        position_type="satellite",  # second trade of the day (D-012)
-        allocation_tier="moderate",  # D-004 RCS-moderate regime
-        strategy_type="iron_condor",  # not in _DEBIT_RISK_PCT → uses satellite risk_pct
+        position_type="satellite",
+        allocation_tier="moderate",
+        strategy_type="iron_condor",
     )
     assert result["contracts"] == 1, (
-        f"Phase 1 satellite + moderate iron_condor on $100k must produce "
-        f"1 contract under the loosened T0-7 floor. Got "
+        f"Phase 1 satellite + moderate iron_condor on $100k at old "
+        f"width=5.0 must still produce 1 contract. Got "
         f"{result['contracts']} contracts, risk_pct={result['risk_pct']}."
     )
-    # Explicit numeric check — guards against accidental risk_pct drift.
-    assert result["risk_pct"] == round(0.0025 * 0.70, 6), (
-        f"Expected effective risk_pct 0.00175 (0.0025 × 0.70), "
+    assert result["risk_pct"] == round(0.005 * 0.70, 6), (
+        f"Expected effective risk_pct 0.0035 (0.005 × 0.70) after "
+        f"2026-04-20 Phase 1 doubling, got {result['risk_pct']}"
+    )
+
+
+def test_floor_covers_sat_full_at_current_width():
+    """
+    T0-7 (2026-04-20 recalibration): verify the floor fires at the
+    current operating widths. VIX 15-20 band → width=15 → stressed=$1500.
+    Phase 1 satellite+full is $500 budget — 0.33 ratio, which is above
+    the 0.30 floor. This is the highest-leverage "floor fires" path in
+    production after the recalibration.
+    """
+    from risk_engine import compute_position_size
+    result = compute_position_size(
+        account_value=100_000.0,
+        spread_width=15.0,  # VIX 15-20 band (today's operating width)
+        sizing_phase=1,
+        position_type="satellite",
+        allocation_tier="full",
+        strategy_type="iron_condor",
+    )
+    assert result["contracts"] == 1, (
+        f"Phase 1 satellite + full iron_condor on $100k at current "
+        f"VIX 15-20 width=15 must produce 1 contract via T0-7 floor. "
+        f"Got {result['contracts']} contracts, "
+        f"risk_pct={result['risk_pct']}."
+    )
+    assert result["risk_pct"] == 0.005, (
+        f"Expected effective risk_pct 0.005 (satellite full-tier Phase 1 "
+        f"post-doubling), got {result['risk_pct']}"
+    )
+
+
+def test_floor_blocks_sat_moderate_at_current_width():
+    """
+    T0-7 (2026-04-20 recalibration): sat+moderate at the current VIX
+    15-20 operating width is the row we deliberately accepted as
+    blocked. $100k × 0.005 × 0.70 = $350 budget vs stressed=$1500 →
+    0.23 ratio < 0.30 floor → contracts=0. This inverses the behavior
+    of commit 167d7cd at the old narrow widths, and is documented as
+    an accepted tradeoff ('fewer, better trades' — second trade of
+    day under moderate RCS regime is intentionally skipped).
+    """
+    from risk_engine import compute_position_size
+    result = compute_position_size(
+        account_value=100_000.0,
+        spread_width=15.0,
+        sizing_phase=1,
+        position_type="satellite",
+        allocation_tier="moderate",
+        strategy_type="iron_condor",
+    )
+    assert result["contracts"] == 0, (
+        f"Phase 1 satellite + moderate iron_condor at current width=15 "
+        f"must be blocked (deliberate tradeoff of the 2026-04-20 width "
+        f"recalibration). Got {result['contracts']} contracts."
+    )
+
+
+def test_core_full_produces_contract_at_all_operating_widths():
+    """
+    T0-7 (2026-04-20 recalibration) — HARD INVARIANT: the core+full
+    tier MUST produce contracts >= 1 at every width in the
+    VIX_SPREAD_WIDTH_TABLE, including the high-stress VIX>30 wing.
+    This is the constraint that drove the entire recalibration.
+
+    If this test fails, trading has been unilaterally disabled for
+    that VIX regime and the operator must be paged before any deploy.
+    """
+    from risk_engine import compute_position_size
+    from strike_selector import VIX_SPREAD_WIDTH_TABLE
+
+    for vix_threshold, width in VIX_SPREAD_WIDTH_TABLE:
+        result = compute_position_size(
+            account_value=100_000.0,
+            spread_width=width,
+            sizing_phase=1,
+            position_type="core",
+            allocation_tier="full",
+            strategy_type="iron_condor",
+        )
+        assert result["contracts"] >= 1, (
+            f"Phase 1 core+full at VIX<{vix_threshold} (width={width}) "
+            f"produced {result['contracts']} contracts on $100k. This "
+            f"violates the core+full hard invariant — the system "
+            f"CANNOT enter any trade at this VIX regime. Review "
+            f"either _RISK_PCT[1]['core'] or the width table."
+        )
+
+
+def test_core_moderate_produces_contract_at_normal_vix():
+    """
+    T0-7 (2026-04-20 recalibration) — operational invariant for the
+    most common live path: Phase 1 core+moderate at the VIX 15-20
+    band (today's band) must produce contracts >= 1. Budget $700 vs
+    stressed $1500 = 0.47 ratio, floor fires.
+
+    Separated from the all-VIX test because core+moderate is
+    INTENTIONALLY blocked at VIX>30 (stressed $3000, floor $900,
+    $700 < $900 → skipped) as part of the crisis-regime discipline.
+    """
+    from risk_engine import compute_position_size
+    result = compute_position_size(
+        account_value=100_000.0,
+        spread_width=15.0,  # VIX 15-20 band
+        sizing_phase=1,
+        position_type="core",
+        allocation_tier="moderate",
+        strategy_type="iron_condor",
+    )
+    assert result["contracts"] == 1, (
+        f"Phase 1 core+moderate iron_condor at VIX 15-20 width=15 "
+        f"must produce 1 contract (most common live path). Got "
+        f"{result['contracts']} contracts."
+    )
+
+
+def test_iron_butterfly_fires_at_current_width():
+    """
+    T0-7 (2026-04-20 recalibration): iron_butterfly risk_pct was
+    doubled 0.004 → 0.008 in lockstep with the width widening. At
+    full tier under today's width=15, budget = $100k × 0.008 × 1.0
+    = $800, stressed = $1500, ratio = 0.53 → floor fires → 1 contract.
+
+    Without the doubling, iron_butterfly would be disabled at all
+    widths >= 10pt.
+    """
+    from risk_engine import compute_position_size
+    result = compute_position_size(
+        account_value=100_000.0,
+        spread_width=15.0,
+        sizing_phase=1,
+        allocation_tier="full",
+        strategy_type="iron_butterfly",
+    )
+    assert result["contracts"] == 1, (
+        f"iron_butterfly at full tier / width=15 must produce 1 "
+        f"contract after the 2026-04-20 risk_pct doubling. Got "
+        f"{result['contracts']}."
+    )
+    assert result["risk_pct"] == 0.008, (
+        f"Expected iron_butterfly risk_pct=0.008 (post-doubling), "
         f"got {result['risk_pct']}"
     )
 

@@ -45,26 +45,63 @@ def _get_redis():
 
 
 # D-014: risk percentages by sizing phase and position type.
-# Phase 1 values (0.005 / 0.0025) are the current paper-trading baseline
-# and MUST remain unchanged. Phases 2 and 3 are reached only by the
-# automated E1/E2 gates in calibration_engine.evaluate_sizing_phase
-# (45+ live days with rolling 45d Sharpe >= 1.2 for phase 2; 90+ live
-# days with rolling 60d Sharpe >= 1.5 for phase 3). Phase 4 is
-# manual-only — never reached by auto-advance — and carries the same
-# ceiling as phase 3 so a stray manual flip cannot lift risk above
-# the system's learned tolerance.
+#
+# Phase 1 values were doubled on 2026-04-20 (core 0.005 → 0.010,
+# satellite 0.0025 → 0.005) as the paired half of the SPX spread
+# width recalibration (see strike_selector.VIX_SPREAD_WIDTH_TABLE).
+# The widths tripled to match SPX at ~7000 price levels (wings that
+# actually survive normal intraday moves) and the old risk_pct would
+# have produced contracts=0 on every core+full trade under the new
+# wider wings. Doubling risk_pct restores sizing while staying within
+# the 2× ceiling that was the pre-existing constraint: Phase 1 max
+# per-trade risk now tops out at $1,000 on a $100k account (1% of
+# account), still well under the 3% daily drawdown halt.
+#
+# LADDER-CONSISTENCY FOLLOW-UP — see TASK_REGISTER Item 13:
+# Only Phase 1 was touched on 2026-04-20. Phases 2 and 3 were
+# originally sized as +50% and 2× relative to Phase 1 (0.0075 and
+# 0.010 core). With Phase 1 now at 0.010, Phase 2's 0.0075 is
+# *lower* than Phase 1 — a calibration-engine trader who advances
+# via the E1 gate would see risk drop. Decision on whether to
+# rescale Phases 2-4 proportionally is deliberately deferred; the
+# E1/E2 gates (45+ / 90+ live days) are months away from firing so
+# this is a zero-impact latent issue for now, but must be resolved
+# before the first advancement fires. Item 13 in TASK_REGISTER.
+#
+# Phases 2 and 3 are reached only by the automated E1/E2 gates in
+# calibration_engine.evaluate_sizing_phase (45+ live days with
+# rolling 45d Sharpe >= 1.2 for phase 2; 90+ live days with rolling
+# 60d Sharpe >= 1.5 for phase 3). Phase 4 is manual-only — never
+# reached by auto-advance — and carries the same ceiling as phase 3
+# so a stray manual flip cannot lift risk above the system's learned
+# tolerance.
 _RISK_PCT = {
-    1: {"core": 0.005,  "satellite": 0.0025},    # Phase 1: unchanged — current paper trading
-    2: {"core": 0.0075, "satellite": 0.00375},   # Phase 2: E1 gate passed — +50% sizing
-    3: {"core": 0.010,  "satellite": 0.0050},    # Phase 3: E2 gate passed — 2× phase 1
+    1: {"core": 0.010,  "satellite": 0.0050},    # Phase 1: 2× prior baseline — paired w/ 2026-04-20 width widening
+    2: {"core": 0.0075, "satellite": 0.00375},   # Phase 2: E1 gate (UNCHANGED — see ladder follow-up in Item 13)
+    3: {"core": 0.010,  "satellite": 0.0050},    # Phase 3: E2 gate (UNCHANGED — see ladder follow-up in Item 13)
     4: {"core": 0.010,  "satellite": 0.0050},    # Phase 4: manual only — same as phase 3
 }
 
 # Phase 2B: Strategy-specific risk overrides
 # Debit strategies risk smaller % because loss = 100% of premium paid.
 # Credit strategies can risk more because max loss = spread width (known).
+#
+# iron_butterfly was doubled on 2026-04-20 (0.004 → 0.008) as the
+# paired half of the SPX width recalibration. At widths >= 15pt (now
+# the default) the old 0.004 rate produced a $400 budget against a
+# $1,500+ stressed_loss — contracts=0 on every iron_butterfly trade
+# regardless of tier. Doubling restores 1-contract sizing at widths
+# 10-20pt in full/moderate tiers. At width=30pt (VIX>30 crisis
+# regime) iron_butterfly remains blocked even at full tier, which
+# is defensible: ATM gamma during a crisis regime is the first
+# strategy to skip.
+#
+# Other debit rates (debit spreads, long options, straddle, calendar)
+# were NOT adjusted — they use cost-based sizing (straddle, calendar)
+# or tight debit premium that doesn't scale with spread width the way
+# iron_butterfly does. Revisit on next sizing review.
 _DEBIT_RISK_PCT = {
-    "iron_butterfly":    0.004,   # 0.4% — ATM shorts lose fast
+    "iron_butterfly":    0.008,   # 0.8% — 2× from 2026-04-20 paired with width widening
     "debit_call_spread": 0.003,   # 0.3% — full premium at risk
     "debit_put_spread":  0.003,   # 0.3% — full premium at risk
     "long_call":         0.003,   # 0.3%
@@ -372,21 +409,41 @@ def compute_position_size(
 
         # T0-7 floor: never size to zero when risk budget allows a meaningful
         # fraction of one contract — except danger tier which explicitly
-        # returns 0 above. Without this, any D-004 moderate reduction
-        # (0.70×) on Phase 1 produces budgets below $500/contract and
-        # drops every single-contract trade regardless of signal quality.
+        # returns 0 above. The floor was introduced to prevent D-004 tier
+        # reductions and phase-1 satellite sizing from silently dropping
+        # to 0 contracts whenever int(budget/stressed_loss) == 0.
         #
         # Threshold: 0.30 of stressed loss.
-        # - Phase 1 core + moderate:      $100k × 0.005  × 0.70 = $350 → 0.70 ratio → fires (was firing)
-        # - Phase 1 satellite + full:     $100k × 0.0025 × 1.00 = $250 → 0.50 ratio → fires (was firing)
-        # - Phase 1 satellite + moderate: $100k × 0.0025 × 0.70 = $175 → 0.35 ratio → fires (was MISSING at 0.50 threshold)
-        # - Phase 1 satellite + low:      $100k × 0.0025 × 0.40 = $100 → 0.20 ratio → correctly skipped
-        # - Any tier + pre_event/danger:  short-circuited upstream, unaffected
         #
-        # The satellite+moderate row was blocking every non-first trade of
-        # the day when RCS was in moderate regime. Loosening from 0.50 to
-        # 0.30 preserves the skip behaviour for genuinely-underfunded cases
-        # (low/pre_event/danger) while unblocking the common case.
+        # Coverage matrix @ $100k account, iron_condor (credit spread),
+        # post 2026-04-20 recalibration (Phase 1 risk 2× + SPX widths 3×):
+        #
+        #   VIX<15 (width=10, stressed=$1000, floor=$300)
+        #     core+full       $1000  1.00 ratio  1ctr  (direct, no floor)
+        #     core+moderate   $700   0.70 ratio  1ctr  (floor fires)
+        #     sat+full        $500   0.50 ratio  1ctr  (floor fires)
+        #     sat+moderate    $350   0.35 ratio  1ctr  (floor fires)
+        #
+        #   VIX 15-20 (width=15, stressed=$1500, floor=$450) — today's band
+        #     core+full       $1000  0.67 ratio  1ctr  (floor fires)
+        #     core+moderate   $700   0.47 ratio  1ctr  (floor fires)
+        #     sat+full        $500   0.33 ratio  1ctr  (floor fires)
+        #     sat+moderate    $350   0.23 ratio  0ctr  (blocked — 2nd trade in moderate regime)
+        #
+        #   VIX 20-30 (width=20, stressed=$2000, floor=$600)
+        #     core+full       $1000  0.50 ratio  1ctr  (floor fires)
+        #     core+moderate   $700   0.35 ratio  1ctr  (floor fires)
+        #     sat+full        $500   0.25 ratio  0ctr  (blocked)
+        #     sat+moderate    $350   0.175      0ctr  (blocked)
+        #
+        #   VIX>30 (width=30, stressed=$3000, floor=$900)
+        #     core+full       $1000  0.33 ratio  1ctr  (floor fires — last line of defense)
+        #     core+moderate   $700   0.23 ratio  0ctr  (blocked — crisis regime)
+        #     sat+*           all    <=$500      0ctr  (blocked)
+        #
+        # Low / pre_event / danger tiers: still correctly blocked at all
+        # widths (budget <= $400 at width>=10pt means ratio<=0.40 at the
+        # narrowest width and drops below 0.30 at widths>=14pt).
         if contracts == 0 and max_risk_dollars >= stressed_loss_per_contract * 0.30:
             contracts = 1
 

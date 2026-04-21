@@ -1666,24 +1666,51 @@ No panel affects any trade decision — pure read-only observability.
   `get-learning-stats` Supabase Edge proxy) shipped 2026-04-20 in
   commit `0149877`. UI Observability Sprint fully closed.
 
-- **Item 12** — `VIX_SPREAD_WIDTH_TABLE` may be under-scaled for current
-  SPX price levels.
-  `backend/strike_selector.py::get_dynamic_spread_width` returns `5.0`
-  for VIX 15–20 (the current regime). At SPX ~7100 a 5-point wing is
-  ~0.07% of spot, which is narrower than the historical calibration
-  band assumed when the table was written. Surfaced during the 2026-
-  04-20 T0-7 floor diagnosis (see commit `167d7cd`). Behaviour is
-  correct per the table, but the table itself should be re-calibrated
-  against recent SPX volatility and expected move data before the next
-  VIX spike.
-  Defer rationale: not blocking trades — the T0-7 floor fix unblocks
-  sizing at the current width, and a wider spread would mechanically
-  increase `stressed_loss_per_contract`, which could re-introduce the
-  contracts=0 path if done without re-tuning `_RISK_PCT` in lockstep.
-  Must be treated as a paired change: spread table ↔ risk_pct ladder.
-  Revisit: once 10+ sessions of trade data exist under the loosened
-  floor, with explicit regression tests spanning the VIX 15/20/25/30/40
-  rows.
+- **Item 12** — ~~`VIX_SPREAD_WIDTH_TABLE` under-scaled for SPX 7000
+  price levels.~~
+  **COMPLETE (2026-04-20).** Two-commit landing:
+  `fix(strike): widen VIX spread width table for SPX 7000 price levels`
+  (table values 2.5/5/7.5/10 → 10/15/20/30, `DEFAULT_SPREAD_WIDTH`
+  5→15) and `fix(risk): double Phase 1 risk_pct to preserve
+  contracts>=1 under widened SPX wings` (Phase 1 core 0.005→0.010,
+  satellite 0.0025→0.005, iron_butterfly 0.004→0.008). Paired
+  commits because narrow-wing → wide-wing alone would produce
+  contracts=0 on core+full without the risk_pct bump. Full sizing
+  matrix verified — core+full produces contracts>=1 at every VIX
+  regime including stress. Satellite+moderate is intentionally
+  blocked at width>=15pt ("fewer, better trades"); satellite+full
+  and satellite+moderate are blocked at VIX>20 (elevated/crisis
+  regime discipline). C4 constraint (0.5-sigma survival) relaxed to
+  0.25-sigma survival — strict 0.5-sigma is infeasible at $100k
+  within the 2× risk_pct ceiling. Pinned by
+  `backend/tests/test_risk_engine.py::test_core_full_produces_contract_
+  at_all_operating_widths` + 5 companion tests + 3 new width-table
+  guards in `test_phase_b1.py`.
+
+- **Item 13** — Sizing-phase ladder non-monotonic after Item 12.
+  The 2026-04-20 Phase 1 doubling was approved and shipped as a
+  Phase-1-only change. Phases 2 and 3 were **not** rescaled, which
+  leaves the ladder as:
+    Phase 1 core = 0.010
+    Phase 2 core = 0.0075 (lower than Phase 1 — advancement demotes)
+    Phase 3 core = 0.010 (equal to Phase 1 — advancement no-op)
+  A trader who passes the E1 gate (45+ live days, rolling 45d Sharpe
+  ≥ 1.2) would currently see their risk_pct **decrease**, which is
+  the opposite of the gate's intent. Phase 3 would leave risk
+  unchanged vs Phase 1.
+  Defer rationale: zero current impact — we are ~2 live days in, and
+  the earliest E1 gate fires at 45 days. The system is provably safe
+  at today's phase. Decision of whether to rescale phases 2/3 in
+  proportion (the natural +50%/2× interpretation would give 0.015 /
+  0.020 core) or to re-examine the gate thresholds themselves is
+  deferred to the first pre-advancement review. Existing
+  `test_section_13_batch_1.py::test_phase1_phase2_phase3_distinct`
+  still passes (adjacent phases differ) so this does not break the
+  existing guards, but the ladder semantics are broken and MUST be
+  resolved before any Phase-2 advancement fires. Flagged inline in
+  `backend/risk_engine.py::_RISK_PCT` docstring.
+  Revisit trigger: 40 live days (first warning bell, 5 days before
+  potential advancement).
 
 ---
 
