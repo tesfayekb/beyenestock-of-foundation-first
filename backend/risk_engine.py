@@ -370,12 +370,24 @@ def compute_position_size(
         max_risk_dollars = account_value * risk_pct
         contracts = int(max_risk_dollars / stressed_loss_per_contract)
 
-        # T0-7 floor: never size to zero when risk budget allows at least
-        # one contract — except danger tier which explicitly returns 0 above.
-        # Without this, D-004 moderate reduction (0.70×) on Phase 1 sizing
-        # produces $280 budget vs $500/contract → int(0.56) = 0 on every
-        # single-contract trade regardless of signal quality.
-        if contracts == 0 and max_risk_dollars >= stressed_loss_per_contract * 0.50:
+        # T0-7 floor: never size to zero when risk budget allows a meaningful
+        # fraction of one contract — except danger tier which explicitly
+        # returns 0 above. Without this, any D-004 moderate reduction
+        # (0.70×) on Phase 1 produces budgets below $500/contract and
+        # drops every single-contract trade regardless of signal quality.
+        #
+        # Threshold: 0.30 of stressed loss.
+        # - Phase 1 core + moderate:      $100k × 0.005  × 0.70 = $350 → 0.70 ratio → fires (was firing)
+        # - Phase 1 satellite + full:     $100k × 0.0025 × 1.00 = $250 → 0.50 ratio → fires (was firing)
+        # - Phase 1 satellite + moderate: $100k × 0.0025 × 0.70 = $175 → 0.35 ratio → fires (was MISSING at 0.50 threshold)
+        # - Phase 1 satellite + low:      $100k × 0.0025 × 0.40 = $100 → 0.20 ratio → correctly skipped
+        # - Any tier + pre_event/danger:  short-circuited upstream, unaffected
+        #
+        # The satellite+moderate row was blocking every non-first trade of
+        # the day when RCS was in moderate regime. Loosening from 0.50 to
+        # 0.30 preserves the skip behaviour for genuinely-underfunded cases
+        # (low/pre_event/danger) while unblocking the common case.
+        if contracts == 0 and max_risk_dollars >= stressed_loss_per_contract * 0.30:
             contracts = 1
 
         logger.info(

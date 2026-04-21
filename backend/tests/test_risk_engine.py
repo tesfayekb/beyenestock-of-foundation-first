@@ -143,6 +143,45 @@ def test_floor_does_not_override_danger_tier():
     assert result["size_reduction_reason"] == "allocation_tier_danger_d004"
 
 
+def test_floor_covers_phase1_satellite_moderate_iron_condor():
+    """
+    T0-7 (2026-04-20 unblock): the real-world failure from the Railway log
+    at 15:30 UTC was iron_condor as the second trade of the day on a
+    moderate-RCS session. Reproduce the exact scenario and assert the
+    floor now produces 1 contract (was returning 0 before the floor was
+    loosened from 0.50 to 0.30 of stressed loss).
+
+    Math:
+      base risk_pct = _RISK_PCT[1]["satellite"] = 0.0025
+      after moderate (0.70×)                    = 0.00175
+      max_risk_dollars = $100k × 0.00175        = $175
+      stressed_loss   = spread_width (5.0) × 100 = $500
+      ratio           = 175 / 500               = 0.35
+
+    0.35 < 0.50 → old floor silently dropped to 0 contracts → blocked trade.
+    0.35 ≥ 0.30 → new floor fires → 1 contract.
+    """
+    from risk_engine import compute_position_size
+    result = compute_position_size(
+        account_value=100_000.0,
+        spread_width=5.0,
+        sizing_phase=1,
+        position_type="satellite",  # second trade of the day (D-012)
+        allocation_tier="moderate",  # D-004 RCS-moderate regime
+        strategy_type="iron_condor",  # not in _DEBIT_RISK_PCT → uses satellite risk_pct
+    )
+    assert result["contracts"] == 1, (
+        f"Phase 1 satellite + moderate iron_condor on $100k must produce "
+        f"1 contract under the loosened T0-7 floor. Got "
+        f"{result['contracts']} contracts, risk_pct={result['risk_pct']}."
+    )
+    # Explicit numeric check — guards against accidental risk_pct drift.
+    assert result["risk_pct"] == round(0.0025 * 0.70, 6), (
+        f"Expected effective risk_pct 0.00175 (0.0025 × 0.70), "
+        f"got {result['risk_pct']}"
+    )
+
+
 def test_floor_respects_zero_spread_width():
     """
     T0-7: spread_width=0 short-circuits to 0 contracts before the floor.
