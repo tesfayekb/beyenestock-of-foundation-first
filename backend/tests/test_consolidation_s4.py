@@ -309,7 +309,21 @@ def test_no_variable_shadow_in_partial_exit():
     ("pending", False),
 ])
 def test_trading_cycle_respects_session_status(status, expect_skip):
-    """trading_cycle must skip on halted/closed and proceed on active/pending."""
+    """trading_cycle must skip NEW ENTRIES on halted/closed and proceed
+    on active/pending.
+
+    2026-04-20 watchdog-safety reorder: the prediction engine now runs
+    on EVERY cycle including halted/closed sessions, so the resulting
+    no_trade=session_halted row keeps the prediction watchdog happy and
+    preserves ML data collection through halt windows. The session
+    gate blocks strategy selection and virtual-position entry only —
+    that is the halt contract. This test now asserts:
+      - run_cycle() IS called on every status (incl. halted/closed)
+      - strategy_selector.select() is NEVER called on halted/closed
+      - execution_engine.open_virtual_position() is NEVER called on
+        halted/closed
+      - skipped_reason is session_<status> on halted/closed
+    """
     import trading_cycle
     import session_manager
 
@@ -340,15 +354,85 @@ def test_trading_cycle_respects_session_status(status, expect_skip):
 
         result = trading_cycle.run_trading_cycle()
 
+    # 2026-04-20: prediction engine runs on EVERY status. Halted-session
+    # prediction writes keep the watchdog from misdiagnosing the halt
+    # as an engine failure and force-closing open positions.
+    trading_cycle._prediction_engine.run_cycle.assert_called_once()
+
     if expect_skip:
         assert result["skipped_reason"] == f"session_{status}", (
             f"expected session_{status}, got {result['skipped_reason']}"
         )
-        # Critically: the prediction engine should NEVER have been called
-        trading_cycle._prediction_engine.run_cycle.assert_not_called()
+        # Session gate blocks strategy selection and position entry.
+        trading_cycle._strategy_selector.select.assert_not_called()
+        trading_cycle._execution_engine.open_virtual_position \
+            .assert_not_called()
     else:
         # Active/pending should NOT be blocked by C-α
         assert result["skipped_reason"] != f"session_{status}"
+
+
+def test_trading_cycle_halted_session_writes_prediction_for_watchdog():
+    """2026-04-20 watchdog-safety: a halted session MUST still call
+    _prediction_engine.run_cycle() so the prediction_watchdog in
+    position_monitor does not misdiagnose the halt as a silent engine
+    and force-close open positions.
+
+    This pins the ordering invariant — prediction runs BEFORE the
+    session-status gate, not after — which is the non-obvious half
+    of the fix.
+    """
+    import trading_cycle
+    import session_manager
+
+    halted_session = {
+        "id": "sess-halted-1",
+        "session_status": "halted",
+        "virtual_pnl": -3100.0,
+        "halt_reason": "daily_drawdown_d005",
+    }
+
+    with patch.object(
+        trading_cycle, "get_or_create_session", return_value=halted_session
+    ), patch.object(
+        session_manager, "get_today_session", return_value=halted_session
+    ), patch.object(
+        trading_cycle, "check_daily_drawdown", return_value=False
+    ), patch.object(trading_cycle, "get_client") as gc:
+        gc.return_value.table.return_value.select.return_value.eq \
+            .return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[]
+            )
+
+        trading_cycle._prediction_engine = MagicMock()
+        trading_cycle._strategy_selector = MagicMock()
+        trading_cycle._execution_engine = MagicMock()
+        # prediction_engine internally writes to trading_prediction_outputs
+        # with no_trade_signal=True, no_trade_reason="session_halted" —
+        # the mock's return value just represents that row shape.
+        trading_cycle._prediction_engine.run_cycle.return_value = {
+            "no_trade_signal": True,
+            "no_trade_reason": "session_halted",
+        }
+
+        result = trading_cycle.run_trading_cycle()
+
+    # Layer 1 assertion: prediction wrote a row even though session
+    # is halted. This is what keeps the watchdog from firing.
+    trading_cycle._prediction_engine.run_cycle.assert_called_once()
+
+    # Layer 1 invariant: halt still blocks strategy + execution.
+    trading_cycle._strategy_selector.select.assert_not_called()
+    trading_cycle._execution_engine.open_virtual_position.assert_not_called()
+
+    # Skip reason reports the halt, not prediction_failed / no_signal.
+    assert result["skipped_reason"] == "session_halted"
+    # Prediction result is still populated on the result dict so callers
+    # can observe the cycle output.
+    assert result["prediction"] == {
+        "no_trade_signal": True,
+        "no_trade_reason": "session_halted",
+    }
 
 
 def test_open_virtual_position_skips_when_halted():

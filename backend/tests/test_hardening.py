@@ -49,27 +49,51 @@ def test_emergency_backstop_closes_stuck_positions():
 
 # ─── Prediction Watchdog ─────────────────────────────────────────────────────
 
+_ACTIVE_SESSION = {
+    "id": "sess-active-1",
+    "session_status": "active",
+    "halt_reason": None,
+}
+_HALTED_SESSION = {
+    "id": "sess-halted-1",
+    "session_status": "halted",
+    "halt_reason": "daily_drawdown_d005",
+}
+
+
 def test_prediction_watchdog_healthy_recent_prediction():
-    """Recent prediction (2 min ago) → watchdog returns healthy."""
+    """Recent prediction (2 min ago) → watchdog returns healthy.
+
+    Mocks session_manager.get_today_session with an active session so
+    the 2026-04-20 session-halt-aware gate does not short-circuit
+    before the staleness check.
+    """
     recent_time = (
         datetime.now(timezone.utc) - timedelta(minutes=2)
     ).isoformat()
     mock_result = MagicMock()
     mock_result.data = [{"predicted_at": recent_time}]
 
-    with patch("position_monitor.get_client") as mock_client:
-        mock_client.return_value.table.return_value \
-            .select.return_value.order.return_value.limit.return_value \
-            .execute.return_value = mock_result
-        from position_monitor import run_prediction_watchdog
-        result = run_prediction_watchdog()
+    with patch(
+        "session_manager.get_today_session", return_value=_ACTIVE_SESSION
+    ):
+        with patch("position_monitor.get_client") as mock_client:
+            mock_client.return_value.table.return_value \
+                .select.return_value.order.return_value.limit.return_value \
+                .execute.return_value = mock_result
+            from position_monitor import run_prediction_watchdog
+            result = run_prediction_watchdog()
 
     assert result["status"] == "healthy"
     assert result["age_minutes"] < 3
 
 
 def test_prediction_watchdog_triggers_on_stale():
-    """Prediction 15 min ago → watchdog triggers and closes open positions."""
+    """Prediction 15 min ago + ACTIVE session → watchdog triggers and
+    closes open positions. Regression guard: the 2026-04-20 session-
+    halt-aware gate MUST NOT skip a genuinely silent engine on an
+    active session.
+    """
     stale_time = (
         datetime.now(timezone.utc) - timedelta(minutes=15)
     ).isoformat()
@@ -80,19 +104,23 @@ def test_prediction_watchdog_triggers_on_stale():
     mock_engine = MagicMock()
     mock_engine.close_virtual_position.return_value = True
 
-    with patch("position_monitor.get_client") as mock_client:
-        mock_client.return_value.table.return_value \
-            .select.return_value.order.return_value.limit.return_value \
-            .execute.return_value = mock_result
-        with patch(
-            "position_monitor.get_open_positions", return_value=fake_positions
-        ):
+    with patch(
+        "session_manager.get_today_session", return_value=_ACTIVE_SESSION
+    ):
+        with patch("position_monitor.get_client") as mock_client:
+            mock_client.return_value.table.return_value \
+                .select.return_value.order.return_value.limit.return_value \
+                .execute.return_value = mock_result
             with patch(
-                "position_monitor._get_engine", return_value=mock_engine
+                "position_monitor.get_open_positions",
+                return_value=fake_positions,
             ):
-                with patch("position_monitor.write_audit_log"):
-                    from position_monitor import run_prediction_watchdog
-                    result = run_prediction_watchdog()
+                with patch(
+                    "position_monitor._get_engine", return_value=mock_engine
+                ):
+                    with patch("position_monitor.write_audit_log"):
+                        from position_monitor import run_prediction_watchdog
+                        result = run_prediction_watchdog()
 
     assert result["status"] == "triggered"
     assert result["positions_closed"] == 1
@@ -102,19 +130,111 @@ def test_prediction_watchdog_triggers_on_stale():
 
 
 def test_prediction_watchdog_no_predictions_yet():
-    """No predictions in DB → watchdog returns no_predictions, no action."""
+    """No predictions in DB + active session → watchdog returns
+    no_predictions, no action."""
     mock_result = MagicMock()
     mock_result.data = []
 
-    with patch("position_monitor.get_client") as mock_client:
-        mock_client.return_value.table.return_value \
-            .select.return_value.order.return_value.limit.return_value \
-            .execute.return_value = mock_result
-        from position_monitor import run_prediction_watchdog
-        result = run_prediction_watchdog()
+    with patch(
+        "session_manager.get_today_session", return_value=_ACTIVE_SESSION
+    ):
+        with patch("position_monitor.get_client") as mock_client:
+            mock_client.return_value.table.return_value \
+                .select.return_value.order.return_value.limit.return_value \
+                .execute.return_value = mock_result
+            from position_monitor import run_prediction_watchdog
+            result = run_prediction_watchdog()
 
     assert result["status"] == "no_predictions"
     assert result["action"] == "none"
+
+
+def test_prediction_watchdog_skips_when_session_halted():
+    """2026-04-20 session-halt-aware watchdog: when today's session is
+    halted (by risk_engine drawdown, D-022, or operator kill switch),
+    the watchdog MUST skip the staleness check and MUST NOT call
+    close_virtual_position on any open position. Verifies the
+    pre-fix bug (watchdog force-closed open iron_butterfly at
+    -$187.18 after a legitimate drawdown halt) cannot recur.
+    """
+    # Even if predictions appear stale, the halted-session gate must
+    # fire first — so set up a stale prediction to prove the gate
+    # short-circuits BEFORE the staleness check is reached.
+    stale_time = (
+        datetime.now(timezone.utc) - timedelta(minutes=30)
+    ).isoformat()
+    mock_result = MagicMock()
+    mock_result.data = [{"predicted_at": stale_time}]
+
+    fake_positions = [{"id": "pos-001", "strategy_type": "iron_butterfly"}]
+    mock_engine = MagicMock()
+
+    with patch(
+        "session_manager.get_today_session", return_value=_HALTED_SESSION
+    ):
+        with patch("position_monitor.get_client") as mock_client:
+            mock_client.return_value.table.return_value \
+                .select.return_value.order.return_value.limit.return_value \
+                .execute.return_value = mock_result
+            with patch(
+                "position_monitor.get_open_positions",
+                return_value=fake_positions,
+            ):
+                with patch(
+                    "position_monitor._get_engine", return_value=mock_engine
+                ):
+                    with patch("position_monitor.write_audit_log"):
+                        from position_monitor import run_prediction_watchdog
+                        result = run_prediction_watchdog()
+
+    assert result["status"] == "session_halted_skip", (
+        f"watchdog must return session_halted_skip on halted session, "
+        f"got {result}"
+    )
+    assert result["action"] == "none"
+    mock_engine.close_virtual_position.assert_not_called()
+
+
+def test_prediction_watchdog_fires_when_session_lookup_fails():
+    """Fail-safe: if session lookup itself raises (Supabase outage,
+    unexpected schema), the watchdog must still fire on genuinely
+    stale predictions. Better a false positive than a silent engine
+    in a real outage.
+    """
+    stale_time = (
+        datetime.now(timezone.utc) - timedelta(minutes=15)
+    ).isoformat()
+    mock_result = MagicMock()
+    mock_result.data = [{"predicted_at": stale_time}]
+
+    def _boom():
+        raise RuntimeError("supabase unavailable")
+
+    fake_positions = [{"id": "pos-001", "strategy_type": "iron_condor"}]
+    mock_engine = MagicMock()
+    mock_engine.close_virtual_position.return_value = True
+
+    with patch("session_manager.get_today_session", side_effect=_boom):
+        with patch("position_monitor.get_client") as mock_client:
+            mock_client.return_value.table.return_value \
+                .select.return_value.order.return_value.limit.return_value \
+                .execute.return_value = mock_result
+            with patch(
+                "position_monitor.get_open_positions",
+                return_value=fake_positions,
+            ):
+                with patch(
+                    "position_monitor._get_engine", return_value=mock_engine
+                ):
+                    with patch("position_monitor.write_audit_log"):
+                        from position_monitor import run_prediction_watchdog
+                        result = run_prediction_watchdog()
+
+    assert result["status"] == "triggered", (
+        f"watchdog must still fire on stale predictions when session "
+        f"lookup raises; got {result}"
+    )
+    mock_engine.close_virtual_position.assert_called_once()
 
 
 # ─── EOD Reconciliation ──────────────────────────────────────────────────────

@@ -293,6 +293,48 @@ def run_prediction_watchdog() -> dict:
     STALE_THRESHOLD_MINUTES = 12
 
     try:
+        # 2026-04-20 watchdog-safety: session-halted gate.
+        # When a session is halted (risk_engine daily drawdown, D-022
+        # consecutive losses, or operator kill switch) the trading
+        # cycle INTENTIONALLY stops producing prediction rows — or
+        # writes only no_trade=session_halted rows. Either way, the
+        # watchdog's staleness alarm and auto-close action are NOT
+        # appropriate during a halt. The halt contract is
+        # "only NEW entries are gated; the open book is unaffected";
+        # auto-closing an open position via this watchdog during a
+        # halt directly contradicts that contract and realises losses
+        # at whatever mark happens to be printing. The open book is
+        # the operator's responsibility under halt (or the 3:45 PM
+        # emergency_backstop at EOD).
+        #
+        # Fail-safe: if the session lookup itself fails (Supabase
+        # outage, unexpected schema), we do NOT skip. Err toward
+        # alarming — a genuinely silent engine during an active
+        # session is a worse outcome than a false skip during a halt.
+        try:
+            from session_manager import get_today_session
+            _current_session = get_today_session()
+            if (
+                _current_session
+                and _current_session.get("session_status") == "halted"
+            ):
+                logger.info(
+                    "prediction_watchdog_session_halted_skip",
+                    halt_reason=_current_session.get("halt_reason"),
+                    session_id=_current_session.get("id"),
+                )
+                return {
+                    "status": "session_halted_skip",
+                    "action": "none",
+                }
+        except Exception as session_lookup_exc:
+            # Log but continue to the stale-check path — a genuine
+            # engine failure must still fire.
+            logger.warning(
+                "prediction_watchdog_session_lookup_failed",
+                error=str(session_lookup_exc),
+            )
+
         result = (
             get_client()
             .table("trading_prediction_outputs")

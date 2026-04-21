@@ -576,11 +576,16 @@ def check_daily_drawdown(
             # circular-import risk at module load time.
             try:
                 from alerting import send_alert, CRITICAL
-                # T0-10: alert copy was wrong — positions are NOT
-                # auto-closed on halt. position_monitor continues
-                # to manage them (TP/SL still active). Corrected copy
-                # reflects what actually happens: only NEW entries
-                # are gated; the open book is unaffected.
+                # T0-10 / 2026-04-20 session-halt watchdog fix:
+                # On halt, only NEW entries are gated. Open positions
+                # continue to be managed by position_monitor (TP/SL
+                # targets still active, 3:45 PM emergency_backstop
+                # still fires). The prediction_watchdog is explicitly
+                # session-halt-aware (see position_monitor.py top of
+                # run_prediction_watchdog) so a halted session no
+                # longer force-closes the open book as a side-effect
+                # of stalled prediction rows — that bug cost real
+                # dollars on 2026-04-20 before this fix landed.
                 send_alert(
                     CRITICAL,
                     "daily_halt_triggered",

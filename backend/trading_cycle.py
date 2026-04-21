@@ -52,12 +52,40 @@ def run_trading_cycle(
             logger.warning("trading_cycle_skipped", reason="no_session")
             return result
 
+        # 2026-04-20 watchdog-safety reorder: the prediction engine runs
+        # BEFORE the session-status gate so every 5-minute cycle writes
+        # a row to trading_prediction_outputs, including during halted
+        # sessions. Rationale:
+        #
+        # Before this reorder, trading_cycle short-circuited on
+        # session_status in {"halted","closed"} without calling
+        # _prediction_engine.run_cycle(). Once a session was halted
+        # intraday (e.g. via risk_engine.check_daily_drawdown at -3%),
+        # no new prediction rows were written. 12 minutes later
+        # position_monitor.run_prediction_watchdog read
+        # trading_prediction_outputs, saw an age > STALE_THRESHOLD_MINUTES,
+        # and force-closed every open position with
+        # exit_reason="watchdog_engine_silent" — directly contradicting
+        # the documented halt semantic ("halt only gates new entries;
+        # the open book is unaffected").
+        #
+        # The fix here is safe because prediction_engine.run_cycle() has
+        # its own session_halted branch (prediction_engine.py:673-674 via
+        # _evaluate_no_trade) which returns a row with
+        # no_trade_signal=True, no_trade_reason="session_halted". That
+        # row satisfies the watchdog and keeps ML data collection alive
+        # through halt windows. The session gate immediately below still
+        # blocks NEW entries — only the prediction write is allowed past.
+        prediction = _prediction_engine.run_cycle()
+        result["prediction"] = prediction
+
         # S4 / C-α: respect kill switch and session lifecycle.
         # Allowed: 'active' (normal trading), 'pending' (created but
-        # market not yet open). Blocked: 'halted' (operator kill switch),
-        # 'closed' (EOD reached). Position monitor and mark-to-market
-        # remain unaffected so existing positions still get managed and
-        # exited under any session state — only NEW entries are gated.
+        # market not yet open). Blocked: 'halted' (operator kill switch
+        # or automatic halt such as daily drawdown), 'closed' (EOD
+        # reached). Position monitor and mark-to-market remain
+        # unaffected so existing positions still get managed and exited
+        # under any session state — only NEW entries are gated here.
         session_status = session.get("session_status", "active")
         if session_status not in ("active", "pending"):
             result["skipped_reason"] = f"session_{session_status}"
@@ -66,6 +94,13 @@ def run_trading_cycle(
                 reason=result["skipped_reason"],
                 session_status=session_status,
             )
+            return result
+
+        if not prediction:
+            # Prediction engine itself failed this cycle (Redis
+            # unavailable, market closed per calendar, internal error).
+            # No downstream decisions are safe without a prediction.
+            result["skipped_reason"] = "prediction_failed"
             return result
 
         # D-005: include unrealized MTM P&L from open positions
@@ -119,14 +154,6 @@ def run_trading_cycle(
             logger.warning(
                 "trading_cycle_skipped", reason="daily_drawdown_halt_d005"
             )
-            return result
-
-        # Run prediction cycle
-        prediction = _prediction_engine.run_cycle()
-        result["prediction"] = prediction
-
-        if not prediction:
-            result["skipped_reason"] = "prediction_failed"
             return result
 
         # Phase 3B: Run shadow cycle (Portfolio A) alongside real prediction.
