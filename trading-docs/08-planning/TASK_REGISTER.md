@@ -1467,54 +1467,82 @@ All panels are READ-ONLY — no trade decisions are affected. Every panel shows
 **New page — surface all Section 12 observability data in one place**
 **Activation note: shows "warming up" for most panels until 10+ sessions**
 
-Panels to include:
+- [x] **UI-1 COMPLETE** (2026-04-20, 0149877) — `src/pages/trading/LearningPage.tsx`
+      Ships all seven panels below. Uses `useLearningStats()` hook
+      (`src/hooks/trading/useLearningStats.ts`) which calls the Supabase
+      Edge Function `get-learning-stats` (see CHANGE 0 below). Every panel
+      renders an explicit warmup state — operator never sees null/undefined.
+      Route: `/trading/learning` (NOT `/admin/trading/learning` as in the
+      original spec — matches the Phase 4C convention where every other
+      trading sidebar entry lives under `/trading/*`).
+      Sidebar entry uses `GraduationCap` icon to avoid colliding with the
+      existing AI Intelligence `Brain` icon.
 
-- [ ] **Realized Vol vs VIX panel**
-      Source: `GET /trading/learning-stats` endpoint (new)
-      Shows: `polygon:spx:realized_vol_20d` vs `polygon:vix:current` ratio
-      Label: "IV/RV Ratio" — green when VIX > RV×1.10 (good for credit), red when below
-      Warmup: shows "collecting data (N/20 daily sessions)" until daily_len >= 5
+Panels shipped:
 
-- [ ] **Butterfly Gate Counters panel**
-      Source: same endpoint
-      Shows: bar chart of `butterfly:blocked:{reason}:{today}` counters
-      Reasons: regime_mismatch, time_gate, failed_today, low_concentration,
-               wall_unstable, drawdown_block (when wired), allowed
-      Label: "Today's Butterfly Gates" — helps tune thresholds after 20+ trades
-      Warmup: shows "no butterfly attempts today" when all counters are 0
+- [x] **IV/RV Ratio panel** — realized_vol_20d vs vix_current with
+      calculated ratio. Green >1.10, red <=1.10, grey when null.
+      Warmup: "Collecting daily returns — realized volatility needs
+      20 daily samples before it stabilises."
 
-- [ ] **Regime × Strategy Matrix panel**
-      Source: same endpoint
-      Shows: table of `strategy_matrix:{regime}:{strategy}` Redis values
-      Columns: regime, strategy, win_rate, avg_pnl, profit_factor, trade_count
-      Highlight: cells with trade_count >= 10 AND win_rate < 0.40 (active reduction)
-      Warmup: shows "collecting trades (N trades, need 10 per cell)" until first cell hits 10
+- [x] **Butterfly Gate Counters panel** — horizontal bar chart of all
+      6 reasons (regime_mismatch, time_gate, failed_today,
+      low_concentration, wall_unstable, drawdown_block) plus "Allowed"
+      green bar. `drawdown_block` greyed out with "wiring pending"
+      annotation (matches the TODO in backend/main.py from Batch 2).
+      Warmup: "No butterfly attempts today — counters reset each session."
 
-- [ ] **Model Drift Alert banner**
-      Source: same endpoint (reads `model_drift_alert` Redis key)
-      Shows: red banner at top of page when `model_drift_alert = "1"`
-      Content: "Model drift detected — 10-day accuracy has dropped. Review predictions."
-      Also show: current 10-day vs 30-day accuracy from last drift check result
-      No banner when key absent (normal state)
+- [x] **Regime × Strategy Matrix panel** — table with regime, strategy,
+      win rate, avg P&L, profit factor, trade count. Rows with
+      trade_count >= 10 AND win_rate < 0.40 tinted red (active reduction).
+      Rows with 5 <= trade_count < 10 tinted yellow (building data).
+      Warmup: "Collecting trades — each cell needs 10 closed paper trades
+      before it starts influencing sizing."
 
-- [ ] **Sizing Phase ribbon**
-      Source: same endpoint (reads `capital:sizing_phase` Redis key)
-      Shows: small ribbon on every admin page when phase > 1
-      Content: "Phase 2 Active — sizing increased 50%" or "Phase 3 Active — 2× sizing"
-      No ribbon when phase = 1 (default, no noise)
+- [x] **Model Drift (live) panel** — green "No drift detected" badge
+      normally; red alert card when `model_drift_alert=true`. Always
+      visible (no warmup state — bool is always defined).
 
-- [ ] **Adaptive Halt Threshold panel**
-      Source: same endpoint
-      Shows: current `risk:halt_threshold_pct` vs hardcoded -3% default
-      Label: "Daily Halt Threshold" — "Adaptive: -2.4%" or "Default: -3.0%"
-      Warmup: shows "default (-3%) until 100 closed trades" when key absent
+- [x] **Sizing Phase panel** — current phase number + label with
+      Batch 1 risk ladder copy ("Paper trading", "E1 Active",
+      "E2 Active", "Manual override"). Shows `sizing_phase_advanced_at`
+      timestamp when phase > 1.
 
-- [ ] **Calibrated Butterfly Thresholds panel**
-      Source: same endpoint
-      Shows: `butterfly:threshold:gex_conf`, `butterfly:threshold:wall_distance`,
-              `butterfly:threshold:concentration` vs their hardcoded defaults
-      Label: "Butterfly Gate Thresholds" — shows calibrated vs default for each
-      Warmup: shows "using defaults until 20 butterfly trades" when keys absent
+- [x] **Adaptive Halt Threshold panel** — calibrated value in green
+      when `halt_threshold_source=adaptive`; -3.0% (default) in grey
+      otherwise. Warmup: "Using default — adaptive calibration
+      activates after 100 closed trades."
+
+- [x] **Calibrated Butterfly Thresholds panel** — 3-row table comparing
+      default vs calibrated for GEX Confidence, Wall Distance,
+      Concentration. Rows where calibrated differs from default
+      tinted green. Warmup: "Using defaults — calibration activates
+      after 20 butterfly trades."
+
+---
+
+#### CHANGE 0 — Supabase Edge Function proxy (`get-learning-stats`)
+**New function — Lovable frontend cannot reach Railway directly (CSP) and
+shipping RAILWAY_ADMIN_KEY in the browser bundle would leak the secret.**
+
+- [x] **CHANGE 0 COMPLETE** (2026-04-20, 0149877) —
+      `supabase/functions/get-learning-stats/index.ts`
+      Authenticates the Supabase session (Bearer token), enforces
+      `trading.view` permission, and forwards to Railway
+      `GET /admin/trading/learning-stats` with `X-Api-Key:
+      RAILWAY_ADMIN_KEY` stored as a Supabase edge secret (server-side
+      only). Fail-open: if Railway is unreachable or the proxy is
+      mis-configured, returns a 200 warmup skeleton so the UI renders
+      every panel in its "collecting data" state rather than erroring.
+      Same pattern as `set-feature-flag`, `kill-switch`,
+      `subscription-key-status`.
+
+      **Operator actions required before the UI shows live data:**
+        1. `supabase secrets set RAILWAY_ADMIN_KEY=<value> RAILWAY_API_URL=<https://...>`
+        2. `supabase functions deploy get-learning-stats`
+
+      Until both are run, the Edge function returns warmup defaults
+      and the UI renders cleanly with no errors — zero trading impact.
 
 ---
 
@@ -1542,22 +1570,39 @@ Panels to include:
 #### UI-3 — Drift alert banner on War Room and Performance pages
 **Elevate model drift to highest-visibility pages**
 
-- [ ] Add `model_drift_alert` banner check to `src/pages/admin/trading/WarRoomPage.tsx`
-- [ ] Add `model_drift_alert` banner check to `src/pages/admin/trading/PerformancePage.tsx`
-      Note: PerformancePage already has `drift_status` from the sessions table —
-      this is a DIFFERENT alert (live Redis flag vs historical session data).
-      Label the new banner clearly: "Live drift alert" vs existing "Session drift status"
+- [x] **UI-3 COMPLETE** (2026-04-20, 0149877) —
+      `src/pages/admin/trading/WarRoomPage.tsx` and
+      `src/pages/admin/trading/PerformancePage.tsx` each now render a
+      destructive-colored drift banner sourced from
+      `useLearningStatsBanner()` (120s refetch, separate cache key
+      from the full Learning Dashboard query so it does not cause
+      cascade invalidation). Banner includes an inline `<Link>` to
+      `/trading/learning` for immediate operator triage.
+      On PerformancePage the banner is labeled **"Live model drift"**
+      so it is clearly distinct from the existing
+      `modelPerf.drift_status` "Drift Status" badge in the Model
+      Performance card (that one is the historical session-level
+      drift; this one is the live 10-day rolling Redis alert).
 
 ---
 
 #### UI-4 — Missed Opportunity Summary on Performance page
 **Surface counterfactual engine weekly report**
 
-- [ ] On `PerformancePage.tsx`, add a "Missed Opportunities" section
-      Source: Supabase query on `trading_prediction_outputs` where `no_trade_signal=True`
-              and `counterfactual_pnl IS NOT NULL`
-      Shows: top 3 no-trade reasons by total counterfactual P&L this week
-      Warmup label: "Available after 30 sessions" when closed_sessions < 30
+- [x] **UI-4 COMPLETE** (2026-04-20, 0149877) —
+      `src/pages/admin/trading/PerformancePage.tsx` now renders a
+      "Missed Opportunities (This Week)" card at the bottom. Reads
+      directly from Supabase (`trading_prediction_outputs` with
+      `no_trade_signal=true`, `counterfactual_pnl IS NOT NULL`, last
+      7 days). Groups by `no_trade_reason`, sorts by absolute total
+      P&L, shows top 3 with cycles / avg / total columns. Uses
+      `formatPnl()` for consistent coloring. Empty state: "No
+      counterfactual data yet — collecting from no-trade cycles."
+      `counterfactual_pnl` is not yet in the generated Supabase
+      types (column added in `20260421_add_counterfactual_pnl.sql`),
+      so the row shape is widened via `as unknown as Array<...>` —
+      same cast-around-missing-types pattern used by `useFeatureFlags`
+      for `trading_feature_flags`.
 
 ---
 
@@ -1576,9 +1621,11 @@ No panel affects any trade decision — pure read-only observability.
   Revisit after 30+ sessions of counterfactual data exists.
 
 - **Item 11** — ~~No UI surfaces for 12A–12L observability data~~
-  **Now planned — see UI Observability Sprint above.** Phase 1 (UI-2 backend
-  endpoint) shipped 2026-04-20 in commit `709a3db`; Phase 2 frontend panels
-  (UI-1, UI-3, UI-4) queued as the next code commit in the same sprint.
+  **COMPLETE.** Phase 1 (UI-2 backend endpoint) shipped 2026-04-20 in
+  commit `709a3db`; Phase 2 frontend panels (UI-1 Learning Dashboard,
+  UI-3 live-drift banners, UI-4 Missed Opportunity panel, plus the
+  `get-learning-stats` Supabase Edge proxy) shipped 2026-04-20 in
+  commit `0149877`. UI Observability Sprint fully closed.
 
 ---
 
@@ -1586,6 +1633,7 @@ No panel affects any trade decision — pure read-only observability.
 
 - [x] Batch 1 shipped (2026-04-20, fc64840)
 - [x] Batch 2 shipped (2026-04-20, 41bb1ab)
+- [x] UI Observability Sprint shipped (2026-04-20, 709a3db + 0149877)
 
 *Section 13 opened: 2026-04-20 | Owner: tesfayekb*
 
