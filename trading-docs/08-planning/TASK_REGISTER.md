@@ -449,6 +449,45 @@ production-hygiene fixes bundled together — no ROI impact.
   confirmed zero code consumers, so adding them would be dead
   schema (documented inline in the migration).
 
+**2026-04-20 Railway deploy scope fix (this commit):**
+The `abspath` pattern shipped in `3cd1c8c` correctly resolves
+sibling-dir paths at runtime, but the sibling directories
+themselves (`backend_agents/`, `backend_earnings/`) were never
+entering the Railway container. Operator confirmed Railway
+Root Directory was set to `/backend`, which only copies the
+`backend/` subtree into the image — everything else in the repo
+was excluded, producing `ModuleNotFoundError: No module named
+'flow_agent'` (and `synthesis_agent`, `feedback_agent`,
+`main_earnings`, ...) on every scheduled tick. The health-write
+column fix in `fd34c3c` exposed these failures; they had been
+silently swallowed before.
+
+- **Infra change.** Moved `backend/nixpacks.toml` → `./nixpacks.toml`
+  (repo root) and rewrote the file to anchor the install/start
+  commands to the new build root:
+
+  ```
+  [phases.install]
+  cmds = ["pip install -r backend/requirements.txt"]
+  [start]
+  cmd = "cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
+  ```
+  No Python code change — the existing `abspath(dirname(__file__)/..
+  /backend_agents)` pattern correctly resolves to
+  `/app/backend_agents` once those dirs are in the container.
+- **Operator step (manual, not in code).** Change Railway service
+  Root Directory from `/backend` to `/` (root) and trigger a
+  manual redeploy. This cannot be automated from the repo.
+- **Regression guard.** Added `backend/tests/test_nixpacks_location.py`
+  — 4 assertions: nixpacks.toml at repo root, not inside backend/,
+  install cmd references `backend/requirements.txt`, start cmd
+  contains both `cd backend` and `uvicorn main:app`.
+- **Verification after redeploy.** Watch Railway logs for
+  `macro_agent_job_complete`, `flow_agent_job_complete`,
+  `synthesis_agent_job_complete`, `feedback_agent_job_complete`,
+  `surprise_detector_job_complete`, `sentiment_agent_job_complete`,
+  and `earnings_scan_job_complete` on the next cycle.
+
 ### Health Check Quality
 
 - [ ] gex_engine: healthy only if gex:by_strike has > 5 entries
