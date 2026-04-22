@@ -1,3 +1,5 @@
+# Railway build configuration — forces Python provider, prevents Node/Bun detection
+# Last updated: 2026-04-22 (cache bust)
 providers = ["python"]
 
 [phases.setup]
