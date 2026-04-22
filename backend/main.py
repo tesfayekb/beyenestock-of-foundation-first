@@ -1255,6 +1255,21 @@ async def heartbeat_check() -> None:
 async def on_startup() -> None:
     global redis_client, tradier_feed, polygon_feed, databento_feed, gex_engine, prediction_engine
     try:
+        import os as _os
+        logger.info(
+            "startup_diagnostic",
+            agents_path_exists=_os.path.exists(
+                _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "backend_agents"))
+            ),
+            earnings_path_exists=_os.path.exists(
+                _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "backend_earnings"))
+            ),
+            backend_agents_files=str(_os.listdir(
+                _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "backend_agents"))
+            ) if _os.path.exists(
+                _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "backend_agents"))
+            ) else "PATH_MISSING"),
+        )
         config.validate_config()
         redis_client = redis.Redis.from_url(config.REDIS_URL, decode_responses=True)
         redis_client.ping()
