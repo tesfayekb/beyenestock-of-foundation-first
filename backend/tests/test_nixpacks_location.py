@@ -93,7 +93,16 @@ def test_nixpacks_start_uses_backend_uvicorn():
     assert '["sh", "-c"' in contents or "['sh', '-c'" in contents, (
         "Dockerfile CMD must use the shell-form exec list "
         '`CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 '
-        '--port $PORT"]` so $PORT is expanded at runtime. The bare '
-        "exec form does not invoke a shell and $PORT is passed "
-        "literally, which crash-loops the container."
+        '--port ${PORT:-8080}"]` so $PORT is expanded at runtime. '
+        "The bare exec form does not invoke a shell and $PORT is "
+        "passed literally, which crash-loops the container."
+    )
+    assert "${PORT:-" in contents, (
+        "Dockerfile CMD must reference PORT using the "
+        "`${PORT:-<default>}` shell-default syntax, not bare "
+        "`$PORT`. Some Railway runners do not inject PORT into "
+        "the Docker container; without a default, uvicorn "
+        "receives an empty --port argument and crash-loops. The "
+        "default (8080) is never used on Railway in practice — it "
+        "exists solely to survive edge-case injection failures."
     )
