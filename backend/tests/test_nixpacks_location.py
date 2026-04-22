@@ -66,7 +66,17 @@ def test_nixpacks_start_uses_backend_uvicorn():
     working directory set to /app/backend so main.py's
     `os.path.dirname(__file__)` resolves to /app/backend and the
     sibling-dir abspath pattern produces /app/backend_agents (not
-    /app/backend_agents/backend_agents)."""
+    /app/backend_agents/backend_agents).
+
+    CMD must use the shell-form exec list `["sh", "-c", "..."]` so
+    $PORT (injected by Railway at runtime) gets expanded. The bare
+    exec form `CMD uvicorn ... --port $PORT` does NOT expand
+    environment variables — Docker passes the literal string
+    `$PORT` to uvicorn, which fails with an argument parse error
+    and the container crash-loops. The shell form routes the
+    command through `sh -c` so the shell does the expansion before
+    uvicorn sees the argv.
+    """
     dockerfile = os.path.join(REPO_ROOT, "Dockerfile")
     with open(dockerfile, "r", encoding="utf-8") as f:
         contents = f.read()
@@ -79,4 +89,11 @@ def test_nixpacks_start_uses_backend_uvicorn():
         "uvicorn runs from backend/ and main.py's __file__ resolves "
         "to /app/backend/main.py — the sibling-dir agent/earnings "
         "abspath pattern depends on that."
+    )
+    assert '["sh", "-c"' in contents or "['sh', '-c'" in contents, (
+        "Dockerfile CMD must use the shell-form exec list "
+        '`CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 '
+        '--port $PORT"]` so $PORT is expanded at runtime. The bare '
+        "exec form does not invoke a shell and $PORT is passed "
+        "literally, which crash-loops the container."
     )
