@@ -18,7 +18,10 @@
   },
   "deploy": {
     "inputs": [
-      { "step": "packages:mise" },
+      {
+        "step": "packages:mise",
+        "include": ["/mise/shims", "/mise/installs", "/root/.local/share/mise"]
+      },
       { "step": "install", "include": ["/app/.venv"] },
       { "local": true, "include": ["."] }
     ],
