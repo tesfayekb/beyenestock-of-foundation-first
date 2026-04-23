@@ -88,29 +88,24 @@ def test_nixpacks_install_references_backend_requirements():
     because when Root Directory = / the build cwd is the repo root,
     not backend/.
 
-    The command MUST also invoke pip as `python -m pip ...`, not
-    bare `pip ...`. Nixpacks' python311 Nix package installs the
-    python interpreter but does NOT put a `pip` executable on PATH
-    at the build-phase shell level — bare `pip` fails with
-    'command not found' and the build errors before any dependency
-    is installed. `python -m pip` resolves pip as a module of the
-    interpreter, which is always available.
+    Bare `pip install ...` (not `python -m pip install`) is the
+    correct form here: Railway's default builder is Railpack, and
+    Railpack's Python provider puts pip on PATH at the build-phase
+    shell level. Legacy Nixpacks v1 does NOT, but the service is
+    pinned to RAILPACK in railway.json so that code path is not
+    taken. If a future operator switches the builder back to
+    NIXPACKS (legacy) in railway.json, this file must also change
+    to `python -m pip install ...` — guard test for that is
+    deliberately not added because the builder pin is the stronger
+    invariant.
     """
     root_nixpacks = os.path.join(REPO_ROOT, "nixpacks.toml")
     with open(root_nixpacks, "r", encoding="utf-8") as f:
         contents = f.read()
     assert "backend/requirements.txt" in contents, (
-        "nixpacks.toml [phases.install] must reference "
-        "`backend/requirements.txt` — bare `requirements.txt` only "
+        "nixpacks.toml [phases.install] must `pip install -r "
+        "backend/requirements.txt` — bare `requirements.txt` only "
         "worked when Root Directory was /backend."
-    )
-    assert "python -m pip install" in contents, (
-        "nixpacks.toml [phases.install] must invoke pip as "
-        "`python -m pip install -r backend/requirements.txt`. "
-        "Bare `pip install ...` fails under the Nix python311 "
-        "package because `pip` is not on PATH — only the python "
-        "interpreter is exposed, and pip must be reached via "
-        "`python -m pip`."
     )
 
 
