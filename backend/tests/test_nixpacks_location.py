@@ -1,27 +1,23 @@
 """
-Deployment-config guard: a Dockerfile at the repo root is the source
-of truth for the Railway build. The prior nixpacks.toml-based setup
-was replaced on 2026-04-22 because Railpack 0.23.0 ignored
-`providers = ["python"]` whenever package.json existed at the repo
-root — it kept detecting the project as Node and building a bun
-image that never started the Python backend.
+Deployment-config guard: nixpacks.toml MUST live at the repository
+root, not inside backend/.
 
-A repo-root Dockerfile bypasses Railpack entirely: when Railway sees
-a Dockerfile at the build context root, it uses Docker and ignores
-Nixpacks / Railpack auto-detection. The file also copies backend/,
-backend_agents/, and backend_earnings/ as siblings under /app/, so
-the abspath pattern in backend/main.py resolves correctly:
+Why this matters — on 2026-04-20 the Railway container was being
+built with Root Directory = /backend (Railway's "Root Directory"
+setting determines which subtree is copied into the container).
+Because backend_agents/ and backend_earnings/ are siblings of
+backend/ (not children), they never entered the container and
+every import of flow_agent / synthesis_agent / feedback_agent /
+main_earnings raised ModuleNotFoundError at runtime. The health-
+write fix in commit fd34c3c surfaced this by correctly reporting
+those failures to Supabase — they had been silent before.
 
-    os.path.dirname(__file__)      → /app/backend
-    os.path.join(..., "..", "X")   → /app/backend/../X
-    os.path.abspath(...)           → /app/X   (X = backend_agents | backend_earnings)
-
-These tests pin the Dockerfile invariants so a future refactor
-cannot silently drop an agent directory or change the entrypoint
-and re-break every agent/earnings job.
-
-File name retained as test_nixpacks_location.py for git/test-ID
-continuity — conceptually this is "deployment config guard."
+The infra fix (commit ships with this test) is to move
+nixpacks.toml to the repo root and change Railway Root Directory
+to / so the whole repo (backend/, backend_agents/, backend_earnings/,
+common/, ...) enters the container. These tests pin that layout so
+a future refactor cannot silently drift nixpacks.toml back inside
+backend/ and re-break every agent job.
 """
 import os
 
@@ -31,78 +27,87 @@ REPO_ROOT = os.path.abspath(
 )
 
 
+def test_nixpacks_at_repo_root():
+    """nixpacks.toml MUST exist at the repository root."""
+    root_nixpacks = os.path.join(REPO_ROOT, "nixpacks.toml")
+    assert os.path.isfile(root_nixpacks), (
+        f"nixpacks.toml not found at repo root ({root_nixpacks}). "
+        f"Railway needs this file at the root so Root Directory can "
+        f"be '/' and backend_agents/ + backend_earnings/ enter the "
+        f"container as siblings of backend/. See commit history for "
+        f"the 2026-04-20 'No module named flow_agent' incident."
+    )
+
+
+def test_nixpacks_not_inside_backend():
+    """nixpacks.toml MUST NOT exist inside backend/ — prevents the
+    file from drifting back to the pre-fix location (which caused
+    Railway Root Directory to be /backend and dropped the sibling
+    directories from the container)."""
+    bad_nixpacks = os.path.join(REPO_ROOT, "backend", "nixpacks.toml")
+    assert not os.path.exists(bad_nixpacks), (
+        f"nixpacks.toml must not live at {bad_nixpacks}. When it does, "
+        f"Railway's Root Directory autodetect trends toward /backend, "
+        f"which excludes backend_agents/ and backend_earnings/ from "
+        f"the container and causes ModuleNotFoundError at runtime. "
+        f"Keep nixpacks.toml at the repo root."
+    )
+
+
 def test_nixpacks_forces_python_provider():
-    """A Dockerfile MUST exist at the repository root. When a
-    Dockerfile is present at the build-context root, Railway uses it
-    and ignores Railpack's Node/Bun auto-detection — which is the
-    reason the Python backend now actually boots.
+    """The root-level nixpacks.toml MUST declare `providers = ["python"]`
+    at the top level so Nixpacks skips auto-detection. Without this,
+    the frontend `package.json` at the repo root causes Nixpacks to
+    detect the project as Node and attempt to build with bun/npm
+    instead of pip — the Python backend never boots.
+
+    Uses a whitespace-tolerant regex (not a literal string search) so
+    this still passes if someone reformats the file with extra spaces
+    around `=` or uses single-quoted strings in TOML (both valid).
     """
-    dockerfile = os.path.join(REPO_ROOT, "Dockerfile")
-    assert os.path.isfile(dockerfile), (
-        f"Dockerfile not found at repo root ({dockerfile}). "
-        f"Railway needs this file at the root to bypass Railpack "
-        f"Node detection caused by the frontend package.json. "
-        f"See commit history for the 2026-04-22 Railpack-bypass fix."
+    import re
+    root_nixpacks = os.path.join(REPO_ROOT, "nixpacks.toml")
+    with open(root_nixpacks, "r", encoding="utf-8") as f:
+        contents = f.read()
+    pattern = re.compile(
+        r'^\s*providers\s*=\s*\[\s*["\']python["\']\s*\]\s*$',
+        re.MULTILINE,
+    )
+    assert pattern.search(contents), (
+        "nixpacks.toml must declare `providers = [\"python\"]` at the "
+        "top level to force the Python provider and skip Node/Bun "
+        "auto-detection. Without this line, the frontend package.json "
+        "at the repo root causes Nixpacks to build a Node image and "
+        "the Python backend never starts."
     )
 
 
 def test_nixpacks_install_references_backend_requirements():
-    """The Dockerfile MUST install `backend/requirements.txt` (not
-    a bare `requirements.txt`), because the build context is the
-    repo root and the Python deps live under backend/."""
-    dockerfile = os.path.join(REPO_ROOT, "Dockerfile")
-    with open(dockerfile, "r", encoding="utf-8") as f:
+    """The install command in the root-level nixpacks.toml MUST
+    reference 'backend/requirements.txt' (not 'requirements.txt'),
+    because when Root Directory = / the build cwd is the repo root,
+    not backend/."""
+    root_nixpacks = os.path.join(REPO_ROOT, "nixpacks.toml")
+    with open(root_nixpacks, "r", encoding="utf-8") as f:
         contents = f.read()
     assert "backend/requirements.txt" in contents, (
-        "Dockerfile must `pip install -r backend/requirements.txt`. "
-        "Bare `requirements.txt` only resolves when the build cwd "
-        "is backend/, which is not the case under a repo-root "
-        "Dockerfile."
+        "nixpacks.toml [phases.install] must `pip install -r "
+        "backend/requirements.txt` — bare `requirements.txt` only "
+        "worked when Root Directory was /backend."
     )
 
 
-def test_nixpacks_start_uses_backend_uvicorn():
-    """The Dockerfile CMD MUST launch `uvicorn main:app` with the
-    working directory set to /app/backend so main.py's
-    `os.path.dirname(__file__)` resolves to /app/backend and the
-    sibling-dir abspath pattern produces /app/backend_agents (not
-    /app/backend_agents/backend_agents).
-
-    CMD must use the shell-form exec list `["sh", "-c", "..."]` so
-    $PORT (injected by Railway at runtime) gets expanded. The bare
-    exec form `CMD uvicorn ... --port $PORT` does NOT expand
-    environment variables — Docker passes the literal string
-    `$PORT` to uvicorn, which fails with an argument parse error
-    and the container crash-loops. The shell form routes the
-    command through `sh -c` so the shell does the expansion before
-    uvicorn sees the argv.
-    """
-    dockerfile = os.path.join(REPO_ROOT, "Dockerfile")
-    with open(dockerfile, "r", encoding="utf-8") as f:
+def test_nixpacks_start_cds_into_backend():
+    """The start command MUST `cd backend` before launching uvicorn
+    so that main.py's `os.path.dirname(__file__)` resolves to
+    /app/backend and the abspath agent-path pattern produces
+    /app/backend_agents (not /app/backend_agents/backend_agents)."""
+    root_nixpacks = os.path.join(REPO_ROOT, "nixpacks.toml")
+    with open(root_nixpacks, "r", encoding="utf-8") as f:
         contents = f.read()
-    assert "uvicorn main:app" in contents, (
-        "Dockerfile CMD must invoke `uvicorn main:app ...` — any "
-        "other entrypoint breaks the FastAPI app startup."
-    )
-    assert "WORKDIR /app/backend" in contents, (
-        "Dockerfile must set `WORKDIR /app/backend` before CMD so "
-        "uvicorn runs from backend/ and main.py's __file__ resolves "
-        "to /app/backend/main.py — the sibling-dir agent/earnings "
-        "abspath pattern depends on that."
-    )
-    assert '["sh", "-c"' in contents or "['sh', '-c'" in contents, (
-        "Dockerfile CMD must use the shell-form exec list "
-        '`CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 '
-        '--port ${PORT:-8080}"]` so $PORT is expanded at runtime. '
-        "The bare exec form does not invoke a shell and $PORT is "
-        "passed literally, which crash-loops the container."
-    )
-    assert "${PORT:-" in contents, (
-        "Dockerfile CMD must reference PORT using the "
-        "`${PORT:-<default>}` shell-default syntax, not bare "
-        "`$PORT`. Some Railway runners do not inject PORT into "
-        "the Docker container; without a default, uvicorn "
-        "receives an empty --port argument and crash-loops. The "
-        "default (8080) is never used on Railway in practice — it "
-        "exists solely to survive edge-case injection failures."
+    assert "cd backend" in contents and "uvicorn main:app" in contents, (
+        "nixpacks.toml [start] cmd must `cd backend && uvicorn "
+        "main:app ...` — running uvicorn from the repo root would "
+        "import a different module path and break the sibling-dir "
+        "abspath pattern in main.py."
     )
