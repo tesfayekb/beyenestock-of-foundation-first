@@ -6,6 +6,10 @@
   },
   "steps": {
     "install": {
+      "inputs": [
+        { "step": "packages:mise" },
+        { "local": true, "include": ["."] }
+      ],
       "commands": ["pip install -r /app/backend/requirements.txt"]
     }
   },
