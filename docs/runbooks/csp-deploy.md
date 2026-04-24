@@ -101,10 +101,13 @@ Either via CLI:
 ```bash
 supabase functions deploy set-feature-flag --no-verify-jwt
 supabase functions deploy subscription-key-status --no-verify-jwt
+supabase functions deploy get-learning-stats --no-verify-jwt
 ```
 Or via Dashboard: open each function -> toggle **"Verify JWT with legacy secret"** OFF -> paste code -> Deploy.
 
 **Why:** The project uses ES256-signed user JWTs. The Edge gateway's pre-verifier rejects them. The function code does its own validation via `serviceClient.auth.getUser(token)` (which understands ES256 because it calls the Auth API), so disabling gateway verification is safe — auth still happens, just inside the function.
+
+**Policy:** Any new Edge Function that uses `serviceClient.auth.getUser` for authentication MUST be deployed with `--no-verify-jwt` until the ES256 migration TODO in §8 is closed.
 
 ### Step 2 — Set Edge Function secrets
 Via Dashboard -> Settings -> Edge Functions -> Secrets, or `supabase secrets set NAME=value`:
