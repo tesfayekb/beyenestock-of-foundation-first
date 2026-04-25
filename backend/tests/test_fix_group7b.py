@@ -84,3 +84,135 @@ def test_0dte_expiry_is_weekday():
     expiry = _get_0dte_expiry()
     d = date.fromisoformat(expiry)
     assert d.weekday() < 5, f"{expiry} is not a weekday"
+
+
+# ── Commit 1 (2026-04-25): IC/IB target_credit chain extraction ────────────
+#
+# The iron_condor / iron_butterfly block in get_strikes() correctly
+# selected strikes from the Tradier chain but never extracted
+# target_credit. Result: strategy_selector fell through to the
+# stale PLACEHOLDER_CREDIT_BY_STRATEGY (calibrated for SPX ~5200),
+# booking entry_credit ≈ $2.30 against a real-market value of $5+.
+# mark_to_market then read live chain prices and produced an instant
+# phantom loss on every IC/IB entry.
+#
+# These three tests pin the fix:
+#   1. With a complete chain, target_credit equals the 4-leg mid-price sum.
+#   2. With an incomplete chain, target_credit stays None — strikes are
+#      still populated; PLACEHOLDER fallback engages upstream as today.
+#   3. Iron butterfly uses the same 4-leg formula as iron condor.
+#
+# Tests follow the existing fixture pattern in this file: MagicMock
+# Redis, patch _get_option_chain_tradier for chain content, and patch
+# _find_strike_by_delta for deterministic strike selection (greeks
+# math is exercised in the existing fallback tests above).
+
+
+def test_iron_condor_target_credit_extracted_from_chain():
+    """IC target_credit = (short_put - long_put) + (short_call - long_call)
+    from Tradier chain mid-prices."""
+    from unittest.mock import MagicMock, patch
+    from strike_selector import get_strikes
+
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None  # symmetric GEX, default VIX=18 → width 15
+
+    # 4 legs at SPX ~7100 with 15-pt symmetric wings.
+    # put_short=7080 (mid 4.50), put_long=7065 (mid 1.20)
+    # call_short=7120 (mid 4.10), call_long=7135 (mid 1.10)
+    # Expected target_credit = (4.50 - 1.20) + (4.10 - 1.10) = 6.30
+    chain = [
+        {"strike": 7080, "option_type": "put",  "bid": 4.45, "ask": 4.55, "greeks": {"delta": -0.16}},
+        {"strike": 7065, "option_type": "put",  "bid": 1.15, "ask": 1.25, "greeks": {"delta": -0.10}},
+        {"strike": 7120, "option_type": "call", "bid": 4.05, "ask": 4.15, "greeks": {"delta":  0.16}},
+        {"strike": 7135, "option_type": "call", "bid": 1.05, "ask": 1.15, "greeks": {"delta":  0.10}},
+    ]
+
+    with patch(
+        "strike_selector._get_option_chain_tradier", return_value=chain
+    ), patch(
+        "strike_selector._find_strike_by_delta",
+        side_effect=lambda c, d, t, abv: 7080.0 if t == "put" else 7120.0,
+    ):
+        result = get_strikes("iron_condor", mock_redis)
+
+    assert result["short_strike"] == 7080.0
+    assert result["long_strike"] == 7080.0 - 15.0
+    assert result["short_strike_2"] == 7120.0
+    assert result["long_strike_2"] == 7120.0 + 15.0
+    assert result["target_credit"] == 6.30
+
+
+def test_iron_condor_target_credit_none_when_chain_incomplete():
+    """Missing leg (or any bid/ask=0) → target_credit None; strikes
+    still populated. Upstream PLACEHOLDER fallback engages as today —
+    that's the existing graceful-degradation path."""
+    from unittest.mock import MagicMock, patch
+    from strike_selector import get_strikes
+
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None
+
+    # Chain MISSING the call_long leg (7135 not present). The other 3
+    # legs have valid bid/ask.
+    chain = [
+        {"strike": 7080, "option_type": "put",  "bid": 4.45, "ask": 4.55, "greeks": {"delta": -0.16}},
+        {"strike": 7065, "option_type": "put",  "bid": 1.15, "ask": 1.25, "greeks": {"delta": -0.10}},
+        {"strike": 7120, "option_type": "call", "bid": 4.05, "ask": 4.15, "greeks": {"delta":  0.16}},
+        # 7135 call_long deliberately missing
+    ]
+
+    with patch(
+        "strike_selector._get_option_chain_tradier", return_value=chain
+    ), patch(
+        "strike_selector._find_strike_by_delta",
+        side_effect=lambda c, d, t, abv: 7080.0 if t == "put" else 7120.0,
+    ):
+        result = get_strikes("iron_condor", mock_redis)
+
+    # Strikes must still be populated — geometry succeeded.
+    assert result["short_strike"] == 7080.0
+    assert result["long_strike"] == 7080.0 - 15.0
+    assert result["short_strike_2"] == 7120.0
+    assert result["long_strike_2"] == 7120.0 + 15.0
+    # Credit lookup failed cleanly — no partial value, no placeholder
+    # injection here. Strategy_selector handles the fallback.
+    assert result["target_credit"] is None
+
+
+def test_iron_butterfly_target_credit_extracted_from_chain():
+    """Iron butterfly uses the same 4-leg credit formula as iron condor.
+    Geometry differs (ATM short / OTM long) but the credit math is
+    structurally identical."""
+    from unittest.mock import MagicMock, patch
+    from strike_selector import get_strikes
+
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None
+
+    # iron_butterfly target_delta = 0.50 (ATM). _find_strike_by_delta
+    # returns the ATM strike for BOTH put and call legs.
+    # ATM = 7100. Wings ±15.
+    # short_put=7100 (mid 35.00), long_put=7085 (mid 25.00)
+    # short_call=7100 (mid 32.00), long_call=7115 (mid 22.00)
+    # target_credit = (35.00 - 25.00) + (32.00 - 22.00) = 20.00
+    chain = [
+        {"strike": 7100, "option_type": "put",  "bid": 34.95, "ask": 35.05, "greeks": {"delta": -0.50}},
+        {"strike": 7085, "option_type": "put",  "bid": 24.95, "ask": 25.05, "greeks": {"delta": -0.40}},
+        {"strike": 7100, "option_type": "call", "bid": 31.95, "ask": 32.05, "greeks": {"delta":  0.50}},
+        {"strike": 7115, "option_type": "call", "bid": 21.95, "ask": 22.05, "greeks": {"delta":  0.40}},
+    ]
+
+    with patch(
+        "strike_selector._get_option_chain_tradier", return_value=chain
+    ), patch(
+        "strike_selector._find_strike_by_delta",
+        side_effect=lambda c, d, t, abv: 7100.0,
+    ):
+        result = get_strikes("iron_butterfly", mock_redis)
+
+    assert result["short_strike"] == 7100.0
+    assert result["long_strike"] == 7100.0 - 15.0
+    assert result["short_strike_2"] == 7100.0
+    assert result["long_strike_2"] == 7100.0 + 15.0
+    assert result["target_credit"] == 20.00

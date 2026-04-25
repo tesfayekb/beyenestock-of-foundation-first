@@ -432,6 +432,42 @@ def get_strikes(
                     "put_spread_width": put_width,
                     "call_spread_width": call_width,
                 })
+                # Extract target_credit from chain mid-prices for all 4 legs.
+                # Same primitives as PCS/CCS at lines 393-400 / 407-414
+                # (chain lookup → bid/ask → round mid), factored into a
+                # tiny inline helper since IC/IB has 4 legs not 1.
+                #
+                # If ANY leg is missing OR any bid/ask is zero, target_credit
+                # stays None and strategy_selector falls through to the
+                # PLACEHOLDER cascade — same graceful-degradation path as
+                # PCS/CCS use today on chain failures.
+                def _leg_mid(strike, opt_type):
+                    opt = next(
+                        (o for o in chain if float(o.get("strike", 0)) == strike
+                         and o.get("option_type", "").lower() == opt_type),
+                        None,
+                    )
+                    if opt is None:
+                        return None
+                    bid = float(opt.get("bid") or 0)
+                    ask = float(opt.get("ask") or 0)
+                    if bid <= 0 or ask <= 0:
+                        return None
+                    return round((bid + ask) / 2, 2)
+
+                put_short_mid = _leg_mid(put_short, "put")
+                put_long_mid = _leg_mid(put_short - put_width, "put")
+                call_short_mid = _leg_mid(call_short, "call")
+                call_long_mid = _leg_mid(call_short + call_width, "call")
+                if all(
+                    m is not None
+                    for m in (put_short_mid, put_long_mid, call_short_mid, call_long_mid)
+                ):
+                    result["target_credit"] = round(
+                        (put_short_mid - put_long_mid)
+                        + (call_short_mid - call_long_mid),
+                        2,
+                    )
 
         elif strategy_type in ("long_put", "debit_put_spread"):
             short = _find_strike_by_delta(chain, target_delta, "put", False)
