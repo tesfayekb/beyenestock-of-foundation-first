@@ -194,6 +194,26 @@ If you identify a feature, enhancement, or capability that is NOT in the approve
 
 This applies to ALL unplanned features — no matter how small, useful, or obvious they seem. Scope is locked. No exceptions.
 
+## SPEC VERIFICATION PROTOCOL (MANDATORY)
+
+When producing or revising any architectural specification, design 
+document, or technical reference under trading-docs/, the author 
+MUST verify every concrete reference against the actual repository 
+state at HEAD before finalization:
+
+- Every `backend/<file>.py:NN` reference must be confirmed by 
+  reading the file
+- Every Supabase table/column reference must be confirmed against 
+  the latest applied migration in supabase/migrations/
+- Every commit hash reference must be confirmed via `git show <hash>`
+- Every claim that "X is implemented" or "Y exists" must cite the 
+  file/commit proving it
+
+Specifications produced without this verification are INVALID until 
+verified. A spec audit (per the spec verification template at 
+trading-docs/08-planning/ai-architecture-audits/_template.md) is 
+the documented verification step.
+
 ## QUALITY MANDATE — INSTITUTIONAL GRADE (NON-NEGOTIABLE)
 
 This is an institutional-grade project. Every output must meet A+ / 100/100 standard. "Good enough" is not acceptable.
