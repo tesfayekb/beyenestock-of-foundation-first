@@ -29,7 +29,7 @@
 | 1 | `gex:updated_at` consumer-only orphan (no producer in code) | AI-SPEC-005, AI-SPEC-013 |
 | 2 | `gex:atm_iv` consumer-only orphan (sole consumer `macro_agent.py:214`) | AI-SPEC-001, AI-SPEC-005 |
 | 3 | MASTER_PLAN debit-spread feature flags (`strategy:bull_debit_spread:enabled` / `strategy:bear_debit_spread:enabled`) named in plan but absent from code | AI-SPEC-007, AI-SPEC-011, AI-SPEC-012 |
-| 4 | `_safe_redis()` is **called** in `prediction_engine.py:120` (against the prompt's framing); its `age_key="gex:updated_at"` has no producer, so the staleness branch always falls through fail-open at line 142–143 (`if ts_raw is None: return raw, True`). Net effect at HEAD: GEX freshness gate is functionally a no-op. | AI-SPEC-005, AI-SPEC-013 (correction noted in §3 Notes; flagged in Risks) |
+| 4 | `_safe_redis()` is **defined** in `prediction_engine.py:100` with a docstring usage example at line 120 (inside the docstring at lines 107–131). No external caller invokes `_safe_redis()` anywhere in `backend/`, `backend_agents/`, `backend_earnings/`, or `src/` — verified by `grep -rn "_safe_redis"` returning exactly two matches: the function definition at line 100 and the docstring example at line 120. The function is **dead code at HEAD**. Net effect: GEX freshness gate is functionally a no-op because the gate is never invoked. (This corrects an earlier mischaracterization that line 120 was an actual call site.) | AI-SPEC-005, AI-SPEC-013 (correction noted in §3 Notes; flagged in Risks) |
 | 5 | `counterfactual_pnl` is a column triple on `trading_prediction_outputs` (per `20260421_add_counterfactual_pnl.sql`), NOT a separate table — see evidence pack §7.3 / §9.6 | AI-SPEC-010, AI-SPEC-012 |
 
 ---
@@ -190,7 +190,7 @@ For dimensions 1–7 every cell is falsifiable (path, line, file, decision ID). 
 |---|-----------|---------|-------------------|
 | 1 | File/module exists | **NO.** No HAR-RV file in `backend/`. **Closest existing logic:** `backend/polygon_feed.py:realized_vol_20d` Redis writer (12A, fixed in B1-2 to use 21:00 UTC EOD gate) — provides one input (20-day daily realized vol) to a future HAR-RV model. | Evidence pack §6.1, §8 Item 5. |
 | 2 | DB table/column | **NO** new table mandatory. Spec likely reads `trading_prediction_outputs` for output-vs-realized comparison; that table exists. | Evidence pack §7.1. |
-| 3 | Redis keys | **Reads:** `polygon:spx:realized_vol_20d` (verified, evidence pack §10.2; producer `polygon_feed.py` 12A; consumer `prediction_engine`); `polygon:vvix:z_score`, `polygon:vix:z_score_daily` (both verified `setex 7200s`); `gex:net` (verified). **Carry-forward #1 / #4 risk:** Item 5 likely uses `_safe_redis()` for staleness, but the staleness path is non-functional at HEAD because `gex:updated_at` has no producer (see §1 metadata, carry-forward #4). | Evidence pack §10.2; HEAD verification of `prediction_engine.py:120`. |
+| 3 | Redis keys | **Reads:** `polygon:spx:realized_vol_20d` (verified, evidence pack §10.2; producer `polygon_feed.py` 12A; consumer `prediction_engine`); `polygon:vvix:z_score`, `polygon:vix:z_score_daily` (both verified `setex 7200s`); `gex:net` (verified). **Carry-forward #1 / #4 risk:** Item 5 likely intends to use `_safe_redis()` for staleness, but at HEAD the `_safe_redis()` function is dead code (defined at `prediction_engine.py:100`, never called — see §1 metadata, carry-forward #4); even if it were wired, `gex:updated_at` has no producer. | Evidence pack §10.2; `grep -rn "_safe_redis"` against `backend/`, `backend_agents/`, `backend_earnings/`, `src/` returns 2 matches (definition + docstring example only). |
 | 4 | Current behavior matches spec | **NO.** HAR-RV (heterogeneous autoregressive realized volatility) requires a fitted regression model; nothing at HEAD computes a fair-value forecast. | Evidence pack §8 Item 5. |
 | 5 | Future design? | **YES — proposed, not existing.** | Evidence pack §8 Item 5. |
 | 6 | Governance conflict | **POTENTIAL CONFLICT with D-016** (Volatility Blending: `sigma = max(realized, 0.70 × implied)`). HAR-RV would replace or augment the realized-vol input to D-016; P1.3 must determine whether HAR-RV becomes the new "realized" feeder OR whether D-016 is amended. T-Rule 4: D-016 cannot be modified, deferred, or reinterpreted without explicit owner approval and a new decision record. | approved-decisions.md D-016 (lines 90–93); constitution T-Rule 4. |
@@ -200,7 +200,7 @@ For dimensions 1–7 every cell is falsifiable (path, line, file, decision ID). 
 | 10 | Implementation owner | Cursor. | T-Rule 1. |
 
 **Notes:**
-- **Carry-forward #4 contradiction:** the original P1.2 prompt characterized `_safe_redis()` as "defined but never called". Verification at HEAD shows it IS called once (`prediction_engine.py:120` with `age_key="gex:updated_at"`). The functional issue is different: because `gex:updated_at` has no producer, the function falls through fail-open at line 142–143 (`if ts_raw is None: return raw, True`). Item 5 audits should treat the freshness gate as a no-op until `gex:updated_at` is wired, NOT as missing infrastructure.
+- **Carry-forward #4 (re-verified):** Re-verification confirms the original framing was correct: `_safe_redis()` is defined at `prediction_engine.py:100` but NOT called anywhere. Line 120 is inside the docstring (lines 107–131). The freshness gate is non-functional at HEAD because nothing calls `_safe_redis()` in the first place. Item 5 audits should treat the freshness gate as **missing infrastructure** — both the staleness mechanism (a real caller) AND the `gex:updated_at` producer would need to be wired before the gate can function.
 
 ---
 
@@ -396,7 +396,7 @@ For dimensions 1–7 every cell is falsifiable (path, line, file, decision ID). 
 
 **Notes:**
 - **`risk_engine.py` collision with Items 1 and 12:** if Item 13's drift-triggered authority demotion requires a `risk_engine.py` modification, all three Cluster A/C specs (1, 12, 13) modify the same file. Sequencing critical.
-- **Carry-forward #4 contradiction (also surfaces in Item 5):** the prompt's claim about `_safe_redis()` being uncalled is wrong; the function is called once at `prediction_engine.py:120`. Item 13 audit must not treat staleness infrastructure as missing — it exists and is exercised, but its `age_key` source has no producer.
+- **Carry-forward #4 (re-verified, also surfaces in Item 5):** Re-verification confirms the original framing: `_safe_redis()` exists as code (defined at `prediction_engine.py:100`) but is NOT exercised — line 120 is inside the docstring (lines 107–131), not a real call. Item 13 audits SHOULD treat the staleness infrastructure as **missing in practice**. Both `_safe_redis()` callers AND the `gex:updated_at` producer would need to be wired before any drift-vs-staleness gating can function.
 
 ---
 
@@ -424,7 +424,7 @@ Modules touched by 2+ specs only. Single-touch modules omitted. Source of truth:
 | AI-SPEC-008 | OPRA flow alpha as new feature | Modifies (adds feature) |
 | AI-SPEC-013 | Realized-vs-modeled drift on prediction outputs | Reads (drift comparison) |
 
-**Conflict risk:** MEDIUM — Items 5 + 8 both add new features to the prediction pipeline; merge-order matters but conflicts are localized. **Carry-forward #4** lives here: `_safe_redis()` at line 100 is called once at line 120; the GEX freshness gate is non-functional at HEAD because `gex:updated_at` has no producer.
+**Conflict risk:** MEDIUM — Items 5 + 8 both add new features to the prediction pipeline; merge-order matters but conflicts are localized. **Carry-forward #4** lives here: `_safe_redis()` is defined at line 100 but never called from outside its own docstring (line 120 is inside lines 107–131). The GEX freshness gate is non-functional at HEAD because the gate function is **dead code**. Items 5 and 13 must address both the missing caller AND the missing `gex:updated_at` producer.
 
 ### `backend/strategy_selector.py` (1541 lines)
 
@@ -601,9 +601,9 @@ Cross-references against AI_ARCH_EVIDENCE_PACK.md §10.
 | `gex:confidence` | AI-SPEC-001 (reads) | `gex_engine.py:64, 167` | `strike_selector.py:299` | no TTL set | verified |
 | `gex:wall_history` | AI-SPEC-001 (reads, indirectly via wall-stability gate) | `gex_engine.py:120` (setex via 12C) | strategy_selector wall-stability gate | 3600s | verified |
 | **`gex:atm_iv`** | **AI-SPEC-001 (consumer if cited), AI-SPEC-005 (consumer if cited)** | **NONE FOUND** | `macro_agent.py:214` (sole consumer) | n/a | **partial — consumer-only orphan (carry-forward #2)** |
-| **`gex:updated_at`** | **AI-SPEC-005 (freshness gate), AI-SPEC-013 (drift staleness)** | **NONE FOUND** | `prediction_engine.py:123` (passed as `age_key` to `_safe_redis`) | n/a | **partial — consumer-only orphan (carry-forward #1 / #4)** |
+| **`gex:updated_at`** | **AI-SPEC-005 (freshness gate), AI-SPEC-013 (drift staleness)** | **NONE FOUND** | referenced as `age_key` in `_safe_redis` docstring example (`prediction_engine.py:120`, inside docstring lines 107–131) | n/a | **partial — consumer-only orphan; `_safe_redis()` itself is dead code (carry-forward #1 / #4)** |
 
-**Status flag:** §10.3 found `gex:atm_iv` and `gex:updated_at` as consumer-only orphans. P1.3 audits for Items 1, 5, 13 must resolve. **Operational risk noted in evidence pack §10.3.3:** because `gex:updated_at` has no producer, the `_safe_redis()` staleness check in `prediction_engine.py:120` always falls through fail-open (line 142–143). The freshness gate is non-functional at HEAD.
+**Status flag:** §10.3 found `gex:atm_iv` and `gex:updated_at` as consumer-only orphans. P1.3 audits for Items 1, 5, 13 must resolve. **Operational risk:** the `_safe_redis()` function at `prediction_engine.py:100` is defined but never called from outside its own docstring (verified via `grep -rn "_safe_redis"` across `backend/`, `backend_agents/`, `backend_earnings/`, `src/` — exactly 2 matches: definition at line 100, docstring example at line 120 inside lines 107–131). The GEX freshness gate is non-functional at HEAD because the gate function is **dead code**. The `gex:updated_at` consumer-only status (P1.1 §10.3.3) is academic until a real caller exists.
 
 ### Pattern: `polygon:spx:*`
 
