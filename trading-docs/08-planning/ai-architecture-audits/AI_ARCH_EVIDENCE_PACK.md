@@ -558,4 +558,156 @@ Each item below was re-verified against the actual repo state at this snapshot.
 
 ---
 
+## 10. Redis Key Inventory
+
+Redis keys are runtime state, not migrations. Static analysis of the codebase produces partial coverage; some keys only exist at runtime. This section catalogs every Redis key referenced in code or governance docs, with producer/consumer evidence where verifiable.
+
+### 10.1 Verification Method
+
+- `grep` across `backend/`, `backend_agents/`, `backend_earnings/`, `src/` for `redis_client.set`, `.setex`, `.get`, `.delete`, `.lpush`, `.lrange`, `.lrem`, `.ltrim`, `.expire`, `.incr`, `.exists` patterns.
+- `grep` for hardcoded key string literals matching the pattern `"<lower>:<lower>..."` (`grep -hoE '"[a-z][a-z0-9_]*:[a-z0-9_][a-z0-9_:.]*"'`) across production code only (excludes `backend/tests/`).
+- Cross-reference against `MASTER_PLAN.md` (lines 56–62 list the strategy feature flags) and `TASK_REGISTER.md` Sections 12 and 13 (which name keys under `butterfly:*`, `capital:*`, `model:meta_label:*`, `feedback:counterfactual:*`).
+- The prompt named `HANDOFF_4_CURSOR_OPERATING_INSTRUCTIONS.md` as the canonical Redis Key Reference — that file is **not present in the repo at HEAD `60dea45`** (verified by `Glob HANDOFF*` returning zero matches and `ls HANDOFF_4_CURSOR_OPERATING_INSTRUCTIONS.md` returning "No such file or directory"). It is an operator-side artifact. Cross-referencing is therefore one-directional (code → governance docs only) and is flagged as a verification gap in §10.5.
+- Status field reflects whether producer AND consumer were both located in static analysis at HEAD `60dea45`.
+
+### 10.2 Verified Redis Keys
+
+Keys grouped alphabetically by namespace prefix. "Producer" and "Consumer" cite the *first* representative call site discovered; many keys have additional read sites elsewhere (consumers tend to fan out widely). All paths and line numbers verified against HEAD `60dea45`.
+
+| Key Pattern | Producer (file:line) | Consumer (file:line) | TTL | Purpose | Status |
+|-------------|----------------------|----------------------|-----|---------|--------|
+| `agents:ai_synthesis:enabled` | `supabase/functions/set-feature-flag/` (Edge Function → Railway proxy → backend Redis writer; not in `backend/`) | `backend/main.py:755`; `backend_agents/synthesis_agent.py:79` | varies (operator-controlled) | Feature flag: gates synthesis agent execution. | partial (consumer verified; producer is out-of-tree Edge Function) |
+| `agents:flow_agent:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:797`; `backend_agents/flow_agent.py:101` | operator-controlled | Feature flag: gates flow agent execution. | partial |
+| `agents:sentiment_agent:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:820`; `backend_agents/sentiment_agent.py:110` | operator-controlled | Feature flag: gates sentiment agent execution. | partial |
+| `ai:feedback:brief` | `backend_agents/feedback_agent.py:129` (`setex`); `feedback_agent.py:24` (`delete`) | `backend_agents/synthesis_agent.py:126` | set via `setex` (TTL declared in setex call; full inspection deferred) | Feedback agent's outcome brief consumed by synthesis. | verified |
+| `ai:flow:brief` | `backend_agents/flow_agent.py:109` (`setex`) | `backend_agents/synthesis_agent.py:93`; `backend/main.py:1917` | `setex` TTL | Flow agent's brief. | verified |
+| `ai:macro:brief` | `backend_agents/macro_agent.py:86` (`setex`) | `backend_agents/synthesis_agent.py:90`; `backend/main.py:1916` | `setex` TTL | Macro agent's brief. | verified |
+| `ai:sentiment:brief` | `backend_agents/sentiment_agent.py:118` (`setex`) | `backend_agents/synthesis_agent.py:96`; `backend/main.py:1918` | `setex` TTL | Sentiment agent's brief. | verified |
+| `ai:synthesis:latest` | `backend_agents/synthesis_agent.py:193` (`setex`); also `surprise_detector.py:239` | `backend_agents/surprise_detector.py:219`; `backend/main.py:1919` | `setex` TTL | Per MASTER_PLAN line 39: `backend/prediction_engine.py` reads this with fallback to rule-based. | verified |
+| `ai:tokens:in:{YYYY-MM-DD}` (dynamic) | `backend_agents/synthesis_agent.py:503` (`setex` via `incr`+`expire`) — 90-day TTL per agent docstring (line 495) | `backend/main.py:2216` | 90 × 86400s | Daily Claude API token-in counter (cost observability). | verified |
+| `ai:tokens:out:{YYYY-MM-DD}` (dynamic) | `backend_agents/synthesis_agent.py:504` | `backend/main.py:2217` | 90 × 86400s | Daily Claude API token-out counter. | verified |
+| `alert:drawdown_warning_sent_today` | `backend/risk_engine.py:535` (one writer at HEAD) | `backend/risk_engine.py:535` (same site reads + writes) | UNVERIFIED — `expire` not visible at this site; needs full file read | Sentinel: drawdown warning already sent today (debounce). | partial |
+| `alert:milestone:{event_key}:sent` (dynamic) | `backend/main.py:1090` (`setex`, 90 × 86400s) | `backend/main.py` (same file; debounce check) | 90 × 86400s | Milestone-alert dedup sentinel. | verified |
+| `butterfly:allowed:{YYYY-MM-DD}` (dynamic) | `backend/strategy_selector.py:864` (`incr`); line 865 (`expire`) | `backend/main.py:2116`; `backend/calibration_engine.py:342` | 7 × 86400s (per `expire` call at line 865) | Daily counter: butterfly trade allowed (paired with `butterfly:blocked:*`). | verified |
+| `butterfly:blocked:{reason}:{YYYY-MM-DD}` (dynamic) | `backend/strategy_selector.py:859` (`incr` via `redis.incr`, per TASK_REGISTER 12B at line 758) | `backend/main.py:2069`; `backend/calibration_engine.py:340` | 7 × 86400s | Per-reason daily counter for butterfly gate blocks. Reasons: `regime_mismatch`, `time_gate`, `failed_today`, `low_concentration`, `wall_unstable`, `drawdown_block` (placeholder, not yet wired per Section 13 B2-3 TODO). | verified |
+| `butterfly:threshold:concentration` | `backend/calibration_engine.py:593` (`setex`) | `backend/strategy_selector.py:639`; `backend/main.py:2093` | `setex` TTL | Calibrated GEX-concentration threshold (12G). | verified |
+| `butterfly:threshold:gex_conf` | `backend/calibration_engine.py:579` (`setex`) | `backend/strategy_selector.py:627`; `backend/main.py:2087` | `setex` TTL | Calibrated GEX-confidence threshold. | verified |
+| `butterfly:threshold:wall_distance` | `backend/calibration_engine.py:586` (`setex`) | `backend/strategy_selector.py:633`; `backend/main.py:2090` | `setex` TTL | Calibrated wall-distance threshold. | verified |
+| `calendar:earnings_proximity_score` | `backend_agents/economic_calendar.py:427` (`setex`, fixed in Section 13 B1-3 commit `fc64840`) | `backend/prediction_engine.py` (consumed via signal feature; see test_section_13_batch_1.py:152) | 86400s | 0.0–1.0 linear-decay earnings-proximity score. Pre-B1-3 this was consumed but never written (phantom feature — fixed). | verified |
+| `calendar:today:intel` | `backend_agents/economic_calendar.py:402` (`setex`) | `backend_agents/synthesis_agent.py:99`; `macro_agent.py:36`; `surprise_detector.py:89`; `backend/main.py:1915` | `setex` TTL | FRED calendar intelligence brief. | verified |
+| `capital:deployment_pct` | `backend/main.py:1698` (`set`, default value `"1.0"` at startup if absent) | (operator-controlled at runtime; consumer in capital_manager flow) | no TTL set (`set` not `setex`) | Capital deployment percent (0.0–1.0); part of Phase 3B real-capital ramp gate. | verified (producer); consumer sites partial |
+| `capital:leverage_multiplier` | `backend/main.py:1700` (`set`, default `"1.0"`) | (capital_manager flow) | no TTL set | Leverage multiplier (Kelly cap pairing). | verified (producer); consumer partial |
+| `capital:live_equity` | `backend/capital_manager.py:160` (`setex`, via `CAPITAL_CACHE_KEY` constant at line 43; `CAPITAL_CACHE_TTL`) | `backend/calibration_engine.py:332`; `capital_manager.py:104` | `CAPITAL_CACHE_TTL` (named constant) | Cached live equity for sizing decisions. | verified |
+| `capital:sizing_phase` | `backend/calibration_engine.py:641` (`SIZING_PHASE_REDIS_KEY` constant; written by sizing-phase auto-advance per 12N) | `backend/main.py:2150`; `backend/risk_engine.py` (sizing phase lookup) | per `setex` in `calibration_engine.py:855`/`894` | Current sizing phase (1–4); drives `_RISK_PCT` lookup. | verified |
+| `capital:sizing_phase_advanced_at` | `backend/calibration_engine.py:647` (`SIZING_PHASE_AUDIT_REDIS_KEY`); written by `_sync_sizing_phase()` per Section 13 B2-1 | `backend/main.py:2153`; UI `LearningPage.tsx` via `get-learning-stats` Edge Function | 1-year TTL (per Section 13 B2-1 commit `41bb1ab` description) | Audit timestamp `"<phase>\|<iso_timestamp>"` for last sizing-phase advance. | verified |
+| `databento:opra:confidence_impact` | `backend/databento_feed.py:419` (`set`, `"true"`); deleted at line 388 | `backend/databento_feed.py` internal | no TTL set | Flag indicating OPRA-flow confidence-degradation event (consumed by GEX confidence calc). | verified |
+| `databento:opra:gex_block` | `backend/databento_feed.py:428` (`set`, `"True"`); deleted at line 387 | `backend/databento_feed.py` internal; cross-checked in gex_engine | no TTL set | Block-level GEX flag from OPRA feed. | verified |
+| `databento:opra:trades` | `backend/databento_feed.py:348` (`lpush`); line 350 (`expire 300s`); line 56 (`delete` on startup) | `backend/gex_engine.py:60` (`lrange`) | 300s | Per MASTER_PLAN line 51: rolling list of OPRA option trades; consumed by GEX engine. | verified |
+| `earnings:active_position` | `backend_earnings/earnings_monitor.py:291` (`setex`, 86400s); `delete` at line 273 | `backend/main.py:2455` | 86400s | Currently-open earnings position serialized JSON. | verified |
+| `earnings:last_scan_at` | `backend_earnings/earnings_calendar.py:142` (`setex`) | `backend/main.py:2461` | `setex` TTL | UTC timestamp of last earnings calendar scan. | verified |
+| `earnings:ticker_weights` | `backend_earnings/edge_calculator.py:384` (`setex`) | `backend_earnings/edge_calculator.py` (internal lookup) | `setex` TTL | Per-ticker weighting for earnings-edge calc. | verified |
+| `earnings:upcoming_events` | `backend_earnings/earnings_calendar.py:137` (`setex`); also re-read at `earnings_calendar.py:200` | `backend/main.py:2449` | `setex` TTL | List of upcoming earnings events (AAPL/NVDA/META/TSLA/AMZN/GOOGL). | verified |
+| `feedback:counterfactual:enabled` | `set-feature-flag` Edge Function (out-of-tree); wired to backend in Section 13 B1-5 (commit `fc64840`) | `backend/counterfactual_engine.py:168` | operator-controlled | Feature flag: gates counterfactual EOD job. Fail-open ENABLED if missing/Redis-down. | partial |
+| `gex:atm_iv` | **NO PRODUCER FOUND IN STATIC ANALYSIS** — see §10.3 | `backend_agents/macro_agent.py:214` | n/a | At-the-money implied vol used by macro agent. | partial — consumer-only |
+| `gex:by_strike` | `backend/gex_engine.py:164` (`set`) | `backend/strategy_selector.py` (butterfly gate); test fixtures | no TTL set | JSON dict of GEX per strike; per MASTER_PLAN T-Rule 4: `gex_engine` is healthy only if this has >5 entries. | verified |
+| `gex:confidence` | `backend/gex_engine.py:64`, `:167` (`set`) | `backend/strike_selector.py:299`; `synthesis_agent.py:225` | no TTL set | GEX confidence scalar (0.0–1.0). | verified |
+| `gex:flip_zone` | `backend/gex_engine.py:166` (`set`) | `backend_agents/synthesis_agent.py:226`; `prediction_engine` regime classifier | no TTL set | GEX flip-zone strike. | verified |
+| `gex:nearest_wall` | `backend/gex_engine.py:165` (`set`) | `backend/strike_selector.py:298`; strategy_selector butterfly gate | no TTL set | Nearest GEX wall strike. | verified |
+| `gex:net` | `backend/gex_engine.py:163` (`set`) | `backend_agents/synthesis_agent.py:224`; shadow_engine | no TTL set | Net GEX in dollars. | verified |
+| `gex:updated_at` | **NO PRODUCER FOUND IN STATIC ANALYSIS** — see §10.3 | `backend/prediction_engine.py:123` (passed as `age_key` parameter for staleness check) | n/a | Timestamp of last GEX update; staleness gate. | partial — consumer-only |
+| `gex:wall_history` | `backend/gex_engine.py:120` (`setex`, in `_append_wall_history()` per 12C) | `backend/strategy_selector.py` (wall-stability gate, 12C); test fixtures | 3600s (per `setex` at line 210) | Rolling 30-min list of `{ts, wall}` for wall-stability check. | verified |
+| `kelly:multiplier` | `backend/strategy_selector.py:1180` (`setex`) | `backend/strategy_selector.py:1174` (same module) | 3600s (per test_phase_b4_wiring.py:92 cite) | Cached Kelly multiplier from DB query. | verified |
+| `model:meta_label:enabled` | `set-feature-flag` Edge Function (out-of-tree); wired in Section 13 B1-5 | `backend/execution_engine.py:358` | operator-controlled | Feature flag: gates meta-label inference at order placement. Fail-open ENABLED. | partial |
+| `polygon:spx:bb_pct_b` | `backend/polygon_feed.py` (UNVERIFIED at exact line; producer pattern matches the technical-indicator block) | `backend/prediction_engine.py:548` | UNVERIFIED — likely 300s like sibling indicators | Bollinger Band %B for SPX. | partial — producer line not pinned |
+| `polygon:spx:close` | UNVERIFIED — read in `shadow_engine.py:304` but producer not located | `backend/shadow_engine.py:304` | n/a | SPX close price for shadow engine. | partial — consumer-only |
+| `polygon:spx:daily_returns:last_date` | `backend/polygon_feed.py` (per persistence guard pattern in 12A; see file lines around 875+) | `backend/main.py:2110`; tests `test_spx_daily_rv.py:173` | UNVERIFIED | Last-date persistence guard for SPX daily-returns ring buffer. | partial |
+| `polygon:spx:macd_signal` | `backend/polygon_feed.py` (technical-indicator producer) | `backend/prediction_engine.py:547` | UNVERIFIED | MACD signal-line for SPX. | partial — producer line not pinned |
+| `polygon:spx:morning_range` | `backend/polygon_feed.py` (technical-indicator producer) | `backend/prediction_engine.py:552` | UNVERIFIED | Morning trading-range for SPX. | partial — producer line not pinned |
+| `polygon:spx:open` | UNVERIFIED — read in `shadow_engine.py:302` but producer not located | `backend/shadow_engine.py:302` | n/a | SPX open price. | partial — consumer-only |
+| `polygon:spx:overnight_gap` | `backend/polygon_feed.py` (overnight-gap calc) | `backend_agents/sentiment_agent.py:228` | UNVERIFIED | Overnight gap return. | partial |
+| `polygon:spx:prior_day_return` | `backend/polygon_feed.py` (12A daily-return EOD writer; see file lines around 875+) | `backend/prediction_engine.py`; `test_spx_daily_rv.py:36` | UNVERIFIED — 12A EOD pattern | Prior-day SPX return; appended to daily-return ring buffer at 21:00 UTC EOD gate. | partial — producer line not pinned |
+| `polygon:spx:realized_vol_20d` | `backend/polygon_feed.py` (12A; computed `std(daily_returns) * sqrt(252) * 100` when ring-buffer ≥5) | `backend/main.py:2061`; `prediction_engine`; tests | 86400s (per 12A spec line 745) | True 20-day daily realized volatility (12A). | verified by spec; producer line not pinned at HEAD |
+| `polygon:spx:return_1h` | `backend/polygon_feed.py:876` (`setex`, 300s) | `prediction_engine` momentum features | 300s | 1-hour SPX return. | verified |
+| `polygon:spx:return_30m` | `backend/polygon_feed.py:875` (`setex`, 300s) | `prediction_engine` | 300s | 30-min SPX return. | verified |
+| `polygon:spx:return_4h` | `backend/polygon_feed.py:877` (`setex`, 300s) | `prediction_engine`; `test_prediction_engine.py:97` | 300s | 4-hour SPX return. | verified |
+| `polygon:spx:return_5m` | `backend/polygon_feed.py:874` (`setex`, 300s) | `prediction_engine` | 300s | 5-min SPX return. | verified |
+| `polygon:spx:rsi_14` | `backend/polygon_feed.py:916` (`setex`, 300s) | `prediction_engine` | 300s | 14-period RSI for SPX. | verified |
+| `polygon:spx:vwap_distance` | `backend/polygon_feed.py` (technical-indicator producer) | `backend/prediction_engine.py:551` | UNVERIFIED | Distance from session VWAP. | partial — producer line not pinned |
+| `polygon:vix9d:current` | `backend/polygon_feed.py` (VIX9D fetcher) | `prediction_engine`; `test_prediction_engine.py:99` | UNVERIFIED | Current VIX9D. | partial |
+| `polygon:vix:20d_mean` | `backend/polygon_feed.py:392` (`setex`, 7200s) | `prediction_engine` | 7200s | 20-day rolling mean of VIX. | verified |
+| `polygon:vix:20d_std` | `backend/polygon_feed.py:395` (`setex`, 7200s) | `prediction_engine` | 7200s | 20-day rolling stdev of VIX. | verified |
+| `polygon:vix:5d_change` | `backend/polygon_feed.py` (VIX-stat block, comment at line 386) | `backend/prediction_engine.py:554` | UNVERIFIED — likely 7200s | 5-day change in VIX. | partial |
+| `polygon:vix:current` | `backend/polygon_feed.py` (current-VIX writer) | `backend/main.py:1120`; `strike_selector.py:355`; `synthesis_agent.py:228` | UNVERIFIED — likely 300s | Current VIX value. | partial — producer line not pinned |
+| `polygon:vix:daily_history:last_date` | `backend/polygon_feed.py:340` (`setex`); read at `polygon_feed.py:317` | `backend/polygon_feed.py` (persistence guard) | UNVERIFIED — long TTL (daily) | Last-date guard for VIX daily-history ring buffer. | verified |
+| `polygon:vix:z_score` | `backend/polygon_feed.py:400` (`setex`, 7200s) — **legacy key, see :398 comment** | `backend/strategy_selector.py:1268`; `prediction_engine.py:555` | 7200s | Legacy VIX z-score (kept for backward compat); new callers should use `polygon:vix:z_score_daily`. | verified |
+| `polygon:vix:z_score_daily` | `backend/polygon_feed.py:403` (`setex`, 7200s) | `backend/strategy_selector.py:1261` | 7200s | Daily-aggregates VIX z-score (new canonical). | verified |
+| `polygon:vix:z_score_intraday` | `backend/polygon_feed.py:282` (`setex`) | `prediction_engine` | UNVERIFIED — `setex` value not extracted | Intraday VIX z-score. | partial |
+| `polygon:vvix:20d_mean` | `backend/polygon_feed.py:239` (`setex`, 3600s) | `prediction_engine` (D-018) | 3600s | 20-day mean of VVIX. | verified |
+| `polygon:vvix:20d_std` | `backend/polygon_feed.py:240` (`setex`, 3600s) | `prediction_engine` (D-018) | 3600s | 20-day stdev of VVIX. | verified |
+| `polygon:vvix:baseline_ready` | `backend/polygon_feed.py:228` (per VVIX writer block; line range cited) | `backend/main.py:1123` | 3600s | Boolean: VVIX baseline statistics warmed up enough for D-018 adaptive Z-score. | partial — producer line approximate |
+| `polygon:vvix:current` | `backend/polygon_feed.py:223` (`setex`, 3600s) | `prediction_engine` | 3600s | Current VVIX. | verified |
+| `polygon:vvix:fallback_thresholds` | `backend/polygon_feed.py:229` (`setex`) | `prediction_engine` (D-018 fallback path) | UNVERIFIED — `setex` value not extracted | Fallback thresholds when VVIX baseline not yet warmed. | partial |
+| `polygon:vvix:z_score` | `backend/polygon_feed.py:241` (`setex`, 3600s) | `backend/main.py:1120`; `synthesis_agent.py:227` | 3600s | Adaptive VVIX Z-score per D-018. | verified |
+| `risk:halt_threshold_pct` | `backend/calibration_engine.py:368` (`setex`) | `backend/main.py:2081`; `risk_engine.py:504` | `setex` TTL | Adaptive halt threshold (Section 12F); -3.0% default if absent (per D-005). | verified |
+| `signal:earnings_proximity:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:2323`; `strategy_selector.py` | operator-controlled | Feature flag: enables earnings-proximity signal in regime classifier. | partial |
+| `signal:entry_time_gate:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:2320`; `strategy_selector.py` | operator-controlled | Feature flag: time-of-day entry-window gate. | partial |
+| `signal:gex_directional_bias:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:2321` | operator-controlled | Feature flag: GEX-derived directional bias. | partial |
+| `signal:iv_rank_filter:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:2324` | operator-controlled | Feature flag: IV-rank entry filter. | partial |
+| `signal:market_breadth:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:2322` | operator-controlled | Feature flag: market-breadth signal. | partial |
+| `signal:vix_term_filter:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:2319` | operator-controlled | Feature flag: VIX term-structure filter. | partial |
+| `strategy:ai_hint_override:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:1836`; `strategy_selector.py` | operator-controlled | Feature flag: allow AI hint to override rule-based regime selection. | partial |
+| `strategy:calendar_spread:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:1835`; `strategy_selector` | operator-controlled | Feature flag: calendar-spread strategy enable (Phase 3C). | partial |
+| `strategy:earnings_straddle:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend_earnings/main_earnings.py:92`; `backend/main.py:1850` | operator-controlled | Feature flag: earnings straddle (Phase 5A). Default OFF per MASTER_PLAN line 386. | partial |
+| `strategy:iron_butterfly:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:1833`; `strategy_selector.py` butterfly gate | operator-controlled | Feature flag: iron-butterfly strategy. | partial |
+| `strategy:long_straddle:enabled` | `set-feature-flag` Edge Function (out-of-tree) | `backend/main.py:1834`; `strategy_selector.py` | operator-controlled | Feature flag: long-straddle strategy. | partial |
+| `strategy_failed_today:{strategy}:{YYYY-MM-DD}` (dynamic) | `backend/position_monitor.py:836` (`setex` via flag-set helper) | `backend/strategy_selector.py:743`, `:1055`; `position_monitor.py:818` | UNVERIFIED — likely 86400s (daily flag) | Per-strategy "failed today" sentinel; blocks re-entry on same strategy after a same-day loss. | verified |
+| `strategy_matrix:{regime}:{strategy}` (dynamic, e.g., `strategy_matrix:pin_range:iron_butterfly`) | `backend/strategy_performance_matrix.py` (12D writer) | `backend/strategy_selector.py:154` (`get`) | UNVERIFIED | Per-cell rolling performance stats (win-rate, avg P&L, profit-factor, trade-count). | partial |
+| `tradier:quotes:{symbol}` (dynamic) | `backend/tradier_feed.py` (or polygon-feed siblings; pattern observed at multiple call sites) | `backend/main.py` (cycle entry); inline at `prediction_engine` (per pipeline GET at line 72) | UNVERIFIED | Cached Tradier quote for `{symbol}`. | partial |
+| `trade_frequency_cap_d020:{regime}:...` (dynamic) | `backend/risk_engine.py:632` (counter pattern; D-020 trade-frequency cap) | `backend/risk_engine.py:632` (same site) | UNVERIFIED | D-020 max-trades-per-regime-per-session counter. | partial |
+
+### 10.3 Keys Referenced in Specs/Docs but Not Found in Code, and Code-Side Anomalies
+
+#### 10.3.1 Documented in `MASTER_PLAN.md` but NOT present in production code
+
+| Key | Doc source | Doc line(s) | Code-side status |
+|-----|-----------|-------------|------------------|
+| `strategy:bull_debit_spread:enabled` | `trading-docs/08-planning/MASTER_PLAN.md` | line 59 | **NOT FOUND IN CODE.** Phase 2B is marked COMPLETE in MASTER_PLAN line 267, but neither `strategy:bull_debit_spread:enabled` nor any `strategy:debit_call_spread:enabled` / `strategy:long_call:enabled` flag appears in any backend Python file (verified by `grep -rn 'strategy:(bull_debit_spread\|debit_call_spread\|long_call):enabled' backend* `). The strategy itself appears to be sized via `_DEBIT_RISK_PCT["debit_call_spread"]` in `backend/risk_engine.py:105` but is not flag-gated. |
+| `strategy:bear_debit_spread:enabled` | `trading-docs/08-planning/MASTER_PLAN.md` | line 60 | **NOT FOUND IN CODE.** Symmetric to bull case. `_DEBIT_RISK_PCT["debit_put_spread"]` at `backend/risk_engine.py:106` exists but no enable flag. |
+
+#### 10.3.2 Operator-side reference (`HANDOFF_4_CURSOR_OPERATING_INSTRUCTIONS.md`)
+
+The prompt named this file as the canonical Redis Key Reference. It is **NOT PRESENT in the repo at HEAD `60dea45`** (`Glob HANDOFF*` returns 0 matches). Cursor cannot perform a doc → code cross-reference for keys named only in HANDOFF_4. If the operator can publish HANDOFF_4 into the repo (or paste its Redis Key Reference table), this section can be re-completed in a follow-up. Until then, the doc → code direction is **unverified**.
+
+#### 10.3.3 Code-side anomalies (consumed but no producer found in static analysis)
+
+These keys are consumed by production code but no producer was located in `backend/`, `backend_agents/`, or `backend_earnings/` at HEAD. They may be set externally (Edge Function, manual operator action), populated by a code path that uses a dynamic key construction not matched by the literal-string grep, or be dead-code reads.
+
+| Key | Sole consumer | Hypothesis |
+|-----|---------------|------------|
+| `gex:atm_iv` | `backend_agents/macro_agent.py:214` | Likely intended to be written by `backend/gex_engine.py` alongside `gex:net` / `gex:flip_zone` etc., but no `set` for this key exists in `gex_engine.py`. May be dead-code consumer or pending implementation. |
+| `gex:updated_at` | `backend/prediction_engine.py:123` (passed as `age_key` for staleness check) | Likely intended to be written by `backend/gex_engine.py` after each successful GEX recomputation, but no producer exists at HEAD. Staleness check therefore always fails-open (no GEX freshness gate effectively active). **POTENTIAL OPERATIONAL RISK** — flag for P1.3 audit attention. |
+
+### 10.4 Statistical Summary
+
+- **Total Redis keys verified or partially-verified at HEAD `60dea45`:** 75 (66 static + 9 dynamic patterns)
+- **Keys with both producer and consumer located in static analysis (status: verified):** 35
+- **Keys with partial verification (consumer-only OR producer is out-of-tree Edge Function OR producer line not pinned to exact `setex`/`set` call):** 38
+- **Keys consumed in code but with no producer found in static analysis:** 2 (`gex:atm_iv`, `gex:updated_at`)
+- **Keys named in governance docs but NOT in code:** 2 (`strategy:bull_debit_spread:enabled`, `strategy:bear_debit_spread:enabled`)
+- **Out-of-tree producers (Supabase Edge Function `set-feature-flag` → Railway proxy → backend Redis writer):** 14 feature flags (3 `agents:*:enabled` + 6 `signal:*:enabled` + 5 `strategy:*:enabled` + 2 wired in B1-5 = `model:meta_label:enabled`, `feedback:counterfactual:enabled`).
+
+Counts include dynamic patterns as one key each (e.g., `butterfly:blocked:{reason}:{today}` is one entry).
+
+### 10.5 Caveats
+
+- **Static analysis cannot find dynamically-constructed key names.** Keys built via f-strings (e.g., `f"strategy_matrix:{cell_key}"`, `f"butterfly:blocked:{reason}:{today}"`, `f"ai:tokens:in:{day}"`, `f"tradier:quotes:{symbol}"`, `f"strategy_failed_today:{strategy}:{today}"`, `f"trade_frequency_cap_d020:{regime}:..."`, `f"alert:milestone:{event_key}:sent"`) appear here as patterns. The fully-resolved keys only exist at runtime; the inventory captures the *pattern*, not enumerated key instances.
+- **TTL completeness is approximate.** Where the inventory cites `setex` or a numeric-second value, that comes from the producer call site. Several producer call sites use a constant or variable (`CAPITAL_CACHE_TTL`, `SIZING_PHASE_REDIS_KEY` paired with `setex(key, _ttl, ...)`) — those entries say "`setex` TTL" and would need a deeper file read to resolve to a concrete number-of-seconds. TTLs set via separate `EXPIRE` commands on already-written keys (e.g., `databento:opra:trades` writes via `lpush` then `expire 300` at `databento_feed.py:350`) are captured.
+- **Out-of-tree producers are not in this repo.** Strategy/agent/signal/`model:*`/`feedback:*` feature flags are written by the `set-feature-flag` Supabase Edge Function (`supabase/functions/set-feature-flag/index.ts`), which POSTs to a Railway endpoint that performs the actual Redis `SET`. The Edge Function itself does NOT touch Redis (it has no Redis client). The Railway-side flag-setter handler is in `backend/main.py` around lines 2568–2576 (delete on remove, set "false" or "true" on toggle). So the *code* producer for feature flags lives at `backend/main.py:2568–2576`, but it executes via an HTTP-authenticated path triggered by the Edge Function, not by autonomous backend logic. Audit attention: the producer-of-record for any feature flag is therefore the **operator**, mediated by Edge Function authentication and Railway admin-key validation.
+- **Some keys may be set via Edge Functions or external services not visible in this repo** (e.g., `subscription-key-status` Edge Function exists but does not touch trading Redis; only `set-feature-flag` and the trading Edge Functions like `get-learning-stats` participate in the trading data plane).
+- **Frontend (`src/`) does not reference Redis keys directly.** Verified by `grep -rE '"[a-z][a-z_]*:[a-z][a-z_:]*' src/ --include='*.ts' --include='*.tsx'` — zero matches. The frontend reads/writes Redis state exclusively through Edge Functions (`get-learning-stats`, `set-feature-flag`, `kill-switch`), preserving the CSP boundary documented in `set-feature-flag/index.ts` lines 3–8.
+- **`HANDOFF_4_CURSOR_OPERATING_INSTRUCTIONS.md` is not in the repo** at HEAD `60dea45`. The prompt's instruction to cross-reference its Redis Key Reference table cannot be satisfied. Phase 1 P1.3 audits should treat the operator-side HANDOFF documents as a separate verification step.
+- **This inventory captures producers/consumers as of HEAD `60dea45`.** Re-snapshot is required when: a new Redis key is added or removed; a producer migrates between modules; the `set-feature-flag` Edge Function or its Railway counterpart is restructured; or a new feature flag is added to `backend/main.py`'s `_AGENT_FLAGS` / `_STRATEGY_FLAGS` / `_SIGNAL_FLAGS` lists.
+
+---
+
 *Phase 1 P1.1 — produced 2026-04-26 by Cursor AI under SPEC VERIFICATION PROTOCOL. Owner: tesfayekb.*
