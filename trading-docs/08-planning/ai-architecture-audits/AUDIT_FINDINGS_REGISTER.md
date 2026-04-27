@@ -19,7 +19,77 @@
 
 > **Update mandate:** Each subsequent per-item audit (P1.3.2 → P1.3.13) MUST update this register as part of its workflow. The audit redline file is the per-spec evidence; this register is the cross-spec roll-up. PRs that produce a per-item redline without updating this register will be returned for completion before merge.
 
-> **ID convention:** Open findings use `<class>-<spec-id>-<n>` (e.g., `C-AI-001-1` = Class C, AI-SPEC-001, item 1; `B-AI-002-3` = Class B, AI-SPEC-002, item 3). Class A items roll up by spec rather than per-item to avoid noise (Class A is mechanical and batch-cleared at Gate 1).
+> **ID convention:** Open findings use `<class>-<spec-id>-<n>` (e.g., `C-AI-001-1` = Class C, AI-SPEC-001, item 1; `B-AI-002-3` = Class B, AI-SPEC-002, item 3). Class A items roll up by spec rather than per-item to avoid noise (Class A is mechanical and batch-cleared at Gate 1). Pre-audit findings (Phase 0 / Phase 1 infrastructure work) use the `PRE-P{phase}-N` prefix and live in §0 below.
+
+---
+
+## 0. Pre-Audit Findings (Phase 0 / Phase 1 Infrastructure)
+
+These findings emerged during Phase 0 governance setup and Phase 1 audit infrastructure work (P1.1 evidence pack, P1.2 cross-cutting matrix, P1.3.0 audit template, P1.3.0b raw spec archive). They are NOT per-item audit findings — they predate the per-item audits — but they are real findings that affect the audit and integration work and must be tracked alongside per-item findings so that the register's stated purpose ("single source of truth for ALL findings") holds.
+
+Findings are categorized by source phase. Each finding has an ID prefix indicating origin:
+
+- **PRE-P0-N** — Phase 0 governance setup
+- **PRE-P11-N** — P1.1 evidence pack
+- **PRE-P12-N** — P1.2 cross-cutting matrix
+- **PRE-P130-N** — P1.3.0 audit template
+- **PRE-P130B-N** — P1.3.0b raw spec archive
+
+### 0.1 Phase 0 Findings (PRs #54, #55)
+
+| ID | Source PR / File | Finding | Status | Resolution Path |
+|----|------------------|---------|--------|------------------|
+| PRE-P0-1 | PR #54 / `feature-proposals.md` lines 26, 84 | `master-plan.md` literal references should be `MASTER_PLAN.md` (case mismatch on case-sensitive filesystems). Verified at HEAD: line 26 contains "MUST be added to `master-plan.md` before implementation begins"; line 84 contains "Reference to PLAN-XXX-NNN in master-plan.md". | open — deferred | Phase 4 (when `feature-proposals.md` is opened to add FP-001 entry); operator approved deferral 2026-04-26 |
+| PRE-P0-2 | PR #55 / `.cursorrules` + `.lovable/rules.md` | Pre-existing structural divergence: `## PHASE GATE VERIFICATION PROTOCOL (MANDATORY)` is at `.cursorrules` line 264 vs `.lovable/rules.md` line 136. Pre-existing, NOT introduced by P0.2. (Cross-listed in evidence pack §9.5.) | open — pre-existing debt | Separate parity audit task (out of scope for current Phase 1 plan) |
+| PRE-P0-3 | PR #55 / `.cursorrules` + `.lovable/rules.md` | Section naming drift: `.cursorrules` line 123 says "REFERENCE INDEX MAINTENANCE"; `.lovable/rules.md` line 123 says "REFERENCE INDEX MAINTENANCE AND RECONCILIATION". (Cross-listed in evidence pack §9.5.) | open — pre-existing debt | Same parity audit task as PRE-P0-2 |
+| PRE-P0-4 | PR #55 + PR #58 / `.cursorrules` line 36 | `.cursorrules` line 36 references "11 rules" but `constitution.md` defines exactly 10 T-Rules (T-Rule 1 Foundation Isolation through T-Rule 10 Silent Failures Are Forbidden). Verified at HEAD by `grep -nE '^### T-Rule [0-9]+' trading-docs/00-governance/constitution.md`. | open — pre-existing debt | Phase 5 cleanup |
+
+### 0.2 P1.1 Evidence Pack Findings (PR #56)
+
+| ID | Source Section | Finding | Status | Resolution Path |
+|----|----------------|---------|--------|------------------|
+| PRE-P11-1 | Evidence pack §9.1 | `trading-docs/00-governance/change-control-policy.md` missing — referenced by `.cursorrules`, `.lovable/rules.md`, and `feature-proposals.md` but file does not exist at HEAD. | open — pre-existing governance debt | Separate cleanup task per consolidated plan §1; will affect subsequent audit §11 governance update entries |
+| PRE-P11-2 | Evidence pack §9.2 | Reference indexes missing in `trading-docs/07-reference/`: `function-index.md`, `event-index.md`, `config-index.md`, `env-var-index.md` (all four absent at HEAD per evidence pack §9.2 lines 507–512). | open — pre-existing governance debt | Separate cleanup task per consolidated plan §1; SPEC VERIFICATION PROTOCOL operates without these indexes |
+| PRE-P11-3 | Evidence pack §9.4 | `_RISK_PCT` ladder non-monotonic at HEAD: Phase 1 (0.010) > Phase 2 (0.0075). Re-introduced by 2026-04-20 width widening (different mechanism than B1-1 originally addressed). Already cross-referenced as cross-spec theme in §5 of this register. | open — pre-existing governance debt | Separate task before Day 40 of paper trading; explicitly not fixed by AI-SPEC-012 (Item 12 sizing) |
+| PRE-P11-4 | Evidence pack §9.6 (newly discovered) | `counterfactual_pnl` is 3 columns on `trading_prediction_outputs`, NOT a separate table. The migration filename `20260421_add_counterfactual_pnl.sql` is correct, but the artifact is `ALTER TABLE ... ADD COLUMN`. P1.2 / P1.3 audits must treat as columns, not as a table. | open — newly discovered during P1.1 | Phase 2 corrections to AI-SPEC-010, AI-SPEC-012; flagged in matrix carry-forward #5 |
+| PRE-P11-5 | Evidence pack §10.3.3 line 687 | `gex:atm_iv` consumer-only orphan: sole consumer at `backend_agents/macro_agent.py:214`, no producer in any production code. Already cross-referenced as matrix carry-forward #2 and tracked in §5 of this register. | open — pre-existing operational risk | Resolution path: per-spec audits for AI-SPEC-001, AI-SPEC-005 will document; eventual fix wires producer in `gex_engine.py` after recompute |
+| PRE-P11-6 | Evidence pack §10.3.3 line 688 | `gex:updated_at` consumer-only orphan: referenced as `age_key` in `_safe_redis()` docstring example at `prediction_engine.py:123` (inside docstring, not an actual call site). Already cross-referenced as matrix carry-forward #1. **Mechanism note:** evidence pack §10.3.3 originally framed this as "fail-open fallthrough"; matrix v1.1 corrected the mechanism to "the gate function is dead code". The conclusion (no effective freshness gate) is unchanged. | open — pre-existing operational risk | Resolution path: AI-SPEC-005 / AI-SPEC-013 audits will document; eventual fix wires both `_safe_redis()` caller AND producer |
+| PRE-P11-7 | Evidence pack §10.3.1 (lines 670–675) | `strategy:bull_debit_spread:enabled` and `strategy:bear_debit_spread:enabled` named in `MASTER_PLAN.md` lines 59–60 but NOT present anywhere in code despite Phase 2B (Bull/Bear Debit Spreads) being declared COMPLETE in `MASTER_PLAN.md`. Phase 2B Rule 5 ("New strategies are gated by Redis flags") appears violated. | open — governance debt with naming inconsistency | Resolution path: cross-spec theme already in §5 (strategy-class taxonomy); affects AI-SPEC-007 / AI-SPEC-011 / AI-SPEC-012 audits |
+
+### 0.3 P1.2 Cross-Cutting Matrix Findings (PR #57)
+
+| ID | Source Section | Finding | Status | Resolution Path |
+|----|----------------|---------|--------|------------------|
+| PRE-P12-1 | Matrix §1 carry-forward #4 (corrected v1.1) | `_safe_redis()` is defined at `prediction_engine.py:100` but never called from outside its own docstring (line 120 inside docstring lines 107–131). Function is dead code at HEAD. GEX freshness gate is non-functional because the gate function is dead code, NOT because `gex:updated_at` lacks a producer. Already tracked in §5 of this register as cross-spec theme. | open — pre-existing operational risk | Resolution path: AI-SPEC-005 / AI-SPEC-013 audits will plan freshness substrate buildout (caller + producer both needed) |
+| PRE-P12-2 | Matrix §4 `risk_engine.py` block | 3-spec collision: AI-SPEC-001 + AI-SPEC-012 + AI-SPEC-013 all modify `backend/risk_engine.py`. Module-level merge order proposed: **1 → 13 → 12**. | open — sequencing constraint | Resolution path: hard sequencing rule for P1.3 / Phase 2; the `_RISK_PCT` ladder fix (PRE-P11-3) must land BEFORE Item 12 begins |
+| PRE-P12-3 | Matrix §7 dependency graph | Soft sequencing question between AI-SPEC-012 and AI-SPEC-013: Item 12 depends on Item 13 demotion paths; Item 13 promotion may need Item 12 capital framework. | open — soft sequencing | Resolution path: P1.3 Item 12 + Item 13 audits reviewed together; ship Item 13 advisory-only first, Item 12 next, then promote Item 13 |
+| PRE-P12-4 | Matrix §1 metadata + §3 corrections | `AI_ARCH_EVIDENCE_PACK.md` §10.2 line 617 + §10.3.3 line 688 carry the same `_safe_redis` mischaracterization that v1.1 corrected in the matrix. Cursor flagged but did not fix (immutable input from P1.1). | open — minor doc inconsistency | Resolution path: future cleanup task; conclusion in evidence pack §10.3.3 is correct, only mechanism description is wrong; defer to separate amendment task |
+
+### 0.4 P1.3.0 Audit Template Findings (PR #58)
+
+| ID | Source | Finding | Status | Resolution Path |
+|----|--------|---------|--------|------------------|
+| PRE-P130-1 | Cursor risks/follow-up (PR #58) | Constitution rule-count mismatch (`.cursorrules` line 36 says "11 rules" vs `constitution.md`'s 10 T-Rules) — same as PRE-P0-4. Surfaced again during P1.3.0 cross-check. | open — duplicate of PRE-P0-4 | See PRE-P0-4 resolution path |
+
+### 0.5 P1.3.0b Raw Spec Archive Findings (PR #59)
+
+| ID | Source | Finding | Status | Resolution Path |
+|----|--------|---------|--------|------------------|
+| PRE-P130B-1 | Cursor risks/follow-up (PR #59) | `trading-docs/04-modules/` already existed at branch base with pre-existing `README.md` and `exit-engine.md`. Phase 4 placement of validated module documentation as siblings of new `archive/` directory still works. | informational only — no action | Phase 4 module placement |
+| PRE-P130B-2 | Cursor risks/follow-up (PR #59) | Tarball delivered as `.tar` (uncompressed) instead of `.tar.gz` per prompt's anticipated format. `tar -xf` worked transparently; checksums verified clean. | informational only — no action | Future-prompt accuracy improvement if delivery format changes |
+
+### 0.6 Cross-Reference With Sections 1–6
+
+Several Phase 0 / Phase 1 findings ALSO appear elsewhere in the register. The cross-references below are intentional — findings can appear in §0 (origin record) AND §5 (cross-spec theme view) AND §1–§3 (per-audit Class C/B/A entries) — each section serves a different purpose. The register should be read top-to-bottom for discovery, but operator decisions reference whichever section is most actionable.
+
+| Pre-audit ID | Also tracked in | Per-audit ID (where applicable) | Purpose of the cross-reference |
+|--------------|-----------------|--------------------------------|-------------------------------|
+| PRE-P11-3 (`_RISK_PCT` non-monotonic) | §5 cross-spec themes; §2 Class B | B-AI-001-7 (AI-SPEC-001 §10.2 B7) | §0 records origin in evidence pack §9.4; §5 tracks the multi-spec impact; §2 records Item 1's specific buildout constraint ("must not worsen") |
+| PRE-P11-4 (`counterfactual_pnl` columns vs table) | will appear in §2 Class B when AI-SPEC-010 / AI-SPEC-012 audits complete | (TBD by P1.3.10 / P1.3.12) | §0 records origin in evidence pack §9.6; future per-item audits will surface the correction in §2 |
+| PRE-P11-5 (`gex:atm_iv` orphan) | §5 cross-spec themes (theme: `_safe_redis()` dead code family); AI-SPEC-001 §8 yes-impact | (referenced by B-AI-001-6 indirectly) | §0 records the consumer-only finding in evidence pack §10.3.3; §5 tracks it as part of the freshness substrate theme |
+| PRE-P11-6 (`gex:updated_at` orphan) | §5 cross-spec themes (theme: `_safe_redis()` dead code family); §2 Class B | B-AI-001-6 (AI-SPEC-001 §10.2 B6) | §0 records the consumer-only finding; §2 records Item 1's V0.1-prerequisite buildout (caller + producer) |
+| PRE-P11-7 (debit-spread feature flags) | §5 cross-spec themes (strategy-class taxonomy); §3 Class A | A2 within AI-SPEC-001 row of §3 | §0 records origin in MASTER_PLAN lines 59–60 vs `risk_engine.py:105–106`; §3 records the per-spec mechanical correction; §5 tracks the system-wide cleanup |
+| PRE-P12-1 (`_safe_redis()` dead code) | §5 cross-spec themes; §2 Class B | B-AI-001-6 (AI-SPEC-001 §10.2 B6) | §0 records origin in matrix §1 carry-forward #4 (v1.1 corrected); §5 tracks it as a multi-spec theme; §2 records Item 1's specific impact |
 
 ---
 
@@ -117,3 +187,4 @@ Aggregated checklist of what governance documents must change. Each per-item aud
 | Date | Audit | Action |
 |------|-------|--------|
 | 2026-04-26 | P1.3.1b | Initial creation. Populated from AI-SPEC-001 audit (PR #60, merged at `f456922`). 3 open Class C escalations (C-AI-001-1, C-AI-001-2, C-AI-001-3); 8 open Class B corrections (B-AI-001-1 through B-AI-001-8); 2 Class A items (logged for Gate 1 batch-clear); 5 cross-spec themes identified; 5 governance update line items aggregated. |
+| 2026-04-26 | P1.3.1b backfill | Added Section 0 (Pre-Audit Findings) covering Phase 0 PRs #54/#55, P1.1 PR #56, P1.2 PR #57, P1.3.0 PR #58, P1.3.0b PR #59. 13 pre-audit findings catalogued (4 Phase 0, 7 P1.1, 4 P1.2, 1 P1.3.0 [duplicate of PRE-P0-4], 2 P1.3.0b informational). §0.6 cross-reference table added linking pre-audit IDs to §5 cross-spec themes and §1–§3 per-audit entries where applicable. Sections 1–6 unchanged. |
