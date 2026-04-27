@@ -333,6 +333,32 @@ def _get_gex_asymmetry(redis_client, spx_price: float) -> dict:
     return result
 
 
+def _chain_leg_mid(chain, strike, opt_type):
+    """Return the mid-price of the option at (strike, opt_type) from the chain.
+
+    Returns None if:
+    - The option isn't found in the chain
+    - Either bid or ask is <= 0
+
+    None-fallback is correct behavior: callers MUST handle None and either
+    set target_credit=None (triggers PLACEHOLDER cascade in strategy_selector)
+    or otherwise gracefully degrade. Returning a synthetic mid would corrupt
+    downstream P&L computation.
+    """
+    opt = next(
+        (o for o in chain if float(o.get("strike", 0)) == strike
+         and o.get("option_type", "").lower() == opt_type),
+        None,
+    )
+    if opt is None:
+        return None
+    bid = float(opt.get("bid") or 0)
+    ask = float(opt.get("ask") or 0)
+    if bid <= 0 or ask <= 0:
+        return None
+    return round((bid + ask) / 2, 2)
+
+
 def get_strikes(
     strategy_type: str,
     redis_client,
@@ -388,30 +414,73 @@ def get_strikes(
             short = _find_strike_by_delta(chain, target_delta, "put", False)
             if short:
                 result["short_strike"] = short
-                result["long_strike"] = short - dynamic_width
-                # Get mid-price for target_credit
-                opt = next(
-                    (o for o in chain if float(o.get("strike", 0)) == short
-                     and o.get("option_type", "").lower() == "put"), None
-                )
-                if opt:
-                    bid = float(opt.get("bid") or 0)
-                    ask = float(opt.get("ask") or 0)
-                    result["target_credit"] = round((bid + ask) / 2, 2)
+                long_strike = short - dynamic_width
+                result["long_strike"] = long_strike
+                # Compute target_credit as net spread (short_mid - long_mid).
+                # Both legs are queried via _chain_leg_mid; if either returns
+                # None (option missing or bid/ask <= 0), target_credit stays
+                # None and strategy_selector falls through to PLACEHOLDER.
+                short_mid = _chain_leg_mid(chain, short, "put")
+                long_mid = _chain_leg_mid(chain, long_strike, "put")
+                if short_mid is not None and long_mid is not None:
+                    result["target_credit"] = round(short_mid - long_mid, 2)
+                    logger.info(
+                        "pcs_target_credit_computed",
+                        short_strike=short,
+                        long_strike=long_strike,
+                        short_mid=short_mid,
+                        long_mid=long_mid,
+                        target_credit=result["target_credit"],
+                    )
+                else:
+                    if short_mid is None and long_mid is None:
+                        reason = "missing_both_legs"
+                    elif short_mid is None:
+                        reason = "missing_short_leg"
+                    else:
+                        reason = "missing_long_leg"
+                    logger.info(
+                        "pcs_target_credit_skipped",
+                        reason=reason,
+                        short_strike=short,
+                        long_strike=long_strike,
+                        short_mid=short_mid,
+                        long_mid=long_mid,
+                    )
 
         elif strategy_type == "call_credit_spread":
             short = _find_strike_by_delta(chain, target_delta, "call", True)
             if short:
                 result["short_strike"] = short
-                result["long_strike"] = short + dynamic_width
-                opt = next(
-                    (o for o in chain if float(o.get("strike", 0)) == short
-                     and o.get("option_type", "").lower() == "call"), None
-                )
-                if opt:
-                    bid = float(opt.get("bid") or 0)
-                    ask = float(opt.get("ask") or 0)
-                    result["target_credit"] = round((bid + ask) / 2, 2)
+                long_strike = short + dynamic_width
+                result["long_strike"] = long_strike
+                short_mid = _chain_leg_mid(chain, short, "call")
+                long_mid = _chain_leg_mid(chain, long_strike, "call")
+                if short_mid is not None and long_mid is not None:
+                    result["target_credit"] = round(short_mid - long_mid, 2)
+                    logger.info(
+                        "ccs_target_credit_computed",
+                        short_strike=short,
+                        long_strike=long_strike,
+                        short_mid=short_mid,
+                        long_mid=long_mid,
+                        target_credit=result["target_credit"],
+                    )
+                else:
+                    if short_mid is None and long_mid is None:
+                        reason = "missing_both_legs"
+                    elif short_mid is None:
+                        reason = "missing_short_leg"
+                    else:
+                        reason = "missing_long_leg"
+                    logger.info(
+                        "ccs_target_credit_skipped",
+                        reason=reason,
+                        short_strike=short,
+                        long_strike=long_strike,
+                        short_mid=short_mid,
+                        long_mid=long_mid,
+                    )
 
         elif strategy_type in ("iron_condor", "iron_butterfly"):
             put_short = _find_strike_by_delta(chain, target_delta, "put", False)
@@ -433,32 +502,17 @@ def get_strikes(
                     "call_spread_width": call_width,
                 })
                 # Extract target_credit from chain mid-prices for all 4 legs.
-                # Same primitives as PCS/CCS at lines 393-400 / 407-414
-                # (chain lookup → bid/ask → round mid), factored into a
-                # tiny inline helper since IC/IB has 4 legs not 1.
-                #
-                # If ANY leg is missing OR any bid/ask is zero, target_credit
-                # stays None and strategy_selector falls through to the
-                # PLACEHOLDER cascade — same graceful-degradation path as
-                # PCS/CCS use today on chain failures.
-                def _leg_mid(strike, opt_type):
-                    opt = next(
-                        (o for o in chain if float(o.get("strike", 0)) == strike
-                         and o.get("option_type", "").lower() == opt_type),
-                        None,
-                    )
-                    if opt is None:
-                        return None
-                    bid = float(opt.get("bid") or 0)
-                    ask = float(opt.get("ask") or 0)
-                    if bid <= 0 or ask <= 0:
-                        return None
-                    return round((bid + ask) / 2, 2)
-
-                put_short_mid = _leg_mid(put_short, "put")
-                put_long_mid = _leg_mid(put_short - put_width, "put")
-                call_short_mid = _leg_mid(call_short, "call")
-                call_long_mid = _leg_mid(call_short + call_width, "call")
+                # All four credit-spread strategies (PCS, CCS, IC, IB) compute
+                # target_credit via the module-level _chain_leg_mid() helper.
+                # IC/IB nets 4 legs: (put_short_mid - put_long_mid) +
+                # (call_short_mid - call_long_mid). PCS/CCS net 2 legs:
+                # short_mid - long_mid. If ANY leg is missing OR any bid/ask
+                # is zero, target_credit stays None and strategy_selector
+                # falls through to the PLACEHOLDER cascade.
+                put_short_mid = _chain_leg_mid(chain, put_short, "put")
+                put_long_mid = _chain_leg_mid(chain, put_short - put_width, "put")
+                call_short_mid = _chain_leg_mid(chain, call_short, "call")
+                call_long_mid = _chain_leg_mid(chain, call_short + call_width, "call")
                 if all(
                     m is not None
                     for m in (put_short_mid, put_long_mid, call_short_mid, call_long_mid)

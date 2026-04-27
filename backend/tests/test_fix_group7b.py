@@ -216,3 +216,145 @@ def test_iron_butterfly_target_credit_extracted_from_chain():
     assert result["short_strike_2"] == 7100.0
     assert result["long_strike_2"] == 7100.0 + 15.0
     assert result["target_credit"] == 20.00
+
+
+# Commit 3 (PCS/CCS target_credit net-spread fix) — chain-extraction tests.
+#
+# These tests verify that PCS/CCS target_credit is computed as the NET spread
+# (short_mid - long_mid) via the module-level _chain_leg_mid helper, not the
+# pre-Commit-3 single-leg-mid bug (which used only the short leg's mid). The
+# IC/IB tests above (lines 111 and 183) serve as the regression-equivalence
+# proof for the helper refactor — they pin target_credit == 6.30 / 20.00 and
+# MUST pass without modification post-refactor.
+#
+# Pre-fix bug shape (eliminated by Commit 3):
+#   target_credit = round((short_bid + short_ask) / 2, 2)  # single leg
+# Post-fix correct shape:
+#   target_credit = round(short_mid - long_mid, 2)  # net spread
+
+
+def test_put_credit_spread_target_credit_extracted_from_chain():
+    """PCS target_credit = short_mid - long_mid from Tradier chain mid-prices.
+
+    Pre-Commit-3 bug returned short_mid only (4.50). Post-fix returns the
+    net spread (3.30) which is the actual credit collected per contract.
+    """
+    from unittest.mock import MagicMock, patch
+    from strike_selector import get_strikes
+
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None  # default VIX=18 -> width 15
+
+    # SPX ~7100 with 15-pt width.
+    # short_put=7080 (mid 4.50), long_put=7065 (mid 1.20)
+    # Expected target_credit = 4.50 - 1.20 = 3.30
+    chain = [
+        {"strike": 7080, "option_type": "put", "bid": 4.40, "ask": 4.60, "greeks": {"delta": -0.16}},
+        {"strike": 7065, "option_type": "put", "bid": 1.10, "ask": 1.30, "greeks": {"delta": -0.10}},
+    ]
+
+    with patch(
+        "strike_selector._get_option_chain_tradier", return_value=chain
+    ), patch(
+        "strike_selector._find_strike_by_delta",
+        side_effect=lambda c, d, t, abv: 7080.0,
+    ):
+        result = get_strikes("put_credit_spread", mock_redis)
+
+    assert result["short_strike"] == 7080.0
+    assert result["long_strike"] == 7080.0 - 15.0
+    assert result["target_credit"] == 3.30
+
+
+def test_call_credit_spread_target_credit_extracted_from_chain():
+    """CCS target_credit = short_mid - long_mid from Tradier chain mid-prices.
+
+    Symmetric to PCS test above; long_strike = short + width (calls go up).
+    """
+    from unittest.mock import MagicMock, patch
+    from strike_selector import get_strikes
+
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None
+
+    # SPX ~7100 with 15-pt width.
+    # short_call=7120 (mid 4.00), long_call=7135 (mid 1.00)
+    # Expected target_credit = 4.00 - 1.00 = 3.00
+    chain = [
+        {"strike": 7120, "option_type": "call", "bid": 3.90, "ask": 4.10, "greeks": {"delta": 0.16}},
+        {"strike": 7135, "option_type": "call", "bid": 0.90, "ask": 1.10, "greeks": {"delta": 0.10}},
+    ]
+
+    with patch(
+        "strike_selector._get_option_chain_tradier", return_value=chain
+    ), patch(
+        "strike_selector._find_strike_by_delta",
+        side_effect=lambda c, d, t, abv: 7120.0,
+    ):
+        result = get_strikes("call_credit_spread", mock_redis)
+
+    assert result["short_strike"] == 7120.0
+    assert result["long_strike"] == 7120.0 + 15.0
+    assert result["target_credit"] == 3.00
+
+
+def test_put_credit_spread_target_credit_none_when_chain_incomplete():
+    """Missing long-put leg (or any bid/ask=0) -> target_credit None;
+    strikes still populated. Mirrors the IC None-fallback test pattern.
+
+    Upstream PLACEHOLDER fallback engages as today — that's the existing
+    graceful-degradation path."""
+    from unittest.mock import MagicMock, patch
+    from strike_selector import get_strikes
+
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None
+
+    # Chain MISSING the long_put leg (7065). Short leg has valid bid/ask.
+    chain = [
+        {"strike": 7080, "option_type": "put", "bid": 4.40, "ask": 4.60, "greeks": {"delta": -0.16}},
+        # 7065 long_put deliberately missing
+    ]
+
+    with patch(
+        "strike_selector._get_option_chain_tradier", return_value=chain
+    ), patch(
+        "strike_selector._find_strike_by_delta",
+        side_effect=lambda c, d, t, abv: 7080.0,
+    ):
+        result = get_strikes("put_credit_spread", mock_redis)
+
+    # Strikes still populated — geometry succeeded.
+    assert result["short_strike"] == 7080.0
+    assert result["long_strike"] == 7080.0 - 15.0
+    # Credit lookup failed cleanly — no partial value, no placeholder
+    # injection here. Strategy_selector handles the fallback.
+    assert result.get("target_credit") is None
+
+
+def test_call_credit_spread_target_credit_none_when_chain_incomplete():
+    """Missing long-call leg -> target_credit None; strikes still populated.
+    Symmetric to PCS None-fallback test above."""
+    from unittest.mock import MagicMock, patch
+    from strike_selector import get_strikes
+
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None
+
+    # Chain MISSING the long_call leg (7135). Short leg has valid bid/ask.
+    chain = [
+        {"strike": 7120, "option_type": "call", "bid": 3.90, "ask": 4.10, "greeks": {"delta": 0.16}},
+        # 7135 long_call deliberately missing
+    ]
+
+    with patch(
+        "strike_selector._get_option_chain_tradier", return_value=chain
+    ), patch(
+        "strike_selector._find_strike_by_delta",
+        side_effect=lambda c, d, t, abv: 7120.0,
+    ):
+        result = get_strikes("call_credit_spread", mock_redis)
+
+    assert result["short_strike"] == 7120.0
+    assert result["long_strike"] == 7120.0 + 15.0
+    assert result.get("target_credit") is None
