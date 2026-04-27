@@ -10,7 +10,8 @@ Architecture:
 - Dispatches records by isinstance: SymbolMappingMsg feeds the map,
   TradeMsg is processed as a real trade, and all other record types
   (SystemMsg / ErrorMsg / etc.) are ignored cleanly.
-- Writes parsed trades to Redis list ``databento:opra:trades`` with 300s TTL.
+- Writes parsed trades to Redis list ``databento:opra:trades``, bounded
+  to the 10000 most-recent trades via LTRIM.
 - Health is reported 'healthy' only when a symbol-resolved, non-zero-price
   trade has been observed within the last 30s — the old bug made 'healthy'
   mean 'the process is alive', which masked a parser that produced nothing
@@ -347,7 +348,11 @@ class DatabentoFeed:
             self.redis_client.rpush(
                 "databento:opra:trades", json.dumps(trade)
             )
-            self.redis_client.expire("databento:opra:trades", 300)
+            # Bound list to the most recent 10000 trades (replaces broken
+            # EXPIRE pattern that reset TTL on every push and caused
+            # unbounded growth; observed 180K elements 2026-04-24 mid-RTH).
+            # 10000 ≈ 15-20 min of RTH activity at observed ~30K/hour rate.
+            self.redis_client.ltrim("databento:opra:trades", -10000, -1)
             self.last_valid_trade_at = time.time()
         except Exception as exc:
             logger.error(
