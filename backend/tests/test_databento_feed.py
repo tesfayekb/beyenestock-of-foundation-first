@@ -114,3 +114,67 @@ def test_unparseable_occ_symbol_drops_without_raising(feed):
 
     feed.redis_client.rpush.assert_not_called()
     assert feed.last_valid_trade_at is None
+
+
+def _stateful_redis_list_mock():
+    """
+    Minimal stateful mock of redis LIST semantics (rpush / ltrim / llen /
+    lrange) for the indices this test exercises. Negative-index handling
+    matches real Redis: bounds are inclusive and -1 means the last element.
+
+    Scoped to this single test — other tests in this file continue to use
+    the existing module-level MagicMock fixture.
+    """
+    storage = []
+    mock = MagicMock()
+
+    def _rpush(_key, value):
+        storage.append(value)
+        return len(storage)
+
+    def _normalize(idx, n):
+        return n + idx if idx < 0 else idx
+
+    def _ltrim(_key, start, stop):
+        n = len(storage)
+        s = max(0, _normalize(start, n))
+        e = min(n - 1, _normalize(stop, n))
+        storage[:] = storage[s:e + 1] if s <= e else []
+
+    def _llen(_key):
+        return len(storage)
+
+    def _lrange(_key, start, stop):
+        n = len(storage)
+        s = max(0, _normalize(start, n))
+        e = min(n - 1, _normalize(stop, n))
+        return list(storage[s:e + 1]) if s <= e else []
+
+    mock.rpush.side_effect = _rpush
+    mock.ltrim.side_effect = _ltrim
+    mock.llen.side_effect = _llen
+    mock.lrange.side_effect = _lrange
+    return mock
+
+
+def test_push_trade_bounds_list_to_10000(feed):
+    """
+    LTRIM bounds the trades list to 10000 elements; the most-recent push
+    is preserved (LTRIM trims from the LEFT). EXPIRE must not be called —
+    regression guard against re-introducing the broken per-push TTL reset
+    that previously let the list grow unbounded.
+    """
+    stateful = _stateful_redis_list_mock()
+    feed.redis_client = stateful
+
+    for i in range(12000):
+        feed._push_trade({"marker": f"trade-{i}", "price": 1.0})
+
+    assert stateful.llen("databento:opra:trades") == 10000
+
+    last = stateful.lrange("databento:opra:trades", -1, -1)
+    assert len(last) == 1
+    assert json.loads(last[0])["marker"] == "trade-11999"
+
+    # Regression guard: the broken EXPIRE pattern must not coexist with LTRIM.
+    stateful.expire.assert_not_called()
