@@ -1,0 +1,496 @@
+# MarketMuse — Master ROI Plan v2.0.3
+**Owner:** tesfayekb
+**Drafted:** 2026-04-28 (ET)
+**Structural revision:** v1.6 (single document) → v2.0 (β-lite multi-plan governance) per Cursor v1.6 gap-scan structural recommendation. Patch v2.0.1 applied 4 must-fix items from Cursor v2.0 review (G-41 missing from §7; paused-flag enable order missing from §1.4; G-25 + G-29 missing from §7; §3 Gate E typo) plus 2 nice-to-haves.
+**Patch v2.0.2 applies 3 cross-doc consistency items from combined verification round across Master Plan v2.0.1 + Build Roadmap v1.5 + DP v1.5:** **CR-1** (§1.6 + §1.7 misciation: "Phase A LightGBM training → Phase 3E" was wrong; canonical home is Phase 5B Item 13 retraining substrate per Build Roadmap §3.11; Phase 3E is Item 5 Vol Fair-Value Engine which has zero LightGBM training; this was a silent-drop-equivalent that pointed future agents at the wrong phase) + **M-1** (3 sites — Cursor flagged 2 but verification surfaced 3 — AI-SPEC-014 / AI-SPEC-016 dual-naming acknowledged across §1.3 P1.3.9 row + §3 Cluster B + §3 Action 4b; canonical name selection deferred to D-024 ratification per AUDIT_DISPOSITION_PLAN.md §3) + **M-2** (§7 G-25 chain archive cascade scope qualified — was "primary cascade for AI-SPEC-001 V0.2 + 004 + 005 + 010"; Build Roadmap §0 dependency map and DP §1.3 both list only Items 4/5/10 V0.2 as direct cascade; AI-SPEC-001 V0.2 paper-binding depends on chain archive only INDIRECTLY via Item 4 replay harness producing the ≥200 cards). **Per operator standing rule (fix-now over defer-to-later) applied symmetrically to all 5 combined-round items: 3 here, 2 in companion DP v1.5 → v1.6.** Combined verification round caught the natural "settling cost" of Master Plan staying static while companions iterated through 5 review cycles each.
+**Patch v2.0.3 applies converged-state cleanup from second combined verification round (Cursor flagged 7 bounded residuals across the trio after O-2 cleanup advanced Build Roadmap v1.5 → v1.6 + DP v1.6 → v1.7 but didn't propagate companion-version references back to Master Plan). 3 sites in this document: status line (companion sub-plans Build Roadmap v1.5 + DP v1.6 → v1.7 + v1.8) + footer trio composition (Master Plan v2.0.2 + Build Roadmap v1.5 + DP v1.6 → v2.0.3 + v1.7 + v1.8). 4 logical fixes / 6 physical sites in companion Build Roadmap v1.6 → v1.7 (cross-doc version updates [2 sites] + forward-pointer roll-forward [1 site] + §6/§8/§8 H-1/H-2/H-3 carryover residuals from prior cycle [3 sites]). 4 logical fixes / 6 physical sites in companion DP v1.7 → v1.8 (cross-doc version updates [2 sites] + forward-pointer [1 site] + concurrent-note refresh [1 site] + cumulative-fix-count carryover with math correction [1 site] — inherited v1.6 typo "11 prior fixes" was mathematically wrong; should have been 16; v1.8 corrects to actually-correct count 21 prior fixes through v1.7).** Per operator standing rule (fix-now over defer-to-later) applied symmetrically including derived items per Cursor's "DO NOT INTRODUCE FURTHER REGRESSION" instruction. Trio settles at converged-state Master Plan v2.0.3 + Build Roadmap v1.7 + DP v1.8 with zero stale cross-doc version references.
+**Status:** **DRAFT v2.0.3** — awaiting final pre-commit Cursor spot-check on converged-state cleanup; on approval committed alongside companion sub-plans (Build Roadmap v1.7 + DP v1.8)
+
+---
+
+## ⚠️ §0 — WHAT LIVES WHERE (READ-ME-FIRST POINTER TABLE)
+
+**This document does not stand alone. Future agents reading cold MUST consult all 3 documents before forward action.**
+
+| Concern | Document | Source register |
+|---|---|---|
+| **Activation path, gates A-F, Pre-AI fix track Commits 1-10, paused-flag enable order, operational items, V0.1 Path Y activation** | **THIS document — `MASTER_ROI_PLAN.md`** | `trading-docs/08-planning/TASK_REGISTER.md` (line-item tasks) |
+| **13 AI-SPEC build commitments, Cluster A/B/C ladder, V0.1/V0.2 promotion gates, chain archive substrate, data improvements 15A-E** | **`AI_BUILD_ROADMAP.md`** | `trading-docs/04-modules/ai-architecture/archive/raw-locked-specs-2026-04-26/AI_ARCHITECTURE_IMPROVEMENT_REGISTRY.md` |
+| **22 Class C operator decisions, ~20 ROI-relevant Class B items, PRE-P findings, D-023/D-024 ratification, D-015/D-016/D-021 divergences** | **`AUDIT_DISPOSITION_PLAN.md`** | `trading-docs/08-planning/ai-architecture-audits/AUDIT_FINDINGS_REGISTER.md` |
+
+**Authority hierarchy:** This document governs **when** things happen (activation gates, sequencing). The other two govern **what** is committed to (build commitments, operator decisions). For any conflict, the source register wins.
+
+**If a forward-work item doesn't fit any of these three concerns, it goes in this document's §6 (Out of Scope with Explicit Handling).**
+
+---
+
+## ⚠️ READ-ME-FIRST FOR ANY AGENT
+
+This document encodes the agreed-upon plan from a multi-day session ending 2026-04-28 with 3-reviewer consensus (Claude, GPT, Cursor) plus structural gap-scan (Cursor) producing 104 surfaced gaps that v1.6 was missing.
+
+1. **The prime directive is ROI.** Every action below is justified by how it directly or indirectly increases net after-tax profitability.
+2. **The destination is Path Y — activate `agents:ai_synthesis:enabled`.** This document is the path to get there safely.
+3. **Sequencing is load-bearing.** Don't reorder. Each step has explicit "DO NOT PROCEED UNTIL" gates.
+4. **Do not lose findings.** Each of the 3 documents tracks its own findings. F-N IDs in this doc are local; G-N IDs from Cursor's gap scan are mapped per-document. Audit register uses PRE-PN-N / B-AI-XXX-N / C-AI-XXX-N convention.
+5. **Use the existing audit redline cadence** (P1.3.7 → P1.3.8 → contingent P1.3.9 → P1.3.10 → Cluster B closure → Cluster C audits per AI Build Roadmap).
+6. **Update at every milestone.** Tick checkboxes. Add verification notes. Increment plan version on material updates.
+
+**v2.0 structural change vs v1.0-v1.6:** Single-document approach repeatedly silently dropped ROI items because the synthesis step optimized for narrative coherence and 6-concern narratives don't cohere. v2.0 splits into 3 documents each governing one concern. **DO NOT regress to single-document approach without explicit operator decision** — the regression failure mode is the same silent drops that occurred 6 times during v1.0-v1.6.
+
+---
+
+## 1 — Where We Are Today (2026-04-28)
+
+### 1.1 Code state (verified)
+- origin/main HEAD: `fc6b0773823d57a1d3a22a9dab2e191c786f29d2` (Commit 3 PCS/CCS net-spread fix; PR #68; merged 2026-04-27 16:06:51 -0400) — verified via `git log origin/main -1` 2026-04-28
+- Railway deployed Commit 3 at 16:08 ET on 2026-04-27
+- Container healthy at last log review (~14:00 ET 2026-04-28); databento subscribed; tradier sandbox active
+
+### 1.2 Pre-AI fix track status
+| Commit | Description | Status | Verified SHA |
+|---|---|---|---|
+| 1 | IC/IB target_credit chain extraction | ✅ Shipped 2026-04-25 (PR #53) | `77af9aa8e841e0f2eaf12652bce968effe4a9c13` |
+| 2 | databento LTRIM / GEX fix | ✅ Shipped 2026-04-27 (PR #66) | `17cd3cfd6595ae37346af8e0f8c253b0e61f81c3` |
+| 3 | PCS/CCS target_credit net-spread fix | ✅ Shipped 2026-04-27 (PR #68) | `fc6b0773823d57a1d3a22a9dab2e191c786f29d2` |
+| 4 | Re-mark + calibration cleanup + NULL slippage handling | ⏳ Pending — anchor for AI-SPEC-010 Layer 2 cutover (C-AI-010-5) | — |
+| 5 | `_RISK_PCT` ladder monotonicity fix (PRE-P11-3 / Action 7b) | ⏳ Pending — Days 7-14 | — |
+| 6 | VVIX z-score deferred fix (S7) — paired with `vix_daily_history` backfill primitive | ⏳ Pending — pre-Action-9 | — |
+| 7 | Phase 0 commission model fix (per TASK_REGISTER §11 Phase 0) | ⏳ Pending — pre-Action-9 | — |
+| 8 | `signal_weak` threshold change (TASK_REGISTER §11 Phase 0) | ⏳ Conditional — only if Action 2 log evidence justifies; conviction-conditional sizing not threshold-only | — |
+| 9 | IV/RV no-trade filter (TASK_REGISTER §11 Phase 0; `prediction_engine.py:706`) | ⏳ Pending — pre-Action-9 | — |
+| 10 | (TBD per FINAL_DEPLOY_PLAN_v2.md — operator paste required to enumerate) | ⏳ Pending paste | — |
+
+**Note on Commits 5-10 enumeration:** Cursor gap scan SD-2 flagged that FINAL_DEPLOY_PLAN_v2.md is not in repo workspace; Commits 5-10 are reconstructed from TASK_REGISTER.md §11. Operator paste of FINAL_DEPLOY_PLAN_v2.md is required to verify exact content of Commit 10. Tracked as G-66 in §7 Findings Register.
+
+### 1.3 Audit track status — see `AI_BUILD_ROADMAP.md` for build commitments
+| Audit | Spec | Cluster | Status |
+|---|---|---|---|
+| P1.3.1 | AI-SPEC-001 AI Risk Governor | A | ✅ Merged (PR #60) |
+| P1.3.2 | AI-SPEC-002 Strategy-Aware Attribution | A | ✅ Merged (PR #62) |
+| P1.3.3 | AI-SPEC-004 Replay Harness | A | ✅ Merged (PR #63) |
+| P1.3.4 | AI-SPEC-010 Counterfactual P&L | A | ✅ Merged (PR #64) |
+| P1.3.5 | AI-SPEC-005 Vol Fair-Value | B | ✅ Merged (PR #65) |
+| P1.3.6 | AI-SPEC-006 Meta-Labeler | B | ✅ Merged (PR #67) |
+| P1.3.7 | AI-SPEC-008 OPRA Flow Alpha | B | 📋 Next — Action 3 |
+| P1.3.8 | AI-SPEC-009 Exit Optimizer | B | 📋 After P1.3.7 — Action 4 |
+| P1.3.9 | AI-SPEC-014 LightGBM Direction Model (renamed AI-SPEC-016 in AI Build Roadmap; operator selects canonical name at D-024 ratification per `AUDIT_DISPOSITION_PLAN.md` §3) | B | ⚠️ CONTINGENT on C-AI-006-4 → option 2 (default position per audit register). See `AUDIT_DISPOSITION_PLAN.md` |
+| P1.3.10 | AI-SPEC-013 Drift Detection | C-promoted | 📋 First audit post-V0.1 (per AI Build Roadmap) |
+| P1.3.11+ | Remaining Cluster C (AI-SPEC-003/007/011/012) | C | 📋 Per AI Build Roadmap sequencing |
+
+### 1.4 Feature flag inventory (corrected from v1.6's stated 5; actual 7-8 paused per backend/main.py:1829-1863)
+
+**7-8 paused feature flags (default OFF):**
+- `agents:ai_synthesis:enabled` — destination flag for Path Y; activation governed by §3 Gates A-F
+- `agents:flow_agent:enabled` — opa flow signals; gated until Action 7 + activation criteria
+- `agents:sentiment_agent:enabled` — sentiment signals (Sentiment Agent built per `what-is-actually-built.md`); gated
+- `strategy:iron_butterfly:enabled` — IB strategy gating
+- `strategy:long_straddle:enabled` — long straddle strategy gating
+- `strategy:calendar_spread:enabled` — calendar spread strategy gating
+- `strategy:ai_hint_override:enabled` — strategy selector consumes AI hint when ≥0.65 confidence
+- `strategy:earnings_straddle:enabled` — Earnings Straddle module built but default-OFF (separate `backend_earnings/` revenue stream); gated
+
+**6 reverse-polarity signal flags (default ON; can be silently OFF if explicit "false" written):**
+- `signal:vix_term_filter:enabled`
+- `signal:entry_time_gate:enabled`
+- `signal:gex_directional_bias:enabled`
+- `signal:market_breadth:enabled`
+- `signal:earnings_proximity:enabled`
+- `signal:iv_rank_filter:enabled`
+
+**Capital scaling levers (operator-tunable numerics, NOT booleans):**
+- `capital:deployment_pct` — current value: `1.0` per `backend/main.py:1697`
+- `capital:leverage_multiplier` — current value: `1.0` per `backend/main.py:1700`
+- These are the 4th ROI lever, orthogonal to AI activation — operator can adjust post-Sharpe-positive sessions without audit/code/AI activation
+
+**Paused-flag enable order (post-Action-9):**
+The 7-8 paused flags are NOT all enabled at Action 9. Per Gate E orthogonality clause, their activation order is operator-controlled and does NOT gate Action 9. **Per-flag enable criteria (minimum closed trades / Sharpe thresholds / abort conditions / dependency on `agents:ai_synthesis:enabled` first being stable) are documented in D-024 and ratified in Action 6.** Future agents: do NOT silently re-derive enable order from this document; consult D-024 in `trading-docs/00-governance/ai-synthesis-activation-criteria.md` once ratified.
+
+The intended enable sequence (subject to D-024 ratification) is approximately:
+1. `agents:ai_synthesis:enabled` (Action 9 — this plan's destination)
+2. `agents:flow_agent:enabled` + `agents:sentiment_agent:enabled` (parallel; both feed `synthesis_agent`)
+3. `strategy:ai_hint_override:enabled` (consumes `ai:synthesis:latest` strategy_hint)
+4. `strategy:iron_butterfly:enabled` + `strategy:long_straddle:enabled` + `strategy:calendar_spread:enabled` (per-strategy enable; gated on per-strategy V0.1 paper validation)
+5. `strategy:earnings_straddle:enabled` (separate revenue stream; independent gate per `backend_earnings/`)
+
+This is intent only — D-024 ratifies the binding sequence.
+
+### 1.5 Trading reality (paper)
+- **2 sessions logged** (5 closed trades total — all iron_butterfly or iron_condor)
+- 22.6% rolling directional accuracy (n=2 SESSIONS, not trades — statistically meaningless given sample size)
+- Total virtual P&L across the 2 sessions: -$1,616.31
+- Action 9 abort SLA baselines for "hourly Sharpe < -1.0" reference rolling sessions, not single-trade outcomes (D-024 will define exact rolling window)
+
+**Today's regime + skip-rate distribution: NOT YET VERIFIED.** Action 2 produces this evidence. Until then, claims about "X gate dominates" are unverified.
+
+### 1.6 Critical operational items affecting ROI today
+- Alert emails currently broken — affects operator situational awareness during V0.1 ramp (Action 11)
+- Phase A LightGBM training pipeline gated on 90 sessions — `model_retraining.py` dormant (per AI Build Roadmap Phase 5B Item 13 retraining substrate, §3.11 — corrected from v2.0.1 "Phase 3E" misciation per combined-round CR-1; Phase 3E is Item 5 Vol Fair-Value Engine which has no LightGBM training)
+- Dashboard observability sprint UI-1/2/3/4 partial completion — affects V0.2 promotion-gate visibility (Action 12)
+- Edge Function deploy needed for Learning Dashboard (Action 12)
+- system-state.md is stale (April 18 snapshot) — operator running newer state from TASK_REGISTER.md only (Action 13)
+
+### 1.7 TASK_REGISTER coverage statement
+**TASK_REGISTER.md §12 (BUILD-NOW QUEUE 12A-12N) is COMPLETE work** per HANDOFF_2 — all 14 items shipped between commits `c5a2b70` and `d11b8fd` between April 14-22 2026. Not pending; not subsumed; done.
+
+**TASK_REGISTER.md §13 (Post-Section-12 Diagnostic Fixes) is COMPLETE work** per HANDOFF_2 — Batches 1+2 shipped at commits `fc64840` and `41bb1ab`. UI Observability Sprint partially shipped (`709a3db` + `0149877` + `0fdc7d2`); UI gaps absorbed by Action 12.
+
+**TASK_REGISTER.md §11 (Profit Maximization Roadmap Phase 0/A/B/C/D/E)** subsumes into:
+- Phase 0 → Pre-AI Commits 7/8/9 (Action 10)
+- Phase A (LightGBM training) → AI Build Roadmap Phase 5B (Item 13 retraining substrate, §3.11 — corrected from v2.0.1 "Phase 3E" per combined-round CR-1)
+- Phases B/C/D/E → AI Build Roadmap per-Cluster sequencing
+
+**TASK_REGISTER.md §14A-F (AI architecture build phases)** subsumes into AI Build Roadmap §10 build commitments (G-1 through G-13).
+
+If a TASK_REGISTER section is NOT named above, it is governed by other companion plans (AI Build Roadmap or Audit Disposition Plan) per §0 pointer table. No silent drops.
+
+---
+
+## 2 — The Decision That Defines This Plan
+
+**Decision: Path Y, not Path X.**
+
+| Path | What it does | Long-term effect |
+|---|---|---|
+| **X** — lower `signal_weak < 0.05` to `0.03` | More rule-based trades on borderline conviction | One-time volume tweak; rules don't learn from added trades; Sharpe likely degrades; phase ladder stalls |
+| **Y** — flip `agents:ai_synthesis:enabled` ON | LLM (Claude/GPT) becomes directional judge | Every trade produces labeled training data; meta-labeler activates at 100 trades; direction model activates at 90 sessions; rule-based fallback gets smarter via meta-labeler calibration |
+
+**Compounding-learning precondition verified:** AI synthesis output → `trading_prediction_outputs` row → `model_retraining.label_prediction_outcomes()` at `backend/model_retraining.py:23-150` labels post-30-min SPX move. Labeling job is scheduled and active at HEAD `fc6b077`. Compounding is real, not assumed.
+
+**Timeline reality (corrected from v1.3):**
+- Meta-label model: trade-gated (`MIN_CLOSED_TRADES = 100`); Path Y CAN accelerate
+- Direction model: session-gated (`MIN_TRAINING_SESSIONS = 90`); Path Y CANNOT accelerate
+- At current 2.5 trades/session: meta-label ~9 months; direction model ~18 weeks
+- At Path Y 2× cadence: meta-label ~5 weeks; direction model ~18 weeks (UNCHANGED)
+- At Path Y 3× cadence: meta-label ~13 sessions; direction model ~18 weeks (UNCHANGED)
+- **Implication:** First trained meta-label model in 1-3 months post-activation conditional on cadence lift; first direction model in ~4 months regardless
+
+**Capital scaling is a 4th ROI lever — orthogonal to AI activation.** `capital:deployment_pct` and `capital:leverage_multiplier` are operator-tunable independent of any AI activation, audit, or code change. Tuning discipline documented in `AUDIT_DISPOSITION_PLAN.md` D-024 governance.
+
+Path Y is the only path that builds compounding value. Path X also has structural ROI risk (Sharpe degradation stalls phase advancement, capping ROI at Phase 1 sizing for 90+ days).
+
+---
+
+## 3 — Prerequisites for Path Y Activation (Hard Gates A-F)
+
+Activating `agents:ai_synthesis:enabled` requires ALL of:
+
+### Gate A — Bug-class prevention complete
+- ✅ DO NOT activate if `bull_debit_spread`/`bear_debit_spread` strings still emitted as invalid
+- 2 emitters (synthesis_agent.py:40-41 + surprise_detector.py:235-237) both write to `ai:synthesis:latest`
+- 2 test files encode the wrong strings
+- Strategy router silently drops invalid hints — no log warning today
+- **Resolution:** Action 1 (Day 0)
+
+### Gate B — Empirical baseline established
+- ✅ DO NOT activate without knowing post-Commit-3 no-trade-reason distribution
+- 13 distinct skip paths exist (12 enumerated + 1 implicit min-contracts floor)
+- Without baseline, AI-vs-rules attribution becomes impossible after activation
+- **Resolution:** Action 2 (Day 0)
+
+### Gate C — Cluster B audit cadence complete
+- ✅ DO NOT activate before Cluster B closes
+- Cluster B = AI-SPEC-005 (done) + AI-SPEC-006 (done) + AI-SPEC-008 (next) + AI-SPEC-009 + possibly AI-SPEC-014 / AI-SPEC-016 (same spec — register uses 014, Build Roadmap uses 016 per Cursor v1.0 H-1 collision avoidance with deferred Item 14 Tournament Engine; canonical name selected at D-024 ratification per `AUDIT_DISPOSITION_PLAN.md` §3; contingent on C-AI-006-4 resolution)
+- **Resolution:** Actions 3, 4, conditional 4b (Days 1-5)
+
+### Gate D — Activation criteria + governance ratified
+- ✅ DO NOT activate without measurable success/abort thresholds
+- Two distinct decisions, NOT conflated:
+  - **D-023** = 13-spec AI authority boundary (Risk Governor scope, Meta-Labeler authority, Counterfactual cutover, etc. — folds 22 Class C escalations enumerated in `AUDIT_DISPOSITION_PLAN.md`)
+  - **D-024** = Phase 2A `synthesis_agent.py` activation criteria + succession plan (Phase 2A is NOT modeled in any of the 13 locked specs)
+- **Resolution:** Actions 5a, 5b, 6 (Days 5-7)
+
+### Gate E — Commit 4 of pre-AI fix track shipped + ≥5 trading days elapsed
+- ✅ DO NOT activate within 5 trading days of Commit 4 deploy
+- Reason: clean Sharpe attribution
+- **Sequencing math (3-way max):** Action 9 effective date = max(Day 14, Action 7 ship + 5 trading days, Action 8 ship + 5 trading days IF Action 8 ships)
+- **7-8 paused flags orthogonality:** The 7-8 strategy/agent flags listed in §1.4 are orthogonal to Path Y. Their activation order is operator-controlled post-Commit-4 and does NOT gate Action 9.
+- **Resolution:** Commit 4 (Action 7) runs in parallel with audit track
+
+### Gate F — `_RISK_PCT` ladder monotonicity fix landed BEFORE Action 9
+- ✅ DO NOT activate (Action 9) until `_RISK_PCT` ladder is fixed
+- **Bug:** `backend/risk_engine.py:78-83` — Phase 1 core risk = 0.010 BUT Phase 2 core risk = 0.0075 → Phase 1 → 2 advancement DROPS sizing 25%
+- **Already tracked as PRE-P11-3** in `AUDIT_FINDINGS_REGISTER.md:53`
+- **Sequencing constraint from PRE-P12-2:** ladder fix must land BEFORE AI-SPEC-012 build begins; constraint satisfied automatically by Day 7-14 landing window
+- **Resolution:** Action 7b — hard Day 7-14 deliverable
+
+**Activation = ALL SIX GATES PASSED.**
+
+---
+
+## 4 — Sequenced Action Plan
+
+### Day 0 — Today (2026-04-28)
+
+#### Action 1 — Fix `bull_debit_spread`/`bear_debit_spread` string drift (Gate A)
+**Owner:** Cursor
+**Estimated work:** 1.5-2 hours
+**ROI vector:** C (enabling-infrastructure — prerequisite for AI activation)
+**Branch name:** `fix/ai-synthesis-strategy-string-drift`
+**Scope (4 files + 3 enhancements):**
+- `backend_agents/synthesis_agent.py:40-41` — replace LLM SYSTEM_PROMPT instruction strings with `debit_call_spread`, `debit_put_spread`
+- `backend_agents/surprise_detector.py:235-237` — same string fix at the surprise-override emit site
+- `backend/tests/test_phase_2a_agents.py:104,143` — update test fixtures
+- `backend/tests/test_consolidation_s5.py:220` — update test fixtures
+- **Bug-class prevention 1 — shared validator helper:** factor `_validate_synthesis_payload(synth: dict) -> Optional[dict]` into a shared location (e.g., `backend_agents/_synthesis_schema.py` or as a module-level function in `synthesis_agent.py` imported by `surprise_detector.py`). Helper validates `synth["strategy"] in {valid_set}` and returns `None` (with warning log) on invalid. Both writers MUST call it before `redis_client.setex("ai:synthesis:latest", ...)` at synthesis_agent.py:198 AND surprise_detector.py:239
+- **Bug-class prevention 2 — invalid-hint warning:** add `logger.warning("ai_hint_invalid_strategy", hint=..., regime_top=...)` at `backend/strategy_selector.py:1027`
+- **Bug-class prevention 3 — test for both writers:** new test asserts that surprise_detector + synthesis_agent both reject invalid strings via the shared validator
+**Verification:**
+- All 5-6 files updated in single commit (5 if helper colocated; 6 if extracted to new module)
+- Pytest passes
+- Validator catches synthesized invalid strings in test
+- Warning fires when test feeds invalid strategy_hint
+- Both write paths covered by validator
+**Status:** [ ] Pending Cursor prompt
+
+#### Action 2 — Pull Railway log baseline (Gate B)
+**Owner:** Operator (with Claude guide)
+**Estimated work:** 1-2 hours
+**ROI vector:** Diagnostic (informs Action 8 + activation post-mortem)
+**Time window:** **Post-Commit-3 deploy: 2026-04-27 16:08 ET onward.** Window is ≤2 trading days of clean data; alternative is contaminated data; accept the small-sample tradeoff.
+**Scope:**
+- Pull Railway logs for 2026-04-27 16:08 ET onward
+- Grep for `no_trade_reason=` and produce distribution histogram
+- Grep for `*_skip_trade` and `*_blocked_*` log keys (5 strategy_selector skip paths)
+- **Also enumerate `contracts=0` / `min_contracts_floor` log occurrences as the implicit 13th skip path per F-37**
+- Identify the actual dominant skip path (across all 13 paths)
+- Save output as `trading-docs/08-planning/ROI_LOG_BASELINE_2026-04-28.md`
+**Status:** [ ] Pending Claude log-pull guide
+
+### Days 1-2 (2026-04-29 to 04-30)
+
+#### Action 3 — P1.3.7 audit (AI-SPEC-008 OPRA Flow Alpha) (Gate C)
+**Owner:** Cursor (audit producer); Claude (audit prompt drafter); operator (review + merge)
+**Estimated work:** 1 day per existing P1.3.x cadence
+**ROI vector:** C
+**Status:** [ ] Pending Action 1 + Action 2 complete
+
+### Days 3-4 (2026-05-01 to 05-02)
+
+#### Action 4 — P1.3.8 audit (AI-SPEC-009 Exit Optimizer) (Gate C)
+**Owner:** Same roles as Action 3
+**Status:** [ ] Pending Action 3 complete
+
+### Day 4 — late-day decision gate
+
+#### Action 5a — C-AI-006-4 decision gate (Gate C, conditional path-fork)
+**Owner:** Operator + Claude (consultation)
+**Estimated work:** 30-45 minutes (single decision)
+**Scope:** Operator decides among C-AI-006-4 options 1/2/3 per `AUDIT_DISPOSITION_PLAN.md` enumeration. Outcome triggers Action 4b OR skips it.
+**Status:** [ ] Pending Action 4 complete
+
+### Day 5 — CONTINGENT (only if Action 5a → option 2)
+
+#### Action 4b — P1.3.9 audit (AI-SPEC-014 LightGBM Direction Model — renamed AI-SPEC-016 in AI Build Roadmap §3.6; canonical name resolved at D-024 ratification per `AUDIT_DISPOSITION_PLAN.md` §3)
+**Trigger:** ONLY if Action 5a → option 2
+**Owner:** Cursor / Claude / operator
+**Estimated work:** 1 day per cadence
+**Status:** [ ] Conditional — pending Action 5a decision
+
+### Days 5-6 — Activation criteria draft
+
+#### Action 5b — D-024 activation criteria draft (Gate D)
+**Owner:** Operator + Claude
+**Estimated work:** Days 5-6 — 1 working session (~3 hours)
+**Scope:**
+- Operator decides Phase 2A `synthesis_agent.py` succession plan (open question F-22)
+- Claude drafts D-024 activation criteria document specifying:
+  - Minimum closed paper trades before flag flip
+  - Required AI synthesis output validation rate (parse rate, schema compliance)
+  - **Full JSON schema for synthesis payload validation** — Action 1's validator covers ONLY `strategy` field; D-024 extends to all required fields per SYSTEM_PROMPT contract at `backend_agents/synthesis_agent.py:32-58`
+  - Sharpe / win-rate thresholds for AI-gated trades vs rule-based baseline
+  - **Abort thresholds** — explicit numeric: parse rate <95% over 3 cycles per D-024 full schema, OR hourly Sharpe < -1.0, OR ≥3 invalid `strategy` payloads detected in Redis over 24h window, OR operator manual abort
+  - **A/B comparison methodology — leverages existing `backend/shadow_engine.py`** (Portfolio A rule-based baseline → `shadow_predictions` table). When AI activates, AI synthesis becomes Portfolio B; existing infrastructure handles attribution. **No new A/B infrastructure required.**
+  - **Capital scaling tuning discipline** — D-024 documents minimum sessions of positive Sharpe before increase, max increase per amendment, etc.
+- Document committed to `trading-docs/00-governance/ai-synthesis-activation-criteria.md`
+**Status:** [ ] Pending Action 4 (and conditionally 4b) complete
+
+### Day 7 — Ratification
+
+#### Action 6 — D-023 + D-024 ratification (Gate D)
+**Owner:** Operator
+**Estimated work:** Day 7 — 1 working session (~2 hours)
+**Scope:**
+- Update `trading-docs/08-planning/approved-decisions.md` with **D-023** AND **D-024**
+- D-023 resolves all 22 Class C escalations enumerated in `AUDIT_DISPOSITION_PLAN.md`
+- D-024 resolves: F-22 (succession plan), F-19 (activation criteria), F-13/F-14 (Path Y rationale), capital tuning discipline
+- Update AUDIT_FINDINGS_REGISTER.md to close resolved items
+**Status:** [ ] Pending Action 5b complete
+
+### Days 7-14 — parallel tracks
+
+#### Action 7 — Pre-AI fix track Commit 4 (Gate E)
+**Owner:** Cursor (implementation); operator (merge)
+**Scope:** Per FINAL_DEPLOY_PLAN_v2.md (re-mark + calibration cleanup + NULL slippage handling). Anchor for AI-SPEC-010 Layer 2 cutover (C-AI-010-5).
+**Bundles F-17:** `feedback:counterfactual:enabled` + `model:meta_label:enabled` added to `_TRADING_FLAG_KEYS` (operator admin endpoint exposure)
+**Status:** [ ] Parallel to audit track
+
+#### Action 7b — `_RISK_PCT` ladder monotonicity fix (Gate F)
+**Owner:** Cursor
+**Estimated work:** 1 hour code + test + commit
+**ROI vector:** A/B
+**Branch name:** `fix/risk-pct-ladder-monotonicity`
+**Scope:**
+- `backend/risk_engine.py:78-83` — change Phase 2 from `{"core": 0.0075, "satellite": 0.00375}` to `{"core": 0.010, "satellite": 0.0050}`
+- Update inline comment to reflect PRE-P11-3 resolution
+- Add test asserting `_RISK_PCT[1]["core"] <= _RISK_PCT[2]["core"] <= _RISK_PCT[3]["core"] <= _RISK_PCT[4]["core"]`
+- Update `AUDIT_FINDINGS_REGISTER.md:53` (PRE-P11-3) to mark closed
+**Note on PRE-P12-2 sequencing:** Constraint satisfied automatically because AI-SPEC-012 / Cluster C is post-V0.1 per `AI_BUILD_ROADMAP.md`
+**Status:** [ ] Hard Day 7-14 deliverable
+
+#### Action 8 — CONDITIONAL: redesigned `signal_weak` change as conviction-conditional sizing
+**Trigger:** ONLY if Action 2 logs show `direction_signal_weak` is genuinely the dominant gate (>50% of skips post-2026-04-27 16:08 ET)
+**Decision rule:** If logs show another gate dominates, Action 8 is a no-op
+**Scope (if proceeding):**
+- Lower threshold from 0.05 → 0.03
+- ADD sizing modifier: trades in 0.03 ≤ |p_bull - p_bear| < 0.05 band get 0.5× contracts
+- Trades with |p_bull - p_bear| ≥ 0.05 retain 1.0× sizing
+- New test asserts borderline trades open at reduced size
+- Sequence ≥5 trading days BEFORE Action 7 deploy for clean Sharpe attribution
+- **Sequencing branch:** if Action 8 cannot ship ≥5 trading days before Action 7, defers to (Action 7 ship + 5 trading days) via Gate E 3-way max formula
+**Status:** [ ] Conditional
+
+### Days 14-21 — Path Y activation
+
+**Note on calendar slip:** Window may extend past Day 21 if Action 8 deferral pushes the Gate E 3-way max past Day 21. This is acceptable — sequencing correctness > calendar fidelity.
+
+#### Action 9 — Path Y activation: flip `agents:ai_synthesis:enabled` to `true`
+**Prerequisite:** Gates A/B/C/D/E/F ALL PASSED. Effective date = max(Day 14, Action 7 ship + 5 trading days, Action 8 ship + 5 trading days IF Action 8 ships).
+**Owner:** Operator
+**Scope:**
+- Verify all 6 gates pass via published D-024 activation criteria document (Gate F = `_RISK_PCT` ladder fix landed)
+- Flip flag via admin endpoint
+- Confirm Redis value
+- Set up monitoring per D-024
+- Confirm frontend dashboard renders new synthesis brief
+**Abort SLA (5-min response):**
+- Parse rate < 95% over 3 cycles per D-024 full schema
+- Hourly Sharpe < -1.0
+- ≥3 synthesis payloads with invalid `strategy` field detected in Redis over 24h window (validator regression — metering source: Redis snapshots, NOT validator logs)
+- Operator manual abort
+**Status:** [ ] Conditional — pending all gates
+
+### Days 21+ — post-activation
+
+Continuous monitoring per D-024. Specific abort triggers documented above. **Cluster C build cadence resumes per `AI_BUILD_ROADMAP.md`** — P1.3.10 AI-SPEC-013 Drift Detection committed as first audit post-V0.1, no later than Day 60 post-activation.
+
+### Operational items (parallel to all of the above; affect ROI directly)
+
+#### Action 10 — Pre-AI Commits 5-10
+**Owner:** Cursor (implementation); operator (merge)
+**Scope:** Per FINAL_DEPLOY_PLAN_v2.md and TASK_REGISTER.md §11. Specifically:
+- Commit 5 = Action 7b (`_RISK_PCT` ladder fix) — already enumerated above
+- Commit 6 = VVIX z-score fix paired with `vix_daily_history` backfill primitive
+- Commit 7 = Phase 0 commission model fix
+- Commit 8 = Action 8 conditional (signal_weak → conviction-conditional sizing) — already enumerated above
+- Commit 9 = IV/RV no-trade filter at `prediction_engine.py:706`
+- Commit 10 = TBD per FINAL_DEPLOY_PLAN_v2.md — operator paste required
+**Status:** [ ] Each commit tracked separately; bundle into Days 7-21+ window
+
+#### Action 11 — Resend SMTP migration (alert emails currently broken)
+**Owner:** Cursor + operator
+**Estimated work:** ~30 min
+**ROI vector:** Governance — operator situational awareness during V0.1 ramp
+**Status:** [ ] Pending — bundle with Commit 7 or schedule standalone
+
+#### Action 12 — Dashboard observability sprint completion (UI-1/2/3/4)
+**Owner:** Operator + Cursor
+**Estimated work:** Variable
+**Scope:** Complete partial UI sprint per HANDOFF_2; deploy Edge Function for Learning Dashboard
+**ROI vector:** Indirect (V0.2 promotion-gate visibility)
+**Status:** [ ] Pending — schedule pre-V0.2 promotion (post-Day-21)
+
+#### Action 13 — system-state.md synchronization
+**Owner:** Operator or Claude
+**Estimated work:** ~15 min
+**Scope:** Update `Last Updated` to 2026-04-28; reflect Commits 1-3 shipped + this plan v2.0; reference 3 sub-plans per §0 pointer table
+**Status:** [ ] Pending — bundle with v2.0 commit PR
+
+---
+
+## 5 — Decision Log Cross-Reference
+
+D-numbers from `trading-docs/08-planning/approved-decisions.md`:
+
+- **D-015** — LightGBM slippage (NOT BUILT — static dict). Divergence open. AI-SPEC-005 audit covers; full handling in `AUDIT_DISPOSITION_PLAN.md`
+- **D-016** — Vol blending (PARTIALLY BUILT). Divergence open. AI-SPEC-005 audit covers; bilateral with C-AI-005-1; full handling in `AUDIT_DISPOSITION_PLAN.md`
+- **D-018** — VVIX emergency z-score halt (3.0). Implemented; **input substrate has bug deferred to S7 — see Pre-AI Commit 6**. D-018 logic correct; reliability gated on Commit 6 fix
+- **D-020** — Trade frequency cap. Implemented
+- **D-021** — HMM + LightGBM regime classifier (NOT BUILT — rule-based). Divergence open. AI-SPEC audits cover; full handling in `AUDIT_DISPOSITION_PLAN.md`
+- **D-022** — Capital preservation halt at 5 consecutive losses. Implemented
+- **D-023** — RESERVED — 13-spec AI authority boundary. Ratification = Action 6. **Full enumeration of 22 Class C items folding into D-023 is in `AUDIT_DISPOSITION_PLAN.md`**
+- **D-024** — RESERVED — Phase 2A activation criteria + succession plan + capital tuning discipline. Ratification = Action 6
+
+---
+
+## 6 — Out of Scope with Explicit Handling
+
+These are NOT in this plan's scope but are explicitly tracked elsewhere or deferred with rationale:
+
+- **`backend_earnings/` strategy track** — separate revenue stream; tracked via TASK_REGISTER.md
+- **Frontend code changes (Lovable)** — out of scope; frontend IMPACT of Action 9 is in scope (verification only)
+- **HANDOFF_3 §14 "AI Trading Agent" framing** — obsolete; superseded by Cluster B+C audits per `AI_BUILD_ROADMAP.md`
+- **Data improvements 15D (cross-asset signals)** — V0.2+ deferral per `AI_BUILD_ROADMAP.md`
+- **Data improvements 15E (retail sentiment)** — V2+ deferral per `deferred-work-register.md`
+- **Cluster C audits 11/3/7/12** — post-V0.1 sequencing per `AI_BUILD_ROADMAP.md` (only AI-SPEC-013 Drift Detection committed within Day 60 post-activation)
+- **Phase ladder performance-gating tweaks** — already dual-gated (Sharpe + calendar); no work needed beyond Action 7b monotonicity fix
+
+---
+
+## 7 — Findings Tracking Register (F-N IDs local to THIS document)
+
+**Note:** F-N IDs from v1.0-v1.6 are preserved. New G-N IDs from Cursor's gap scan are mapped per-document — gaps that belong to AI Build Roadmap or Audit Disposition Plan are tracked in those documents, not here. This register holds findings governing the activation path and operational items.
+
+| ID | Finding | Source | Status |
+|---|---|---|---|
+| F-1 | Phase 2A `synthesis_agent.py` exists, 628 LOC, dual-provider, Redis-flag-gated | Consensus | [ ] |
+| F-8 | `signal_weak < 0.05` at lines 580/649 | Claude-in-chat | [ ] |
+| F-9 | `direction_signal_weak` is one of 13 distinct skip paths | Cursor verification | [ ] |
+| F-10 | `bull_debit_spread`/`bear_debit_spread` string drift in synthesis_agent.py:40-41 | Cursor inventory | [ ] |
+| F-11 | Same drift in surprise_detector.py:235-237 (2nd emitter, 2nd writer at :239) | Cursor 3rd review | [ ] |
+| F-12 | Same drift in test suite | Cursor 3rd review | [ ] |
+| F-13 | AI synthesis path bypasses `signal_weak` gate | Cursor 3rd review | Informational — informed Path Y |
+| F-14 | Phase ladder is dual-gated (calendar AND Sharpe) | Cursor 3rd review | Informational — informed Action 8 design |
+| F-17 | `feedback:counterfactual:enabled` + `model:meta_label:enabled` not in `_TRADING_FLAG_KEYS` | Cursor inventory | [ ] Bundled into Action 7 |
+| F-21 | 22 services, 15 healthy / 7 idle / 0 offline | Consensus | Informational |
+| F-22 | Phase 2A `synthesis_agent.py` succession plan unresolved | Consensus | [ ] D-024 (Action 6) |
+| F-29 | Frontend `trading_ai_briefs` will start rendering on Action 9 flip | Cursor v1.0 review M4 | [ ] |
+| F-30 | `_RISK_PCT` ladder is non-monotonic — Phase 2 sizing collapse | Cursor v1.2 MISS-1 (PRE-P11-3) | [ ] Action 7b |
+| F-31 | `polygon:vvix:z_score` mislabeled 100-min intraday window bug | Cursor v1.2 MISS-2 | [ ] Pre-AI Commit 6 |
+| F-32 | Time-to-first-ML-model: meta-label is trade-gated; direction model is session-gated | Cursor v1.2 MISS-3 + v1.3 W3 | Informational |
+| F-37 | Min-contracts implicit 13th skip path | Cursor v1.2 (less critical) | [ ] Action 2 baseline |
+| **G-2N** | **Source register references for cross-tracking with other 2 sub-plans:** | | |
+| G-25 | Chain archive substrate operator decision (C-AI-004-4) — primary cascade dependency for AI-SPEC-004 V0.1 + AI-SPEC-005 V0.2 + AI-SPEC-010 V0.2 (per AI Build Roadmap §0 dependency map + AUDIT_DISPOSITION_PLAN §1.3); INDIRECT cascade to AI-SPEC-001 V0.2 paper-binding (≥200 cards via Item 4 replay harness — corrected from v2.0.1 "primary cascade for AI-SPEC-001 V0.2" overstatement per combined-round M-2); default position option 3 (V0.1-advisory-only) | Cursor gap scan §3.B | [ ] AUDIT_DISPOSITION_PLAN.md |
+| G-29 | C-AI-006-1 Authority Recovery automatic-vs-operator-mediated — first authority-boundary Class C in Cluster B; bilateral with AI-SPEC-005 §5; CRITICAL — governs Items 5 + 6 simultaneously | Cursor gap scan §3.B | [ ] AUDIT_DISPOSITION_PLAN.md |
+| G-41 | Freshness substrate buildout — `_safe_redis()` dead code at `prediction_engine.py:100` + `gex:updated_at` no-producer; 3-audit cross-spec confirmed (B-AI-001-6 + B-AI-005-16 + B-AI-006-17); SAFETY-CRITICAL given Item 6 admissibility authority depends on freshness gates | Cursor gap scan §3.B + this plan's non-negotiables | [ ] AUDIT_DISPOSITION_PLAN.md |
+| G-49 | 15A Real-time news ingestion | Cursor gap scan §3.C | [ ] AI Build Roadmap |
+| G-50 | 15B Options flow archival | Cursor gap scan §3.C | [ ] AI Build Roadmap |
+| G-51 | 15C VIX term structure full curve | Cursor gap scan §3.C | [ ] AI Build Roadmap |
+| G-55 | 16B VIX spread width recalibration | Cursor gap scan §3.C | [ ] AI Build Roadmap |
+| G-56 | 16C OCO bracket orders pre-real-capital | Cursor gap scan §3.C | [ ] Action 10 (Commit 10 candidate) |
+| G-57 | 17A Resend SMTP migration | Cursor gap scan §3.C | [ ] Action 11 |
+| G-58 | 17B Edge Function deploy for Learning Dashboard | Cursor gap scan §3.C | [ ] Action 12 |
+| G-59 | 17C Phase A LightGBM training pipeline | Cursor gap scan §3.C | [ ] AI Build Roadmap |
+| G-66 | Commit 10 content TBD per FINAL_DEPLOY_PLAN_v2.md | Cursor gap scan SD-2 | [ ] Operator paste required |
+| G-85 | system-state.md is stale | Cursor gap scan §3.G | [ ] Action 13 |
+| G-86 | Sentiment Agent built but flag default-OFF | Cursor gap scan §3.G | [ ] Tracked in §1.4 |
+| G-87 | Earnings Straddle module built but flag default-OFF | Cursor gap scan §3.G | [ ] Tracked in §1.4 |
+| G-94 | Paused-flag count corrected (5 → 7-8) | Cursor gap scan §3.H | [x] Tracked in §1.4 |
+| G-95 | 6 reverse-polarity signal flags state confirmation needed | Cursor gap scan §3.H | [ ] Operator inspection |
+
+**For G-1 through G-13 (build commitments) and G-17 through G-31f (operator decisions): see `AI_BUILD_ROADMAP.md` and `AUDIT_DISPOSITION_PLAN.md` respectively.**
+
+---
+
+## 8 — Reviewer Consensus
+
+Plan adopts:
+- Cursor Sequence D + Operator Path Y (rounds v1.0-v1.6)
+- Cursor structural recommendation Option β (v1.6 gap scan)
+- Operator-modified β-lite (3 documents instead of 6)
+- 3-reviewer consensus across 6 review rounds + 1 structural gap scan
+
+Source reviews archived in conversation transcripts.
+
+---
+
+*End of Master ROI Plan v2.0.3 — DRAFT awaiting final pre-commit Cursor spot-check on converged-state cleanup (3 sites in this doc; 4 in Build Roadmap v1.7; 4 in DP v1.8); on approval commit trio together as Phase 2 deliverable: Master Plan v2.0.3 + Build Roadmap v1.7 + DP v1.8. Historical: combined-round patches CR-1 + M-1 + M-2 were applied at v2.0.1 → v2.0.2 (intact through v2.0.3); v2.0.3 is converged-state cleanup only — no substantive content changes, only cross-doc version reference alignment.*
