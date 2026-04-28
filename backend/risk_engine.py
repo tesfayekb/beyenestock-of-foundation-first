@@ -57,16 +57,16 @@ def _get_redis():
 # per-trade risk now tops out at $1,000 on a $100k account (1% of
 # account), still well under the 3% daily drawdown halt.
 #
-# LADDER-CONSISTENCY FOLLOW-UP — see TASK_REGISTER Item 13:
-# Only Phase 1 was touched on 2026-04-20. Phases 2 and 3 were
-# originally sized as +50% and 2× relative to Phase 1 (0.0075 and
-# 0.010 core). With Phase 1 now at 0.010, Phase 2's 0.0075 is
-# *lower* than Phase 1 — a calibration-engine trader who advances
-# via the E1 gate would see risk drop. Decision on whether to
-# rescale Phases 2-4 proportionally is deliberately deferred; the
-# E1/E2 gates (45+ / 90+ live days) are months away from firing so
-# this is a zero-impact latent issue for now, but must be resolved
-# before the first advancement fires. Item 13 in TASK_REGISTER.
+# LADDER-CONSISTENCY RESOLVED 2026-04-28 (PRE-P11-3 / Action 7b):
+# Only Phase 1 was touched on 2026-04-20 (paired with SPX strike-width
+# widening); Phases 2-4 retained pre-widening risk-pct values
+# (0.0075 / 0.010 / 0.010 core) which made Phase 2 lower than Phase 1
+# — a non-monotonic ladder where calibration-engine advancement via the
+# E1 gate would have reduced risk budget. Resolution: Phase 2-4 scaled
+# 2× to preserve dollar-equivalent ladder structure (1.0× / 1.5× / 2.0×
+# / 2.0× of new baseline 0.010, matching the pre-widening ladder
+# structure with the new baseline). Monotonicity regression test added
+# at backend/tests/test_risk_engine.py::test_risk_pct_ladder_monotonic.
 #
 # Phases 2 and 3 are reached only by the automated E1/E2 gates in
 # calibration_engine.evaluate_sizing_phase (45+ live days with
@@ -76,10 +76,10 @@ def _get_redis():
 # so a stray manual flip cannot lift risk above the system's learned
 # tolerance.
 _RISK_PCT = {
-    1: {"core": 0.010,  "satellite": 0.0050},    # Phase 1: 2× prior baseline — paired w/ 2026-04-20 width widening
-    2: {"core": 0.0075, "satellite": 0.00375},   # Phase 2: E1 gate (UNCHANGED — see ladder follow-up in Item 13)
-    3: {"core": 0.010,  "satellite": 0.0050},    # Phase 3: E2 gate (UNCHANGED — see ladder follow-up in Item 13)
-    4: {"core": 0.010,  "satellite": 0.0050},    # Phase 4: manual only — same as phase 3
+    1: {"core": 0.010,  "satellite": 0.0050},   # Phase 1: 2× prior baseline — paired w/ 2026-04-20 width widening
+    2: {"core": 0.015,  "satellite": 0.0075},   # Phase 2: E1 gate — 1.5× Phase 1 (PRE-P11-3 closed; preserves dollar-equivalent ladder post-2026-04-20 width widening)
+    3: {"core": 0.020,  "satellite": 0.0100},   # Phase 3: E2 gate — 2× Phase 1 (PRE-P11-3 closed; preserves dollar-equivalent ladder post-2026-04-20 width widening)
+    4: {"core": 0.020,  "satellite": 0.0100},   # Phase 4: manual only — same as Phase 3
 }
 
 # Phase 2B: Strategy-specific risk overrides
