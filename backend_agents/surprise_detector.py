@@ -18,6 +18,7 @@ from typing import Optional
 
 import httpx
 
+from _synthesis_schema import validate_synthesis_payload
 from db import get_client
 from logger import get_logger
 
@@ -232,20 +233,26 @@ def _update_synthesis(redis_client, overall: dict, surprises: list) -> None:
         # Update strategy based on surprise
         if overall["magnitude"] == "large" and overall["confidence"] > 0.60:
             if overall["direction"] == "bull":
-                existing["strategy"] = "bull_debit_spread"
+                existing["strategy"] = "debit_call_spread"
             elif overall["direction"] == "bear":
-                existing["strategy"] = "bear_debit_spread"
+                existing["strategy"] = "debit_put_spread"
+
+        # Validator gate: refuse to write payloads with invalid strategy
+        # strings (closes Action 1 / Phase 2 silent-drift writer path).
+        validated = validate_synthesis_payload(existing)
+        if validated is None:
+            return
 
         redis_client.setex(
             "ai:synthesis:latest",
             1800,  # 30 min
-            json.dumps(existing),
+            json.dumps(validated),
         )
         # CSP-fix mirror: dashboard reads via direct supabase-js.
         get_client().table("trading_ai_briefs").upsert(
             {
                 "brief_kind": "synthesis",
-                "payload": existing,
+                "payload": validated,
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             },
             on_conflict="brief_kind",

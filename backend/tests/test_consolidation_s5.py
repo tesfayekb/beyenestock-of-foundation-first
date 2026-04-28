@@ -217,7 +217,7 @@ def test_probability_simplex_sums_to_one_in_ai_synthesis_branch():
     synth = {
         "direction": "bull",
         "confidence": 0.72,
-        "strategy": "bull_debit_spread",
+        "strategy": "debit_call_spread",
         "sizing_modifier": 1.0,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

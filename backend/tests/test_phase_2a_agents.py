@@ -2,11 +2,12 @@
 import os
 import sys
 
-# Make backend_agents/ importable (sibling directory to backend/)
-sys.path.insert(
-    0,
-    os.path.join(os.path.dirname(__file__), "..", "..", "backend_agents"),
-)
+# Make backend/ and backend_agents/ importable, mirroring test_consolidation_s5.py.
+# Test 3 below imports strategy_selector from backend/.
+_BACKEND_DIR = os.path.join(os.path.dirname(__file__), "..")
+_AGENTS_DIR = os.path.join(_BACKEND_DIR, "..", "backend_agents")
+sys.path.insert(0, os.path.abspath(_BACKEND_DIR))
+sys.path.insert(0, os.path.abspath(_AGENTS_DIR))
 
 import json
 from unittest.mock import MagicMock, patch
@@ -101,7 +102,7 @@ def test_synthesis_agent_skips_without_feature_flag():
         with patch("synthesis_agent._call_ai_provider") as mock_ai:
             mock_ai.return_value = {
                 "direction": "bull", "confidence": 0.6,
-                "strategy": "bull_debit_spread",
+                "strategy": "debit_call_spread",
                 "rationale": "test", "risk_level": 3,
                 "sizing_modifier": 1.0
             }
@@ -140,7 +141,7 @@ def test_call_ai_provider_dispatches_to_openai_when_configured():
     from synthesis_agent import _call_ai_provider
     fake_response = json.dumps({
         "direction": "bull", "confidence": 0.65,
-        "strategy": "bull_debit_spread", "rationale": "ok",
+        "strategy": "debit_call_spread", "rationale": "ok",
         "risk_level": 5, "sizing_modifier": 1.0,
     })
     with patch("synthesis_agent.config") as mock_config:
@@ -196,3 +197,89 @@ def test_run_synthesis_agent_skips_when_openai_provider_has_no_key():
             result = run_synthesis_agent(mock_redis)
     assert result == {}
     assert not mock_ai.called
+
+
+# ── Action 1 / Phase 2: Strategy enum string-drift validator regression ────────
+
+def test_validator_returns_none_on_invalid_strategy():
+    """validate_synthesis_payload returns None when synth["strategy"] is not in
+    STATIC_SLIPPAGE_BY_STRATEGY (canonical 10 per AUDIT_DISPOSITION_PLAN.md
+    v1.9 §(m)). Catches drift like bull_debit_spread / bear_debit_spread."""
+    from _synthesis_schema import validate_synthesis_payload
+    result = validate_synthesis_payload({"strategy": "bull_debit_spread"})
+    assert result is None
+
+
+def test_validator_returns_payload_unchanged_on_canonical_strategy():
+    """validate_synthesis_payload returns the payload unchanged when strategy
+    is in the canonical 10."""
+    from _synthesis_schema import validate_synthesis_payload
+    payload = {
+        "strategy": "debit_call_spread",
+        "direction": "bull",
+        "confidence": 0.65,
+    }
+    result = validate_synthesis_payload(payload)
+    assert result is payload
+
+
+def test_strategy_selector_logs_warning_on_invalid_hint():
+    """When AI-hint-override is enabled and strategy_hint is non-canonical,
+    strategy_selector emits 'ai_hint_invalid_strategy' rather than silently
+    falling through. Closes the silent-drop bug-class at the router.
+
+    Reaches the inline elif at strategy_selector.py:1070 by mocking the
+    upstream Stage 0/1/2 gates so execution flows into the AI-hint-override
+    block with an invalid strategy_hint.
+    """
+    from strategy_selector import StrategySelector
+
+    selector = StrategySelector.__new__(StrategySelector)
+    selector.redis_client = MagicMock()
+
+    # Force the AI-hint-override feature flag ON; all other flag lookups OFF
+    # (so we don't disturb later gates we don't care about for this test).
+    def _flag(key, default=False):
+        if key == "strategy:ai_hint_override:enabled":
+            return True
+        return default
+    selector._check_feature_flag = MagicMock(side_effect=_flag)
+
+    # Bypass all pre-elif Stage 0/1/2 gates: produce a non-empty `ordered`
+    # so the AI-hint-override block is entered with a clean baseline.
+    selector._stage0_time_gate = MagicMock(return_value=(True, "ok"))
+    selector._stage1_regime_gate = MagicMock(return_value=["iron_condor"])
+    selector._stage2_direction_filter = MagicMock(return_value=["iron_condor"])
+
+    prediction = {
+        "regime": "neutral",
+        "direction": "neutral",
+        "p_bull": 0.35,
+        "p_bear": 0.30,
+        "cv_stress_score": 0.0,
+        "regime_agreement": True,
+        # Invalid hint — passes the truthy + confidence checks but fails
+        # the `in valid_strategies` clause, dropping into the new elif.
+        "strategy_hint": "bull_debit_spread",
+        "confidence": 0.65,
+    }
+    session = {"id": "t", "virtual_trades_count": 0, "consecutive_losses_today": 0}
+
+    with patch("strategy_selector.logger") as mock_logger:
+        try:
+            selector.select(prediction=prediction, session=session)
+        except Exception:
+            pass  # downstream errors OK — warning must still have fired
+
+        warning_calls = [
+            c for c in mock_logger.warning.call_args_list
+            if c.args and c.args[0] == "ai_hint_invalid_strategy"
+        ]
+        assert warning_calls, (
+            "expected logger.warning('ai_hint_invalid_strategy', ...) to fire "
+            "on non-canonical strategy_hint; got: "
+            f"{mock_logger.warning.call_args_list!r}"
+        )
+        kwargs = warning_calls[0].kwargs
+        assert kwargs.get("hint") == "bull_debit_spread"
+        assert kwargs.get("regime_top") == "iron_condor"
