@@ -1067,6 +1067,12 @@ class StrategySelector:
                                 strategy_type = ordered[0]
                         except Exception:
                             pass  # fail open — never block trades on flag check
+                    elif strategy_hint and strategy_hint not in valid_strategies:
+                        logger.warning(
+                            "ai_hint_invalid_strategy",
+                            hint=strategy_hint,
+                            regime_top=ordered[0],
+                        )
             except Exception as hint_err:
                 logger.warning(
                     "ai_hint_override_failed", error=str(hint_err)

@@ -257,7 +257,7 @@ Single register of every trading change action. Every change to trading code, sc
     jobs, FOMC), aggregates with magnitude weighting (large=2x,
     small=0.5x), and updates `ai:synthesis:latest` with a
     surprise-informed direction + strategy override (large bull →
-    `bull_debit_spread`, large bear → `bear_debit_spread`).
+    `debit_call_spread`, large bear → `debit_put_spread`).
   - `backend/prediction_engine.py` `_compute_direction()` gains
     **Priority 0** that reads `ai:synthesis:latest` before Priority 1
     LightGBM. Activates only when (a) the key exists, (b) age <30 min,

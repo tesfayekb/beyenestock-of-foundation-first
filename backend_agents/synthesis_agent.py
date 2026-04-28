@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import config
+from _synthesis_schema import validate_synthesis_payload
 from db import get_client
 from logger import get_logger
 
@@ -37,8 +38,8 @@ Rules:
 - You must output ONLY valid JSON matching the schema below. No prose.
 - direction: "bull", "bear", or "neutral"
 - confidence: 0.0 to 1.0 (be conservative — never above 0.85)
-- strategy: "iron_condor", "iron_butterfly", "bull_debit_spread",
-  "bear_debit_spread", "long_straddle", or "sit_out"
+- strategy: "iron_condor", "iron_butterfly", "debit_call_spread",
+  "debit_put_spread", "long_straddle", or "sit_out"
 - rationale: 1-2 sentences maximum
 - risk_level: 1 (very low) to 10 (extreme)
 
@@ -189,17 +190,22 @@ def run_synthesis_agent(redis_client) -> dict:
 
         # Only write to Redis if feature flag is ON
         if enabled and redis_client:
+            # Validator gate: refuse to write payloads with invalid strategy
+            # strings (closes Action 1 / Phase 2 silent-drift writer path).
+            validated = validate_synthesis_payload(synthesis)
+            if validated is None:
+                return synthesis
             try:
                 redis_client.setex(
                     "ai:synthesis:latest",
                     1800,  # 30 min TTL — stale synthesis should not affect trades
-                    json.dumps(synthesis),
+                    json.dumps(validated),
                 )
                 # CSP-fix mirror: dashboard reads via direct supabase-js.
                 get_client().table("trading_ai_briefs").upsert(
                     {
                         "brief_kind": "synthesis",
-                        "payload": synthesis,
+                        "payload": validated,
                         "generated_at": datetime.now(timezone.utc).isoformat(),
                     },
                     on_conflict="brief_kind",
