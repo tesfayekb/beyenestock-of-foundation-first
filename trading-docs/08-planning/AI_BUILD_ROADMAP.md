@@ -350,35 +350,47 @@ Each section below specifies what gets built, in what scope, with what sub-items
 
 ---
 
-### 3.9 — Item 8 (AI-SPEC-008) OPRA Flow Alpha V0.x (Phase 4C)
-**Audit:** P1.3.7 next per Master ROI Plan Action 3
-**Spec:** `ITEM_8_OPRA_FLOW_ALPHA_LOCKED.md` (585 lines)
-**Build commitment:** TBD per audit P1.3.7
-**Estimated work:** 4-6 weeks V0.x
+### 3.9 — Item 8 (AI-SPEC-008) OPRA Flow Alpha V0.3 (Phase 4C / new Phase 4D candidate)
+**Audit:** P1.3.7 complete 2026-04-28; redline at `trading-docs/08-planning/ai-architecture-audits/AI-SPEC-008.md` (583 lines, 14 sections + §0 Pre-Audit Verification); 2 Class A + 18 Class B + 4 Class C findings; recommended status `RATIFY-WITH-AMENDMENTS`
+**Spec:** `ITEM_8_OPRA_FLOW_ALPHA_LOCKED.md` (585 lines, 13 sections)
+**Build commitment:** V0.3 ship per spec §12 V0.3 Build Scope lines 546-561 (audit-validated, see 13-item enumeration below); V0.3 advisory-only authority per `C-AI-008-4` default option 3 — Item 8 produces measurements consumed by Items 5/6/Governor; Item 8 does NOT have authority to override Item 1 Governor veto, Item 6 Meta-Labeler skip, or Item 5 Vol Fair-Value Engine outputs (producer-only authority preserves capital preservation invariant per architectural principle 1)
+**Tier:** V0.3 (corrected from V0.2 per `A-AI-008-1` Class A Mechanical Correction; tier harmonized to match Spec §12 V0.3 Build Scope label which is the most operationally-binding section)
+**Estimated work:** 4-6 weeks V0.3 advisory ship; production-binding deferred to V0.4+ calendar contingent on Item 6 V0.2 ship + chain-archive maturation per `C-AI-008-4`
 **ROI vector:** Tier 3 — LARGEST Tier 3 opportunity per registry given paid Databento subscription is currently underutilized
 
-**Critical architectural commitment from registry:** OPRA features are DETERMINISTIC and feed Items 5/6/Governor as STRUCTURED INPUTS. **The LLM never reads raw OPRA data.** Item 6 with OPRA features must beat Item 6 without OPRA features on calibration, realized utility, and drawdown — otherwise OPRA stays research-only.
+**Critical architectural commitment from registry (preserved + audit-confirmed):** OPRA features are DETERMINISTIC and feed Items 5/6/Governor as STRUCTURED INPUTS. **The LLM never reads raw OPRA data.** Item 6 with OPRA features must beat Item 6 without OPRA features on calibration, realized utility, and drawdown — otherwise OPRA stays research-only. **`A-AI-008-2` correction**: Spec §5 Governor integration framing harmonized to **6-field JSON dictionary** (matches verbatim example dictionary; not 5-field summary).
 
-**V0.x build sub-items (preliminary, pending audit):**
-1. Flow alpha engine module (deterministic)
-2. 20-feature spec implementation
-3. Lee-Ready aggressor signing
-4. `flow_persistence` formula
-5. 0DTE-specific validation
-6. Production safeguards
-7. Storage discipline: Redis live state with TTL + LTRIM (matching Commit 2 fix pattern)
-8. Supabase durable bars only — never raw ticks
-9. **Marginal-value gate at meta-labeler level** (production test): does Item 6 + OPRA beat Item 6 alone?
-10. Successor-replace today's `flow_agent.py` (currently brief generator; Item 8 is alpha extractor)
-11. Cutover policy from current flow_agent.py (operator decision pending audit)
-12. Bundle with TASK_REGISTER.md §11 (formerly HANDOFF_3 §15B options flow signals — Databento) — same paid subscription, same alpha layer
+**V0.3 build sub-items (audit-validated per spec §12 lines 548-561, 13 items + 1 cross-spec hygiene addendum):**
+1. `flow_alpha_engine` separate Railway worker process — recommended canonical filename `backend/flow_alpha_engine.py` per `B-AI-008-1` (matches AI-SPEC-005 `vol_fair_value_engine.py` per `B-AI-005-1` and AI-SPEC-006 `meta_labeler_engine.py` per `B-AI-006-1` per-spec naming pattern)
+2. 20 production features with mathematical definitions per spec §1 lines 22-76 (`opra_premium_z_5m` through `flow_price_divergence_5m`); 21st column `zero_dte_minus_1_3dte_pressure` derived value added per `B-AI-008-18` (Spec §1 line 153 vs §3 line 207 reconciliation — favored Spec §1 enumeration as canonical)
+3. Lee-Ready aggressor classification per spec §1 lines 33-46 with **quality flags emission** per `B-AI-008-8`: `lee_ready_inferred_share_5m` + `unknown_aggressor_share_5m` columns AND `opra:flow_alpha:latest` JSONB output enables downstream consumers to de-weight inferred aggregates; threshold parametric (default 0.30) operator-tunable in `system-state.md` `opra_flow_alpha.unknown_aggressor_share_threshold`
+4. Sweep detection with strict clustering rules per spec §1 lines 114-126 (same-millisecond cluster reconstruction across exchanges)
+5. Block trade detection with 95th-percentile rolling distributions per spec §1 lines 128-133
+6. Mixed time aggregation (tick / 1m / 5m / 15m) per spec §1
+7. **4 Redis keys** per `B-AI-008-2`: `opra:flow_alpha:latest` (TTL = 15 minutes; full feature snapshot JSONB), `opra:flow_alpha:bars:1m` (LTRIM 120 bars; rolling minute-bar archive), `opra:flow_alpha:bars:5m` (LTRIM 80 bars; rolling 5-minute-bar archive), `opra:flow_alpha:health` (TTL = 5 minutes; backpressure state JSONB with `state` / `lag_seconds` / `last_emit_at` / `unknown_aggressor_share`); matches Commit 2 fix pattern
+8. **2 new Supabase tables** per `B-AI-008-3`: `opra_flow_feature_bars` (21 NUMERIC columns for 20 production features + 1 derived per `B-AI-008-18`, `features_jsonb JSONB`, `data_quality_flags JSONB`, `lee_ready_inferred_share NUMERIC`, `unknown_aggressor_share NUMERIC`, **`calibration_eligible BOOLEAN NOT NULL DEFAULT false`** for cross-spec substrate hygiene); `opra_flow_events` (event_type CHECK constraint with sweep/block/burst, expiry/strike/right enums, aggressor_sign / direction / confidence); recommended migration filename `2026MMDD_add_opra_flow_substrate.sql`; durable bars only — never raw ticks
+9. Walk-forward validation harness with quantitative gates per spec §6 lines 333-393 + replay process per `B-AI-008-11` (calendar-blocked on Item 4 V0.1 ship + chain-archive substrate sufficiency per `C-AI-004-4`)
+10. 0DTE-specific validation splits per spec §6 lines 343-358
+11. Cross-DTE divergence feature (`zero_dte_minus_1_3dte_pressure` per spec §1 line 153 + `B-AI-008-18`)
+12. **Backpressure handling and staleness flags** per spec §4 lines 249-264 (multi-mode normal / degraded / stale; 5-second stale threshold via `opra:flow_alpha:health` Redis key); **bilateral with `_safe_redis()` dead-code freshness gate carry-forward** — Item 8 P1.3.7 audit confirms this theme as 4th HIGH-IMPACT consumer (escalates from "open governance debt" to "load-bearing safety substrate" with Cluster B alpha-generation tier)
+13. Integration shims for Items 5, 6, Governor per spec §5 lines 270-305 — **deferred bilateral confirmation** per `C-AI-008-1` default option 3 (preserves audit-trail clarity; bilateral confirmation deferred to next P1.3.5 + P1.3.6 amendment cycle): Item 5 spec contains 2 abstract OPRA references only (lines 390 + 549; no field-name enumeration), Item 6 spec is fully silent on Item 8 as 6th producer surface; **`A-AI-008-2` correction** — Governor framing harmonized to 6-field JSON dictionary per spec §5 verbatim example
+14. **Marginal-value gate at meta-labeler level** (production test, preserved): does Item 6 + OPRA beat Item 6 alone? per spec §13 line 575 + critical architectural commitment
+
+**flow_agent migration policy (operator decision pending per `C-AI-008-2` D-023 enrichment item (v)):**
+- **Option 1 (default recommended)**: coexistence with role-narrowing — `flow_agent.py` (343 lines at HEAD) **narrows to LLM summarizer** reading from `flow_alpha_engine` output (5/6-field Governor compact summary per `B-AI-008-15`); existing `ai:flow:brief` Redis key continues but content shifts from Unusual Whales / put-call ratio brief to narrative summary over Item 8's compact summary; preserves backward-compat with `synthesis_agent.py:93` + `main.py:1917` consumer contract; matches locked spec §8 lines 444-462 explicit text
+- **Option 2**: full successor-replacement — `flow_alpha_engine` subsumes `flow_agent.py` per prior Build Roadmap framing (this line, predecessor wording); breaks backward-compat
+- **Option 3**: hybrid — new file `backend/flow_alpha_engine.py` per `B-AI-008-1` + `flow_agent.py` narrowed; mirrors Item 5 `vol_fair_value_engine.py` canonical-name pattern per `B-AI-005-1`
 
 **Bundles legacy HANDOFF_3 items (now in TASK_REGISTER.md §11 per H-A re-citation):**
 - 15B Options flow signals (block trades, sweeps) from Databento — this IS Item 8
 
-**V0.x promotion gates:** Marginal-value gate at meta-labeler (per registry critical production test)
+**V0.3 promotion gates per spec §6:** Marginal-value gate at meta-labeler (per registry critical production test) + walk-forward validation gates per spec §6 lines 333-393 (quantitative thresholds); production-binding deferred to V0.4+ contingent on Item 6 V0.2 ship + chain-archive maturation per `C-AI-008-4`
+
+**V0.3 pre-implementation gate per `C-AI-008-3` default option 4:** Databento subscription scope verification — V0.3 implementation cannot begin until operator confirms (a) sub-second NBBO tick availability for Lee-Ready aggressor inference, (b) sweep tape reconstruction across exchanges, (c) within D-008 budget OR D-008 budget revision via new D-XXX (D-025 candidate); folds into D-023 enrichment item (u) — Item 8 authority boundary (spec authority over Databento subscription scope is operator-only; Item 8 specifies what it needs but does not procure)
 
 **Expected ROI per registry:** 0% months 1-3 (collect/replay), +0% to +2% months 4-6 (advisory), +4% to +8% base / +8% to +12% bull months 7-12 (production if validated)
+
+**Class C dependencies:** [C-AI-008-1] (cross-spec contract gap with Items 5 + 6), [C-AI-008-2] (flow_agent migration policy), [C-AI-008-3] (Databento subscription scope), [C-AI-008-4] (V0.3 advisory-only authority + calendar deferral); all folded into D-023 enrichment items (u) + (v) + (w)
 
 ---
 
