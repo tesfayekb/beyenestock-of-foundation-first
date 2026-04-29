@@ -140,6 +140,7 @@ This is the first baseline snapshot. Recommended additions:
 | Date (ET) | Session window | Cycles attempted | Skipped | Trades executed | Dominant gate | Dominant share |
 |---|---|---|---|---|---|---|
 | 2026-04-28 | 09:30–15:35 | 73 | 73 | 0 | `direction_signal_weak` | 100.0% |
+| 2026-04-29 | 09:00–15:55 | 84 | 84 | 0 | `direction_signal_weak` | 92.9% |
 
 ---
 
