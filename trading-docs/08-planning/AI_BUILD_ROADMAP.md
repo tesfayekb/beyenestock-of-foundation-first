@@ -395,32 +395,61 @@ Each section below specifies what gets built, in what scope, with what sub-items
 ---
 
 ### 3.10 — Item 9 (AI-SPEC-009) Exit Optimizer V0.3 advisory → V0.4 production (Phase 5A)
-**Audit:** P1.3.8 next per Master ROI Plan Action 4
+**Audit:** P1.3.8 COMPLETE 2026-04-29 — `trading-docs/08-planning/ai-architecture-audits/AI-SPEC-009.md` redline (771 lines; 4 Class A + 20 Class B + 6 Class C findings; **CLUSTER B AUDIT 4 of 4 — CLOSES GATE C OF PATH Y ACTIVATION PREREQUISITES**)
 **Spec:** `ITEM_9_EXIT_OPTIMIZER_LOCKED.md` (783 lines)
-**Build commitment:** TBD per audit P1.3.8
+**Build commitment:** **20 sub-items per AI-SPEC-009 §12.1 + AUDIT_FINDINGS_REGISTER.md TASK_REGISTER §14I (canonical numbering 14I.0 through 14I.19)** — replaces prior "TBD per audit P1.3.8" placeholder
 **Estimated work:** 4-6 weeks V0.3 advisory; +4-6 weeks V0.4 production if validated
-**ROI vector:** Tier 3 — bilateral with Item 6 V0.2 + Item 5 V0.x
+**ROI vector:** Tier 3 — bilateral with Item 6 V0.2 + Item 5 V0.2 + Item 8 V0.3 + Item 10 V0.4-with-Item-9 sub-stage
 
 **Critical architectural commitment from registry:** Exit optimizer ADVISES in V0.3, EARNS limited authority in V0.4 strategy-by-strategy. **Static exits remain the execution backbone.** Adaptive exits can ONLY cause earlier exits, never later. Constitutional gates absolute. **A bad entry filter skips one trade; a bad exit optimizer can damage every open trade.**
 
-**V0.3 advisory build sub-items (preliminary, pending audit):**
-1. Continuous EV evaluator (reuses Item 5 machinery)
-2. Trajectory features: giveback, path_vol, profit_velocity (multiplicative on uncertainty, NOT raw EV)
-3. 14:30 close interaction (mandatory close embedded in every simulation as forced terminal exit)
-4. Adaptive exit slippage formula (1.0 + vol stress + time pressure + spread widening + stress flag, capped at 3x)
-5. EV_hold path slippage simulation (no apples-to-oranges comparison)
-6. Static-vs-adaptive ledger (Item 10 V0.4 integration)
-7. V0.3 advisory authority (recommendations only)
-8. Replaces today's rule-based `position_monitor.py` exit logic
+**P1.3.8 audit-confirmed architectural commitments:**
+- **Layer 1 + Layer 2 COEXISTENCE per `C-AI-009-2` default option 1** — `position_monitor.py` Layer 1 (858 lines, 11 distinct exit_reason values at HEAD per V8/V9 grep) STAYS as static-exit safety net even after V0.4 promotion of `exit_optimizer_engine.py` Layer 2; spec §16 line 779 explicit text. **Item 9 introduces 4th variant of architectural template family: Layer 1 + Layer 2 COEXISTENCE for safety-critical specs** (distinct from Items 10/5 Layer 1 retrofit, Item 6 dormant Layer 1 + Layer 2 fresh ship, Item 8 Layer 0 + Layer 2 coexistence).
+- **Earlier-exit-only enforcement per `C-AI-009-6` default option (a)** — post-hoc verification per spec author intent; operator ratifies acceptance of asymmetric-risk-window (a runtime bug could extend trades for an entire validation window before being caught — every open position during the bug window is exposed to extension; validation window = rolling 60 sessions per spec §11 line 603). **Without freshness gate, stale Items 5/6/8 readings could cause Item 9 to make exit decisions on snapshots that are hours old — directly violating "earlier exit only" (`B-AI-009-20` HIGH-IMPACT confirmation; theme escalates from "safety-critical for Cluster B alpha-generation tier" (P1.3.7 framing) to "load-bearing component of Item 9 V0.4 earlier-exit-only commitment" (P1.3.8 framing — most consequential framing yet)).**
+- **V0.4 promotion-gate coordination per `C-AI-009-3` + `C-AI-009-4` default options 1 + 3** — per-strategy independent gates with system-level minimum; requires `item_promotion_records` row per enabled strategy bucket (`exit_optimizer_v1.<strategy>.authority_level`) + GLC criteria pass-through (Sharpe ≥ 1.5 etc. per D-013 12 GLC) as system-level prerequisite + per-strategy 40-trade floor + per-strategy Wilson_lower_95(useful_exit_rate) > 0.30 + per-strategy adaptive_exit_value > 0 over rolling 60 sessions + system-level minimum 200 trades + system-level Wilson aggregated.
+- **Authority Recovery / Demotion contract per `C-AI-009-5` default option 1** — operator-mediated demotion only (mirrors AI-SPEC-006 P1.3.6 `C-AI-006-1` resolution). Automatic degradation triggers (per-strategy Wilson_lower_95 drops below 0.20 over rolling 30 sessions OR per-strategy adaptive_exit_value goes negative over rolling 30 sessions OR per-strategy max-drawdown-delta worsens by > 5%) write entries to `item_promotion_records` for operator review; operator approves/rejects demotion per event. Maintains bilateral coherence across Items 5 + 6 + 9 Authority Recovery / Demotion patterns.
+- **Cross-spec contract gap per `C-AI-009-1` default option 3** — DEFERRED BILATERAL CONFIRMATION (mirrors AI-SPEC-008 P1.3.7 `C-AI-008-1` pattern). Item 9 §9 lines 478–489 unilaterally claim 10-field contract with Item 5; Item 9 §9 lines 499–509 unilaterally claim 9-field contract with Item 8; Items 5 + 6 + 8 specs ALL silent on Item 9 (V4+V5+V6 zero matches); only Item 10 ↔ Item 9 bilateral (V7 6+ matches; explicit `get_exit_optimizer_training_paths()` accessor per Item 10 spec line 407). Bilateral confirmation deferred to next P1.3.5-amend + P1.3.7-amend cycle (post-Cluster B closure).
 
-**V0.4 production build sub-items (after V0.3 calibration):**
-1. Strategy-by-strategy production authority earning
-2. "Earlier exit only" constraint enforcement
-3. Bilateral with Item 6 V0.2 (Phase 4B): meta-labeler can override exit optimizer
+**V0.3 advisory build sub-items (audit-confirmed, 14I.0 through 14I.13):**
+1. **14I.0** Schema bootstrap — `exit_optimizer_recommendations` Supabase table per `B-AI-009-17` with full DDL covering output fields + per-decision feature snapshots + `calibration_eligible BOOLEAN NOT NULL DEFAULT false` (POSSIBLE 6th producer surface for `calibration_eligible` flag — scheduled for substrate hygiene only; theme stays at 5 surfaces at spec level)
+2. **14I.1** `backend/exit_optimizer_engine.py` (canonical name per `B-AI-009-1`) deterministic forward-EV adapter engine module with method orchestrator class
+3. **14I.2** Forward-EV computation per `B-AI-009-2` — reuses Item 5 distribution machinery from `vol:*` Redis namespace per `B-AI-005-16`; calendar-blocked on Item 5 V0.2 ship
+4. **14I.3** Trajectory features per `B-AI-009-3` — 5 features (`giveback_R`, `giveback_pct_of_peak`, `pnl_path_vol`, `profit_velocity`, `EV_uncertainty_R_adjusted`); multiplicative confidence adjustment per spec §2 lines 126–132; bilateral with `B-AI-010-2` Item 10 V0.2 `closed_trade_path_metrics` substrate
+5. **14I.4** Hybrid evaluation cadence per `B-AI-009-4` — 120s normal / 30–60s stress; 7 enumerated state-change triggers per spec §3 lines 152–161; latency targets p50 < 250ms / p95 < 750ms / hard timeout 1.5s; NO LLM call in exit loop per spec §3 line 175
+6. **14I.5** Decision threshold logic per `B-AI-009-5` — `normal_threshold = max(0.03R, 0.25 * EV_uncertainty_R_adjusted)`; `high_stress_threshold = max(0.02R, 0.20 * EV_uncertainty_R_adjusted)`; `confidence_required = 0.65`
+7. **14I.6** 5 confidence modifiers per `B-AI-009-6` — `giveback_pct_of_peak` ≥ 0.25 / ≥ 0.40; data quality flags; Item 5 `engine_confidence` low; Item 8 `unknown_aggressor_share_5m > 0.40`; per spec §4 lines 200–213
+8. **14I.7** Profit Protection Rule per `B-AI-009-7` — `if current_profit >= 40% of max_profit AND exit_advantage_R > 0.015 AND adverse_flow_or_vol_shift = true: recommend exit / reduce` per spec §4 lines 218–223; operates at Layer 2 advisory; does NOT replace `position_monitor.py:765` `take_profit_40pct` Layer 1 static rule
+9. **14I.8** Adaptive exit slippage formula per `B-AI-009-8` — `adjustment_factor = 1.0 + 0.50 * max(0, current_iv_z - 1.0) + 0.30 * (1 - time_remaining_pct) + 0.25 * spread_z + 0.25 * stress_exit_flag`; capped at 3.0; bilateral with `C-AI-010-3` z-score producer authority + `STATIC_SLIPPAGE_BY_STRATEGY` at `strategy_selector.py:17-28`
+10. **14I.9** Strategy-specific exit logic for 5 strategies per `B-AI-009-9` (Iron Condor §6.1, Iron Butterfly §6.2, Put Credit Spread §6.3, Long Straddle §6.4, Debit Call Spread §6.5); **per Ambiguity 3 resolution operator authorization 2026-04-29: V0.3 ship MUST resolve §6 strategy enumeration scope** — EITHER extend §6 with logic for remaining 5 strategies (Call Credit Spread, Debit Put Spread, Calendar Spread, Long Call, Long Put per `_DEBIT_RISK_PCT` enum at `risk_engine.py:103-111`) OR explicitly mark these as inheriting IC/PCS/Long-Straddle defaults with per-strategy reasoning footnote; default deferred to operator at V0.3 ship scope finalization (T-Rule 5 / capital preservation makes "default to inheriting" risky if a strategy has materially different exit characteristics; explicit operator ratification preferred); operator clarification needed on `earnings_straddle` taxonomy (sub-mode of `long_straddle` or 11th canonical strategy)
+11. **14I.10** 14:30 mandatory close enforcement per `B-AI-009-10` — runtime invariant: if computed forward EV depends on post-14:30 continuation, reject the simulation; between 14:00 and 14:30 the optimizer can only compare `exit_now` vs `hold until at most 14:30`; per spec §8 lines 426–452
+12. **14I.11** Item 5 integration shim per `B-AI-009-11` — 10 fields (7 directly named + 3 derivations); reads from `vol:*` Redis namespace per `B-AI-005-16`; calendar-blocked on Item 5 V0.2 ship; bilateral with `C-AI-009-1` cross-spec contract gap
+13. **14I.12** Item 8 integration shim per `B-AI-009-12` — 9 fields (8 production + 1 quality flag `unknown_aggressor_share_5m`); reads from `opra:flow_alpha:*` Redis namespace per `B-AI-008-2`; calendar-blocked on Item 8 V0.3 ship; bilateral with `C-AI-009-1`
+14. **14I.13** Replay validation harness per `B-AI-009-13` — calendar-blocked on Item 4 V0.1 ship + chain-archive substrate sufficiency per `C-AI-004-4`; V0.3 ships in advisory-only mode without replay validation if chain-archive insufficient at V0.3 ship time (mirrors `C-AI-008-4` V0.3 advisory-only acceptance pattern); 11 metrics per spec §10 lines 528–558
 
-**V0.x promotion gates:** Per registry (V0.4 promotion: per-strategy validation; "earlier-exit-only" verified)
+**V0.4 production build sub-items (audit-confirmed, 14I.14 through 14I.19):**
+15. **14I.14** Counterfactual ledger consumption per `B-AI-009-14` — consumes Item 10's `get_exit_optimizer_training_paths()` accessor per Item 10 spec line 407; **bilateral with Item 10 V0.4-with-Item-9 sub-stage** per AI_BUILD_ROADMAP.md §3.4 line 217 Stage 4; bundles into Item 9 V0.4 promotion gate evaluation per `B-AI-009-16`
+16. **14I.15** Operator review dashboard per `B-AI-009-15` — admin route for reviewing exit recommendations + counterfactual static-vs-adaptive ledger; bilateral with `B-AI-009-17` recommendation logging surface
+17. **14I.16** V0.4 promotion-gate evaluation infrastructure per `B-AI-009-16` — implementation in `backend/exit_optimizer_engine.py` (or separate `backend/exit_optimizer_promotion.py`); 11 gates per spec §11 lines 599–611 with `useful_exit_rate = useful_adaptive_exits / total_adaptive_exit_recommendations`; bilateral with `C-AI-009-3` paper_phase_criteria + item_promotion_records coordination operator decision; bilateral with `C-AI-009-4` per-strategy independent gates with system-level minimum; per `A-AI-009-1` framing reconciliation §11 promotion gates may need to import §10 walk-forward + per-strategy degradation gates
+18. **14I.17** Recommendation logging surface per `B-AI-009-17` — `exit_optimizer_recommendations` table writer (entry per recommendation produced); UPDATE on `executed = true` when `position_monitor.py` Layer 1 acts on the advisory; tracks `executed_action` (matches advisory or differs) for V0.4 promotion-gate Wilson computation
+19. **14I.18** Authority Recovery / Demotion contract per `C-AI-009-5` operator decision (default option 1 — operator-mediated demotion only): automatic degradation triggers write entries to `item_promotion_records` for operator review; folds into D-023 enrichment item (p) extension
+20. **14I.19** Earlier-exit-only enforcement per `C-AI-009-6` operator decision (default option (a) post-hoc verification per spec author intent) — Spec §11 V0.4 sub-item 2 + §10 Replay Validation process detect "earlier exit only" violations after-the-fact; if violations detected, V0.4 per-strategy authority demoted per Authority Recovery / Demotion contract item 14I.18; operator monitors `exit_optimizer_recommendations.executed = true AND exit_reason != 'optimizer_advised'` queries for replay-detected violations; folds into D-023 enrichment item (z)
+
+**V0.x promotion gates:** Per spec §11 lines 599–611 + `C-AI-009-3` + `C-AI-009-4` operator decisions:
+- **Per-strategy independent gates with system-level minimum** (default option 3 per `C-AI-009-4`): each strategy promoted to V0.4 separately when its 40-trade floor + per-strategy Wilson_lower_95(useful_exit_rate) > 0.30 + per-strategy adaptive_exit_value > 0 over rolling 60 sessions gates pass AND system-level total ≥ 200 trades passes
+- **GLC criteria pass-through** as system-level prerequisite per `C-AI-009-3` default option 1 (Sharpe ≥ 1.5 etc. per D-013 12 GLC)
+- **Earlier-exit-only post-hoc verification** per `C-AI-009-6` default option (a) — operator ratifies acceptance of asymmetric-risk-window per V0.4 promotion validation discipline
 
 **Expected ROI per registry:** 0% months 1-3, 0% to +1% months 4-6 (V0.3), +2% to +5% base / +5% to +7% bull months 7-12 (V0.4)
+
+**Sequencing per AUDIT_FINDINGS_REGISTER.md MASTER_PLAN.md Phase 5A:** Phase 5A ships AFTER Phase 4B (Item 6 V0.2) + Phase 4D (Item 8 V0.3) + Phase 3D (Item 10 V0.2) + Phase 3E (Item 5 V0.2) + Phase 3C (Item 4 V0.1 + chain-archive substrate) + Phase 3X (substrate fix `_safe_redis()` + freshness producers per §3.15). Phase 5A bundles **Item 10 V0.4-with-Item-9 sub-stage** (static-vs-adaptive ledger, exit slippage integration) per Item 10 spec §11 migration + `B-AI-009-14`.
+
+**Phase 5A V0.4 production-binding calendar-blocked on:**
+1. `C-AI-004-4` chain-archive substrate disposition
+2. Items 5 + 8 cross-spec contract ratification per `C-AI-009-1` deferred-confirmation default option 3 (with `cross_spec_contract_ratified = false` flags as ship-allowed condition)
+3. Per-strategy 40-trade floor + system-level 200-trade minimum + per-strategy Wilson_lower_95 ≥ 0.30 + per-strategy adaptive_exit_value > 0 over rolling 60 sessions per `C-AI-009-3` + `C-AI-009-4`
+4. Phase 4B (Item 6 V0.2 exit-side) since Item 9 V0.3 reads from Item 6 outputs via `meta_labeler_decisions` for V0.4 demotion-trigger Wilson computation
+
+**Side-finding flagged in P1.3.8 audit (operator-decided post-merge):** Phase 5A naming collision — `Phase 5A` is used for both Item 9 (per this section) and the already-shipped Earnings Volatility System (per pre-Phase 5 calendar). Two disposition options surfaced per audit §11 governance updates: (i) rename Item-9-track to Phase 5E, OR (ii) renumber Earnings Volatility System retrospectively. **Standing Rule 6 pattern: do NOT auto-resolve; operator decision pending alongside Phase 4C debt from P1.3.7.**
 
 ---
 
@@ -625,7 +654,7 @@ Every data-improvement item is mapped to a build phase. None are silent drops.
 | G-6 | AI-SPEC-006 Meta-Labeler V0.2 build commitment | Cursor gap scan §3.A | Phase 4B | [ ] |
 | G-7 | AI-SPEC-007 Adversarial Review V0.x build commitment | Cursor gap scan §3.A | Phase 4A | [ ] |
 | G-8 | AI-SPEC-008 OPRA Flow Alpha V0.x build commitment | Cursor gap scan §3.A | Phase 4C | [ ] |
-| G-9 | AI-SPEC-009 Exit Optimizer V0.x build commitment | Cursor gap scan §3.A | Phase 5A | [ ] |
+| G-9 | AI-SPEC-009 Exit Optimizer V0.x build commitment | Cursor gap scan §3.A | Phase 5A | [x] — P1.3.8 audit complete 2026-04-29; AI-SPEC-009.md redline (771 lines; 4 Class A + 20 Class B + 6 Class C findings); 20 build sub-items 14I.0–14I.19 enumerated in AUDIT_FINDINGS_REGISTER.md TASK_REGISTER §14I; **CLUSTER B AUDIT 4 of 4 — CLOSES GATE C OF PATH Y ACTIVATION PREREQUISITES** |
 | G-10 | AI-SPEC-010 Layer 2 Counterfactual P&L V0.2 build commitment | Cursor gap scan §3.A | Phase 3D | [ ] |
 | G-11 | AI-SPEC-011 Event-Day Playbooks V0.x build commitment | Cursor gap scan §3.A | Phase 5C | [ ] |
 | G-12 | AI-SPEC-012 Dynamic Capital Allocation V0.x build commitment | Cursor gap scan §3.A | Phase 5D | [ ] |
