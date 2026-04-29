@@ -354,3 +354,28 @@ def test_floor_respects_zero_spread_width():
     )
     assert result["contracts"] == 0
     assert result["size_reduction_reason"] == "zero_spread_width"
+
+
+def test_risk_pct_ladder_monotonic():
+    """PRE-P11-3 / F-30 closure: _RISK_PCT must be monotonically non-decreasing
+    across phases for both core and satellite, so risk budget can only equal
+    or grow as the system advances through E1/E2 gates.
+
+    Bug history: re-introduced by the 2026-04-20 SPX width-widening commit
+    which doubled Phase 1 (0.005 → 0.010) but did not apply the same 2×
+    scaling to Phase 2-4. Resolution = proportional 2× scaling of Phase 2-4
+    to restore dollar-equivalent ladder structure (1.0× / 1.5× / 2.0× / 2.0×
+    of new baseline 0.010).
+    """
+    from risk_engine import _RISK_PCT
+    cores = [_RISK_PCT[p]["core"] for p in (1, 2, 3, 4)]
+    sats = [_RISK_PCT[p]["satellite"] for p in (1, 2, 3, 4)]
+    for i in range(len(cores) - 1):
+        assert cores[i] <= cores[i + 1], (
+            f"core ladder broken at phase {i+1}→{i+2}: "
+            f"{cores[i]} > {cores[i+1]}"
+        )
+        assert sats[i] <= sats[i + 1], (
+            f"satellite ladder broken at phase {i+1}→{i+2}: "
+            f"{sats[i]} > {sats[i+1]}"
+        )
