@@ -2,6 +2,7 @@ providers = ["python"]
 
 [phases.setup]
 nixPkgs = ["python311"]
+aptPkgs = ["libgomp1"]   # T-ACT-042: OpenMP runtime for lightgbm 4.6.0 wheel (the wheel intentionally does not vendor libgomp.so.1; see lightgbm-org/LightGBM#7141 + microsoft/LightGBM#3041)
 
 [phases.install]
 cmds = ["pip install -r backend/requirements.txt"]
