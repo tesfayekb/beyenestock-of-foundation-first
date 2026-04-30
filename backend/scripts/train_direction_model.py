@@ -448,6 +448,58 @@ def train_and_evaluate(df: pd.DataFrame) -> tuple:
 
 # -- Save Model ----------------------------------------------------------------
 
+def _capture_training_environment() -> dict:
+    """
+    Capture pickle-critical library versions + host context at training
+    time so production can detect train-vs-prod version skew on model
+    load (T-ACT-044 / Fix PR 5).
+
+    The pickle artifact (direction_lgbm_v1.pkl) has transitive runtime
+    dependencies on EVERY library whose objects appear in the pickled
+    object graph, not just the headline ML library. For an
+    ``LGBMClassifier`` pickle, that's at least:
+      - ``lightgbm`` (Booster state)
+      - ``scikit-learn`` (LabelEncoder auto-created when fit with
+        string labels — see this script L394-396)
+      - ``numpy`` (classes_, feature_importances_, internal buffers)
+      - ``scipy`` (transitively used by sklearn internals)
+      - ``pandas`` (used in feature engineering; not directly in the
+        pickle but capturing it provides forensic context)
+
+    Capturing these here lets:
+      a. The new ``preflight_training_env.py`` script verify the
+         training venv matches ``backend/requirements.txt`` BEFORE
+         training starts.
+      b. ``prediction_engine._load_pickle_and_metadata()`` (deferred
+         to a future PR per D5) compare metadata-captured versions
+         against runtime-resolved versions and warn on skew.
+
+    ``platform`` and ``trained_on_host`` are forensic-only and never
+    used as gating signals — they help when reconstructing what env
+    produced a particular .pkl 6 months down the line.
+    """
+    import platform
+    import socket
+    from importlib.metadata import version as _pkg_version, PackageNotFoundError
+
+    def _safe_version(pkg: str) -> str:
+        try:
+            return _pkg_version(pkg)
+        except PackageNotFoundError:
+            return "not_installed"
+
+    return {
+        "python":        platform.python_version(),
+        "scikit-learn":  _safe_version("scikit-learn"),
+        "numpy":         _safe_version("numpy"),
+        "pandas":        _safe_version("pandas"),
+        "scipy":         _safe_version("scipy"),
+        "lightgbm":      _safe_version("lightgbm"),
+        "platform":      f"{platform.system()}-{platform.machine()}",
+        "trained_on_host": socket.gethostname(),
+    }
+
+
 def save_model(model, win_rate: float, accuracy: float,
                importance_df: pd.DataFrame) -> None:
     """Save model and metadata to backend/models/."""
@@ -460,6 +512,8 @@ def save_model(model, win_rate: float, accuracy: float,
         pickle.dump(model, f)
     print(f"  [OK] Model -> {model_path}")
 
+    training_env = _capture_training_environment()
+
     metadata = {
         "model_version": "v1",
         "trained_at": datetime.now(timezone.utc).isoformat(),
@@ -471,10 +525,14 @@ def save_model(model, win_rate: float, accuracy: float,
         "gate_threshold": MIN_ACCURACY_GATE,
         "gate_passed": bool(win_rate >= MIN_ACCURACY_GATE),
         "top_features": importance_df.head(10)["feature"].tolist(),
+        "training_environment": training_env,
     }
     meta_path = MODELS_DIR / "model_metadata.json"
     meta_path.write_text(json.dumps(metadata, indent=2))
     print(f"  [OK] Metadata -> {meta_path}")
+    print(f"  [OK] Captured training environment:")
+    for k, v in training_env.items():
+        print(f"        {k:18s} {v}")
 
 
 # -- Main ----------------------------------------------------------------------

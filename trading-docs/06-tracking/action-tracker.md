@@ -29,6 +29,188 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-044 — sklearn version pin + training-env capture + preflight script (post-T-ACT-043 deploy validation)
+
+- **id:** T-ACT-044
+- **date:** 2026-04-30
+- **action:** T-ACT-043 post-merge deploy successfully loaded the
+  LightGBM model on the Tier 2 Supabase fallback path (Railpack
+  apt-package fix from PR 4 worked — no more `libgomp.so.1` error).
+  However production emitted a new warning at unpickle time:
+    `InconsistentVersionWarning: Trying to unpickle estimator
+    LabelEncoder from version 1.8.0 when using version 1.5.2.
+    This might lead to breaking code or invalid results.`
+  Investigation revealed the operator's training venv at
+  `~/.venvs/lgbm-train` was skewed from production by FOUR
+  pickle-critical libraries (not just the headline sklearn):
+  - **scikit-learn:** training=1.8.0, prod=1.5.2 (`>=1.3,<1.6`
+    range pin resolves to latest 1.5.x, which is 1.5.2 per PyPI).
+    The headline warning. 3-minor-version skew.
+  - **numpy:** training=2.4.4, prod=1.26.4. **MAJOR version skew**
+    (2.x → 1.x). NumPy 2.0 removed deprecated APIs and changed
+    dtype handling; arbitrary pickled numpy state may fail to
+    load across this boundary.
+  - **pandas:** training=3.0.2, prod=2.2.3. **MAJOR version skew**
+    (3.x → 2.x). Forensic-only at the moment (pandas state isn't
+    in the .pkl) but flagged for completeness.
+  - **scipy:** training=1.17.1, prod=1.13.1. 4-minor skew.
+    Transitively used by sklearn internals.
+  Plus: lightgbm 4.6.0 = 4.6.0 (already aligned by PR 2 D6 fix);
+  Python 3.11 = 3.11 (no skew).
+  - **First key callout — discipline gap diagnosed:** the skew
+    originated from PR 2 Stage 0's freelance pip-install
+    instruction: `pip install lightgbm pandas pyarrow` (no
+    version pins, no `-r requirements.txt`). Pip resolved latest
+    available wheels, which were 1+ year ahead of prod. **This is
+    the discipline gap that A.3 (HANDOFF NOTE Appendix) closes
+    permanently.** Future training venvs must be installed via
+    the new `preflight_training_env.py` cycle (or via
+    `pip install -r backend/requirements.txt` directly), never
+    via freelance package names without pins.
+  - **Second key callout — defense-in-depth at inference site
+    mitigated the class-inversion concern:** `prediction_engine.py`
+    L861-865 looks up class probabilities by STRING name
+    (`classes.index("bull")`) against `direction_model.classes_`,
+    NOT by integer index from the LabelEncoder's internal
+    mapping. So even if sklearn 1.8.0 vs 1.5.2 produced different
+    internal class numbering, the prediction code still pulls
+    the correct probability for "bull" / "bear" / "neutral" via
+    the string-keyed `.classes_` attribute. **This defensive
+    pattern silently absorbed the version-skew warning in
+    production for an unknown number of prediction cycles.** It
+    is INFORMATIONAL (not a justification to leave the warning
+    unfixed) — it's evidence that defensive coding patterns
+    matter even when version pins fail. The string-name lookup
+    pattern should be preserved through any future refactor of
+    the model inference code path.
+  - **Operator decision: Path B (retrain on prod-pinned versions)**,
+    not Path A (bump prod to operator's versions). Reasoning:
+    production has been running numpy 1.26.4 + pandas 2.2.3 +
+    scipy 1.13.1 + sklearn 1.5.2 for weeks across many code
+    paths (gex_engine, prediction_engine, strategy_selector, etc.).
+    Bumping numpy 1.x → 2.x in prod has wide blast radius and
+    multi-day testing cost. Retraining is one cycle (~5-15 min)
+    contained to the operator's local machine.
+  - **Lessons-learned (HANDOFF NOTE Appendix A.3):** for any
+    pickled ML artifact, every library that contributes to the
+    pickle's serialization is a transitive runtime dependency,
+    not just the headline ML library. Pin EVERY pickle-critical
+    library to an exact version (`==X.Y.Z`) in requirements.txt;
+    no range pins. Capture training-environment versions in
+    `model_metadata.json` at training time. Always install
+    training venvs via `pip install -r requirements.txt` OR via
+    a preflight script that validates against requirements.txt.
+    Never freelance `pip install <pkg>` without pins for
+    pickle-critical libraries.
+- **type:** dependency hygiene + training-env discipline
+- **phase:** phase_5_post_action_8_unblock (post-T-ACT-043 deploy
+  validation)
+- **impact:** MEDIUM-HIGH — this PR closes the version-skew bug
+  class permanently for all future training cycles. The current
+  trained model artifact is still deployed and producing
+  predictions correctly (defense-in-depth at L861-865 absorbed
+  the skew); operator-side retrain on prod-pinned venv removes
+  the warning entirely and eliminates latent skew risk on any
+  future trained pickle. Combined with T-ACT-040 (AI synthesis
+  output unblock), T-ACT-041 (LightGBM hybrid deployment),
+  T-ACT-042 Defect B (CHECK constraint), T-ACT-043 (Railpack
+  libgomp1 fix), this PR is the final closeout for the runtime
+  unblock chain. Action 8 (Conviction-Conditional Sizing)
+  re-evaluation gate (3+ trading days of real-conviction data
+  combined from `lgbm_v1` + `ai_synthesis` sources) becomes
+  unblocked once the next operator-driven retrain + redeploy
+  cycle completes.
+- **owner:** Cursor (DIAGNOSE + EXECUTE for the code/docs
+  changes) + Operator (retrain in new prod-pinned venv +
+  metadata verification + Supabase upload + merge + redeploy)
+- **modules_affected:**
+  - `backend/requirements.txt` (1 line: `scikit-learn>=1.3,<1.6`
+    → `scikit-learn==1.5.2`)
+  - `backend/scripts/train_direction_model.py` (~70 line
+    addition: new `_capture_training_environment()` helper +
+    `training_environment` field in `model_metadata.json`
+    output at save time)
+  - `backend/scripts/preflight_training_env.py` (NEW, ~140
+    lines including module docstring; ~50 LOC of executable
+    Python)
+  - `trading-docs/06-tracking/action-tracker.md` (this entry)
+  - `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md`
+    (Appendix A.3 addition for next-agent inheritance)
+- **docs_updated:**
+  - `trading-docs/06-tracking/action-tracker.md` (this entry)
+  - `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md`
+    (A.3 lessons-learned addition)
+- **foundation_impact:** NONE — `requirements.txt` change is
+  trading-image-scoped (the `sentinel/Dockerfile` GCP service
+  has its own separate dependency manifest and does not consume
+  `backend/requirements.txt`). New scripts are training-time
+  only (operator-driven, not invoked by any production code
+  path). Training-environment metadata capture is additive only
+  (existing `model_metadata.json` consumers
+  `prediction_engine._load_pickle_and_metadata()` use only the
+  `features` key; new `training_environment` key is ignored
+  until a future PR opts in to read it).
+- **scope_choice:** **Scope B (recommended)** per D1 operator
+  decision. Closes the bug class permanently across all future
+  training cycles via 3 coordinated changes (pin + capture +
+  preflight). Scope C (defense-in-depth runtime version-warning
+  check at `_load_pickle_and_metadata`) explicitly DEFERRED per
+  D5 operator decision — preflight closes the bug at the
+  upstream source; runtime check is for a threat model
+  (operator manually uploads a bad pickle bypassing preflight)
+  that isn't realistic today.
+- **verification:**
+  - **Pre-merge static checks:**
+    - `python3 -c "import ast; ast.parse(open('backend/scripts/train_direction_model.py').read())"` — PASS.
+    - `python3 -c "import ast; ast.parse(open('backend/scripts/preflight_training_env.py').read())"` — PASS.
+    - `cd backend && python3 -m scripts.preflight_training_env`
+      smoke-tested on the workspace shell venv: correctly
+      identified 3 skews + 2 matches and printed copy-paste-
+      ready pip install command. Exit code 1 on skew (correct).
+  - **Pre-merge Q-D2 verification:** PyPI release history
+    confirmed `1.5.2` is the latest stable in the `1.5.x` line
+    (next is `1.6.0` which is outside the `<1.6` upper bound).
+    Pinning `==1.5.2` matches what Railway is currently
+    resolving from `>=1.3,<1.6`.
+  - **Pre-merge Q-D1 venv path verification:** operator's
+    existing `~/.venvs/lgbm-train` confirmed populated with
+    skewed libraries (scikit-learn 1.8.0, numpy 2.4.4,
+    pandas 3.0.2, scipy 1.17.1). Recommended new venv path
+    `~/.venvs/lgbm-train-prod-pinned` does not exist yet
+    (operator will create it).
+  - **Post-merge operator verification (after retrain in
+    new venv + Supabase upload + merge + Railway redeploy):**
+      a. Railway runtime logs:
+         **NO MORE `InconsistentVersionWarning`** at unpickle
+         time. The full `pip install` step pulls
+         `scikit-learn==1.5.2` (newly pinned), so train+prod
+         are version-identical and the warning vanishes.
+      b. Railway runtime logs:
+         `direction_model_loaded source=supabase-fallback`
+         (no warnings, no errors).
+      c. T-ACT-041 verification SQL:
+         `SELECT source, COUNT(*) FROM trading_prediction_outputs
+         WHERE created_at > NOW() - INTERVAL '1 hour'
+         GROUP BY source;` — `lgbm_v1` rows continue to appear
+         (no regression from PR 4).
+      d. Operator pastes new `model_metadata.json` to Cursor
+         for verification: must include `training_environment`
+         dict with all 5 pickle-critical libraries matching
+         `requirements.txt` exactly:
+            `scikit-learn: 1.5.2, numpy: 1.26.4,
+             pandas: 2.2.3, scipy: 1.13.1, lightgbm: 4.6.0`
+         AND `gate_passed: true, win_rate >= 0.52`.
+- **t_rules_checked:** T-Rule 1 (no foundation drift; sentinel
+  image untouched, no GCP changes), T-Rule 2 (requirements.txt
+  pin tightening is additive-restriction; new scripts are
+  additive-only; metadata schema change is additive-only and
+  backward compatible with existing consumers), T-Rule 7
+  (action-tracker updated this turn), T-Rule 9 (no out-of-scope
+  edits — strictly the 5 files listed; explicitly deferred
+  Scope C runtime check per D5).
+
+---
+
 ### T-ACT-043 — Railpack apt-package fix + nixpacks.toml deletion (supersedes T-ACT-042 Defect A)
 
 - **id:** T-ACT-043
