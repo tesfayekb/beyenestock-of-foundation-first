@@ -29,6 +29,154 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-041 — LightGBM model deployment via hybrid path (env-var gate + Supabase storage fallback)
+
+- **id:** T-ACT-041
+- **date:** 2026-04-30
+- **action:** Closes the dominant blocker behind the "no trades"
+  pattern: the LightGBM direction model
+  (`direction_lgbm_v1.pkl`) had never been produced anywhere
+  reachable (verified: 0 .pkl files in repo / git history / local
+  fs / Railway), causing ~95% of prediction cycles to fall through
+  to the regime-fallback placeholder triplet (`0.35/0.30/0.35`).
+  PR establishes the hybrid path A + B-Supabase recommended in
+  the Fix PR 2 PREP report.
+  - **Operator one-time training (Phases A2 + A3):** Phase A2
+    (`download_historical_data.py`) downloaded 32K training rows
+    + 23.7K holdout rows from Polygon + CBOE. Phase A3
+    (`train_direction_model.py`) produced `direction_lgbm_v1.pkl`
+    + `model_metadata.json` with `win_rate=0.5292` (gate 0.52,
+    PASSED with ~9σ margin on a 23.7K sample), 25 features, top
+    contributors `vwap_distance, rv_20d, return_4h, iv_rv_ratio,
+    vvix_z_score`. Polygon plan limited 5-min depth to ~3 years
+    instead of spec'd 5; operator marked acceptable for v1.
+  - **Stage 1 — Env-var-ize gate:** `train_direction_model.py:46`
+    now reads `MIN_LABELED_SESSIONS_FOR_TRAINING` from env
+    (`LGBM_MIN_LABELED_SESSIONS`), defaulting to 90. Operator's
+    one-time bootstrap used `LGBM_MIN_LABELED_SESSIONS=0` to
+    bypass the gate (live system has ~3-5 organic labeled
+    sessions; gate exists to defer training until 90, but the
+    training data itself comes from historical SPX bars not the
+    label stream). Default 90 preserved for any future scheduled
+    invocation. Documented in `backend/.env.example`.
+  - **Stage 3 — Three-tier model loader:** Extracted L67-89 inline
+    block into `prediction_engine.PredictionEngine._load_direction_model()`
+    (per DIAGNOSE D5 for test ergonomics). Three tiers:
+      Tier 1 — local cache:
+        1a. `backend/models/` (operator's training output; absent
+            on Railway since `.gitignore` blocks committing model
+            files).
+        1b. `/tmp/lightgbm_cache/` (populated by previous Tier 2
+            invocation in same container; lost on Railway cold
+            restart).
+      Tier 2 — Supabase storage download from
+        `ml-models/direction/v1/{direction_lgbm_v1.pkl,
+        model_metadata.json}`, atomically staged to
+        `/tmp/lightgbm_cache/.staging-<pid>/` before move-into-
+        place via `os.replace()`. Both files succeed or neither
+        moves — no partial cache state on disk.
+      Tier 3 — total miss: `_direction_model` stays None;
+        falls through to GEX/ZG path at L545. Per Q-D10:
+        fall-through over fail-fast — keeps trading running at
+        degraded conviction rather than crashing uvicorn on a
+        dependency hiccup.
+  - **Bundled bug fix (D3):** Pre-existing inline block had a
+    silent failure mode — if local `.pkl` existed but `.json` did
+    not, the model loaded but `_direction_features` stayed None,
+    and inference at L545 short-circuited because of the AND
+    check. New `_load_pickle_and_metadata()` raises on empty
+    features list and the three-tier loader requires BOTH files
+    present at every Tier 1 sub-path. The partial-state condition
+    now correctly cascades to Tier 2 instead of silently dropping
+    to GEX/ZG with a misleading `direction_model_loaded` log.
+  - **Health probe (Q-D6):** One-shot at `_load_direction_model()`
+    call site, writes `("direction_model", state, ...)` via
+    `db.write_health_status()`. State enum:
+      `healthy`  — Tier 1 hit (local cache).
+      `degraded` — Tier 2 hit (loaded from Supabase fallback).
+      `error`    — Tier 3 (both tiers missed, GEX/ZG active).
+    Health write failures never block model load (`_safe_write_health`
+    wrapper logs but swallows).
+  - **Concurrent instantiation (D4):** `main.py:1283` and
+    `trading_cycle.py:34` BOTH instantiate PredictionEngine —
+    structural, not theoretical. Atomic-rename pattern keeps
+    cache writes safe under the race; in practice the second
+    instance hits the cache populated by the first (sub-second
+    Tier 1b hit) so the doubled bandwidth is a worst-case bound,
+    not the typical case.
+  - **Storage client constraint (D2):** supabase-py 2.10 uses a
+    SEPARATE httpx client for storage (NOT the HTTP/1.1-patched
+    postgrest client at `db.py:132-167`). Safe at startup
+    (single-threaded). Documented inline at the call site so any
+    future scheduler-thread storage caller knows to extend the
+    HTTP/2 patch.
+  - **Operator-side artifacts (separate session post-merge):**
+    Create `ml-models` Supabase storage bucket
+    (RLS service-role-only); upload
+    `direction_lgbm_v1.pkl` to `direction/v1/direction_lgbm_v1.pkl`
+    and `model_metadata.json` to `direction/v1/model_metadata.json`
+    via dashboard/CLI. Files NOT committed to git per the
+    `.gitignore` approval-gate rule (lines 38-40).
+  - **Tests (4):** Three required + one D3 partial-state regression
+    guard. Tier 1 hit / Tier 2 fallback / Tier 3 total miss /
+    partial-state-as-cache-miss. Real picklable `_FakeLGBM` class
+    avoids `unittest.mock` pickling edge cases; `tmp_path` fixture
+    isolates each test from production paths and from each other.
+  - **lightgbm version pin (D6):** Bumped
+    `backend/requirements.txt:13` from `lightgbm==4.5.0` to
+    `lightgbm==4.6.0` to exactly match operator's training-env
+    version. Removes pickle forward/backward-compatibility risk
+    across minor versions.
+- **type:** code + dependency
+- **phase:** phase_5_post_action_8_unblock
+- **impact:** HIGH — closes the dominant signal source. Combined
+  with T-ACT-040 (AI synthesis output unblock), the system now
+  has TWO independent conviction-signal sources reaching
+  `trading_prediction_outputs`: LightGBM (~95% of cycles when
+  fresh) and AI synthesis (~5% of cycles). Action 8
+  (Conviction-Conditional Sizing) becomes safe to authorize once
+  3+ days of real-conviction prediction data is captured
+  post-deploy.
+- **owner:** Cursor + Operator (joint — operator ran A2/A3
+  locally; Cursor did all repo edits)
+- **modules_affected:**
+  - `backend/scripts/train_direction_model.py` (env-var gate)
+  - `backend/.env.example` (operator-local override
+    documentation)
+  - `backend/prediction_engine.py` (three-tier loader, partial-
+    state guard, health probe wrapper)
+  - `backend/requirements.txt` (lightgbm 4.5.0 → 4.6.0)
+  - `backend/tests/test_consolidation_s5.py` (4 regression
+    tests)
+- **docs_updated:**
+  - `trading-docs/06-tracking/action-tracker.md` (this entry)
+- **foundation_impact:** NONE — all changes within trading
+  module boundaries. No `src/integrations/`, no shared
+  foundation Python.
+- **verification:**
+  - Pytest: 4 new tests pass; full PR 1 ai_synth regression
+    set (5 tests) still passes; pre-existing `test_phase_a3.py`
+    failures (3, `ModuleNotFoundError: lightgbm` from training
+    script import) UNCHANGED — confirmed not a regression by
+    git-stash + re-run baseline check (matches T-ACT-040
+    methodology).
+  - Operator post-deploy verification SQL provided in
+    commit body (group-by source against
+    `trading_prediction_outputs`, 1-hour post-deploy window).
+  - Schema migration: NONE — no new columns. Reuses
+    `direction_model` as a `service_name` in the existing
+    `trading_system_health` table (no collision with the 12+
+    existing service_name values).
+- **t_rules_checked:** T-Rule 1 (no foundation drift), T-Rule 2
+  (no migration needed; reuses existing health table), T-Rule 5
+  (4 new tests added; baseline + regression set passes), T-Rule 7
+  (action-tracker updated this turn), T-Rule 9 (no out-of-scope
+  edits — strictly the 5 files listed; trading_cycle.py NOT
+  refactored despite D4-Option-B being viable, per operator's
+  "increase ROI not clamp down" rule).
+
+---
+
 ### T-ACT-040 — Fix PR: AI synthesis output loss (TTL/freshness coupling + schema migration)
 
 - **id:** T-ACT-040

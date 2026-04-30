@@ -378,6 +378,272 @@ def test_ai_synthesis_neutral_does_not_trigger_signal_weak_gate():
     )
 
 
+# ── T-ACT-041: LightGBM model loader (3-tier strategy) ──────────────────────
+
+
+# Helpers shared across the 4 model-loader tests below. Producing a
+# real picklable object (instead of MagicMock) avoids the well-known
+# unittest.mock pickling edge cases.
+class _FakeLGBM:
+    """Stand-in for LGBMClassifier used by tests. Picklable because it
+    is a top-level class with no closures. Tests only check that the
+    loader stores it on _direction_model — they don't invoke
+    predict_proba (that's covered by separate inference tests)."""
+    classes_ = ["bear", "bull"]
+
+    def predict_proba(self, X):  # noqa: ARG002
+        return [[0.4, 0.6]]
+
+
+def _write_pkl(path, obj):
+    import pickle as _pickle
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        _pickle.dump(obj, f)
+
+
+def _write_meta(path, features=None):
+    if features is None:
+        # Use a small but non-empty list — D3 partial-state guard
+        # rejects empty features, so any non-empty list works for
+        # tests that only check load success.
+        features = ["return_5m", "vix_close", "rv_20d"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "model_version": "v1",
+        "features": features,
+        "n_features": len(features),
+        "win_rate": 0.5292,
+        "gate_passed": True,
+    }))
+
+
+def test_direction_model_loads_from_local_cache_when_present(tmp_path):
+    """T-ACT-041 Tier 1 — local cache hit. Both files present at
+    the local-tree path; loader populates _direction_model and
+    _direction_features without touching Supabase. Health probe
+    writes 'healthy'."""
+    from prediction_engine import PredictionEngine
+
+    local_pkl  = tmp_path / "models" / "direction_lgbm_v1.pkl"
+    local_meta = tmp_path / "models" / "model_metadata.json"
+    cache_pkl  = tmp_path / "cache" / "direction_lgbm_v1.pkl"
+    cache_meta = tmp_path / "cache" / "model_metadata.json"
+    _write_pkl(local_pkl, _FakeLGBM())
+    _write_meta(local_meta)
+
+    engine = PredictionEngine.__new__(PredictionEngine)
+
+    with patch("prediction_engine.write_health_status") as mock_health, \
+         patch("prediction_engine.get_client") as mock_client:
+        engine._load_direction_model(
+            local_pkl=local_pkl,
+            local_meta=local_meta,
+            cache_pkl=cache_pkl,
+            cache_meta=cache_meta,
+        )
+
+        assert engine._direction_model is not None
+        assert isinstance(engine._direction_model, _FakeLGBM)
+        assert engine._direction_features == [
+            "return_5m", "vix_close", "rv_20d",
+        ]
+        # Tier 1 hit must NOT touch Supabase:
+        mock_client.assert_not_called()
+        # Health probe records 'healthy' once:
+        mock_health.assert_called_once_with(
+            "direction_model", "healthy", last_error_message=None,
+        )
+        # Cache path must NOT be populated when Tier 1 hits (the
+        # /tmp cache is for Tier 2 spillover only):
+        assert not cache_pkl.exists()
+        assert not cache_meta.exists()
+
+
+def test_direction_model_loads_from_supabase_when_local_missing(tmp_path):
+    """T-ACT-041 Tier 2 — Supabase fallback. Local cache absent;
+    storage download returns valid bytes for both files; loader
+    caches them under /tmp atomically and then loads. Health probe
+    writes 'degraded'."""
+    import pickle as _pickle
+    from prediction_engine import PredictionEngine
+
+    local_pkl  = tmp_path / "models" / "direction_lgbm_v1.pkl"
+    local_meta = tmp_path / "models" / "model_metadata.json"
+    cache_pkl  = tmp_path / "cache" / "direction_lgbm_v1.pkl"
+    cache_meta = tmp_path / "cache" / "model_metadata.json"
+    # Note: deliberately NOT writing local files — Tier 1 must miss.
+
+    pkl_bytes  = _pickle.dumps(_FakeLGBM())
+    meta_bytes = json.dumps({
+        "model_version": "v1",
+        "features": ["vwap_distance", "rv_20d", "return_4h"],
+        "win_rate": 0.5292,
+        "gate_passed": True,
+    }).encode("utf-8")
+
+    mock_storage = MagicMock()
+    mock_storage.download.side_effect = [pkl_bytes, meta_bytes]
+    mock_supabase = MagicMock()
+    mock_supabase.storage.from_.return_value = mock_storage
+
+    engine = PredictionEngine.__new__(PredictionEngine)
+
+    with patch("prediction_engine.write_health_status") as mock_health, \
+         patch("prediction_engine.get_client", return_value=mock_supabase):
+        engine._load_direction_model(
+            local_pkl=local_pkl,
+            local_meta=local_meta,
+            cache_pkl=cache_pkl,
+            cache_meta=cache_meta,
+        )
+
+        assert engine._direction_model is not None
+        assert isinstance(engine._direction_model, _FakeLGBM)
+        assert engine._direction_features == [
+            "vwap_distance", "rv_20d", "return_4h",
+        ]
+
+        # Storage was called with the canonical bucket + paths:
+        mock_supabase.storage.from_.assert_called_once_with("ml-models")
+        mock_storage.download.assert_any_call(
+            "direction/v1/direction_lgbm_v1.pkl"
+        )
+        mock_storage.download.assert_any_call(
+            "direction/v1/model_metadata.json"
+        )
+
+        # Cache populated atomically — both files now present:
+        assert cache_pkl.exists()
+        assert cache_meta.exists()
+        # Bytes match what storage returned:
+        assert cache_pkl.read_bytes() == pkl_bytes
+        assert cache_meta.read_bytes() == meta_bytes
+        # No leftover staging dirs:
+        leftover = list(cache_pkl.parent.glob(".staging-*"))
+        assert leftover == [], (
+            f"staging dir(s) leaked after successful download: {leftover}"
+        )
+
+        # Health probe records 'degraded':
+        mock_health.assert_called_once()
+        call_args = mock_health.call_args
+        assert call_args.args[:2] == ("direction_model", "degraded")
+        assert "supabase fallback" in (
+            call_args.kwargs.get("last_error_message") or ""
+        )
+
+
+def test_direction_model_falls_through_to_gex_zg_when_both_paths_miss(tmp_path):
+    """T-ACT-041 Tier 3 — total miss. Local absent; Supabase download
+    raises. Loader leaves _direction_model = None so the GEX/ZG
+    fallback at L545 takes over; no exception bubbles up to break
+    PredictionEngine __init__. Health probe writes 'error'."""
+    from prediction_engine import PredictionEngine
+
+    local_pkl  = tmp_path / "models" / "direction_lgbm_v1.pkl"
+    local_meta = tmp_path / "models" / "model_metadata.json"
+    cache_pkl  = tmp_path / "cache" / "direction_lgbm_v1.pkl"
+    cache_meta = tmp_path / "cache" / "model_metadata.json"
+
+    mock_storage = MagicMock()
+    mock_storage.download.side_effect = RuntimeError(
+        "supabase storage: 404 not_found direction/v1/direction_lgbm_v1.pkl"
+    )
+    mock_supabase = MagicMock()
+    mock_supabase.storage.from_.return_value = mock_storage
+
+    engine = PredictionEngine.__new__(PredictionEngine)
+    engine._direction_model = "sentinel-must-be-overwritten"
+    engine._direction_features = ["sentinel"]
+
+    with patch("prediction_engine.write_health_status") as mock_health, \
+         patch("prediction_engine.get_client", return_value=mock_supabase):
+        # Must NOT raise — fall-through is the contract per Q-D10.
+        engine._load_direction_model(
+            local_pkl=local_pkl,
+            local_meta=local_meta,
+            cache_pkl=cache_pkl,
+            cache_meta=cache_meta,
+        )
+
+        # Final state is the documented Tier 3 silent miss:
+        assert engine._direction_model is None
+        assert engine._direction_features is None
+
+        # Health probe records 'error' with informative message:
+        mock_health.assert_called_once()
+        call_args = mock_health.call_args
+        assert call_args.args[:2] == ("direction_model", "error")
+        msg = call_args.kwargs.get("last_error_message") or ""
+        assert "both missed" in msg
+
+
+def test_direction_model_treats_partial_local_state_as_cache_miss(tmp_path):
+    """T-ACT-041 D3 partial-state guard regression. Pre-existing
+    inline block at the previous prediction_engine.py:67-89 had a
+    silent failure: if local direction_lgbm_v1.pkl existed but
+    model_metadata.json did NOT, the model loaded but
+    _direction_features stayed None, and inference at L545 short-
+    circuited because of the AND check. New three-tier loader must
+    treat this as a cache miss and trigger Supabase fallback."""
+    import pickle as _pickle
+    from prediction_engine import PredictionEngine
+
+    local_pkl  = tmp_path / "models" / "direction_lgbm_v1.pkl"
+    local_meta = tmp_path / "models" / "model_metadata.json"
+    cache_pkl  = tmp_path / "cache" / "direction_lgbm_v1.pkl"
+    cache_meta = tmp_path / "cache" / "model_metadata.json"
+
+    # Local PKL present, local metadata MISSING — the partial-state
+    # condition that the pre-fix code silently mishandled.
+    _write_pkl(local_pkl, _FakeLGBM())
+    assert local_pkl.exists()
+    assert not local_meta.exists()
+
+    # Supabase fallback returns a valid pair so we can verify Tier 2
+    # actually fires (and isn't silently skipped).
+    pkl_bytes  = _pickle.dumps(_FakeLGBM())
+    meta_bytes = json.dumps({
+        "model_version": "v1",
+        "features": ["return_5m", "vix_close"],
+        "win_rate": 0.5292,
+        "gate_passed": True,
+    }).encode("utf-8")
+
+    mock_storage = MagicMock()
+    mock_storage.download.side_effect = [pkl_bytes, meta_bytes]
+    mock_supabase = MagicMock()
+    mock_supabase.storage.from_.return_value = mock_storage
+
+    engine = PredictionEngine.__new__(PredictionEngine)
+
+    with patch("prediction_engine.write_health_status") as mock_health, \
+         patch("prediction_engine.get_client", return_value=mock_supabase):
+        engine._load_direction_model(
+            local_pkl=local_pkl,
+            local_meta=local_meta,
+            cache_pkl=cache_pkl,
+            cache_meta=cache_meta,
+        )
+
+        # Fix verified: Tier 1 was correctly skipped; Tier 2 fired:
+        mock_supabase.storage.from_.assert_called_once_with("ml-models")
+        assert mock_storage.download.call_count == 2
+
+        # Final state reflects Supabase load (Tier 2), NOT the
+        # partial local-tree state:
+        assert engine._direction_model is not None
+        assert engine._direction_features == ["return_5m", "vix_close"]
+
+        # Health probe records 'degraded' (Supabase fallback), NOT
+        # the misleading 'healthy' the old code would have implied:
+        mock_health.assert_called_once()
+        assert mock_health.call_args.args[:2] == (
+            "direction_model", "degraded",
+        )
+
+
 # ── P1-15: War Room EXPECTED_SERVICES ────────────────────────────────────────
 
 
