@@ -1108,4 +1108,40 @@ When auditing any new spec, these are the **canonical Cluster B audits** to use 
 
 ---
 
+## Appendix A — DIAGNOSE Discipline Additions (cumulative, governance-grade)
+
+These checklist additions are mandatory for the corresponding DIAGNOSE round in any future PR. Each was extracted from a real defect that escaped earlier DIAGNOSE rounds, cost a deploy cycle, and would have been caught had the discipline been in place. Order is chronological.
+
+### A.1 Health-probe `service_name` (added 2026-04-30 from T-ACT-042 / Fix PR 3)
+
+For any new health-probe `service_name` introduced via `db.write_health_status()` or equivalent, the DIAGNOSE round MUST validate against migration files defining CHECK constraints, NOT just runtime call sites. "No collision with existing names" in the codebase is necessary but not sufficient. Concretely:
+
+- Locate the migration that defines `trading_system_health_service_name_check` (or the equivalent CHECK constraint for any other `_service_name_check` table).
+- Confirm the new `service_name` is in the IN list of the most-recent migration that touched that constraint.
+- If absent, add a DROP IF EXISTS + ADD migration in the same PR that introduces the new probe.
+
+**Defect that triggered this:** PR 2 (T-ACT-041) DIAGNOSE Q-D6 verified `direction_model` didn't collide with the 23 existing service names in call sites, but missed the CHECK constraint allowlist. Result: `health_write_failed error={'code': '23514', ...}` log spam at deploy `a77195a` until PR 3 fixed it.
+
+### A.2 Deploy-config edits — validate the meta-config (added 2026-04-30 from T-ACT-043 / Fix PR 4)
+
+For any change to `nixpacks.toml`, `railpack.json`, `Dockerfile`, `Procfile`, `.platform.yaml`, `fly.toml`, `app.json`, or any builder-specific config file, the DIAGNOSE round MUST:
+
+1. **Identify the AUTHORITATIVE builder** via `railway.json` `build.builder` field (or equivalent meta-config for other PaaS). The presence of a config file at repo root is **necessary but NOT sufficient** evidence that the builder consumes it. This project pins `RAILPACK` in `railway.json:4` and ignores `nixpacks.toml` entirely — but PR 3 missed this and edited the inert file.
+2. **List ALL deploy-config files at repo root** via a single inventory command:
+   ```bash
+   ls -1a | grep -iE "^(nixpacks|railpack|dockerfile|procfile|railway|fly|app\.json|\.platform|render\.yaml|heroku|buildpacks|\.buildpacks)"
+   ```
+3. **If multiple deploy-config files exist**, document in the DIAGNOSE report which is active and which is inert. Cite the meta-config that determines this.
+4. **For inert configs, propose deletion in the same PR** to prevent the recurrence pattern. Keeping inert deploy configs is exactly the misleading-context surface that wastes deploy cycles.
+
+**Defect that triggered this:** PR 3 (T-ACT-042) edited `nixpacks.toml` to add `aptPkgs = ["libgomp1"]`. Empirically inert — Railway uses Railpack per `railway.json:4`. Same `libgomp.so.1` error appeared in deploy `eaa7aa8` post-PR-3-merge, costing a deploy cycle and forcing T-ACT-043 + Fix PR 4.
+
+### A.3 Future additions
+
+Append future discipline additions here as A.3, A.4, ... Each addition must include: (a) the rule text, (b) the defect that triggered it, (c) the action-tracker entry that documents the discovery.
+
+---
+
 *Handoff note authored 2026-04-28 22:10 UTC-4 by Cursor (Claude Opus 4.7) at end of P1.3.7 EXECUTE session. Owner: tesfayekb. File location: `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md`. End of handoff.*
+
+*Appendix A added 2026-04-30 (T-ACT-042 + T-ACT-043 lessons-learned consolidation; per operator decision D5 in Fix PR 4 DIAGNOSE round).*

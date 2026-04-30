@@ -29,9 +29,188 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-043 — Railpack apt-package fix + nixpacks.toml deletion (supersedes T-ACT-042 Defect A)
+
+- **id:** T-ACT-043
+- **supersedes:** T-ACT-042 (Defect A only — Defect B remains
+  closed via T-ACT-042's CHECK constraint migration)
+- **date:** 2026-04-30
+- **action:** T-ACT-042 (#84) post-merge deploy `eaa7aa8` showed
+  identical `libgomp.so.1: cannot open shared object file` error
+  as pre-PR-3 deploy `a77195a`. Empirical confirmation that
+  PR 3's `nixpacks.toml` edit was inert in production. Root
+  cause discovered via 3 independent evidence sources:
+  - **Source 1 (authoritative pin):** `railway.json:3-6`
+    explicitly pins `"builder": "RAILPACK"` with
+    `railpackVersion: 0.22.0`. Railway's documented mechanism
+    for builder selection. This pin was added in commit
+    `f2c0b40` ("fix(deploy): pin builder to RAILPACK in
+    railway.json — restores 452edd6 working state").
+  - **Source 2 (active config maintenance):** `railpack.json`
+    has 6 commits of active maintenance (`375cbbc`, `fe1c6e5`,
+    `28d99ba`, `81afc88`, `936c387`, `4dc7576`) all dated
+    Apr 23-30. `nixpacks.toml` last meaningful edit was PR 3's
+    inert change at `4b763d1`. Before that, last functional
+    Nixpacks edit was `f2c0b40` which itself simultaneously
+    flipped the builder away from Nixpacks.
+  - **Source 3 (decisive empirical):** PR 3 deploy `eaa7aa8`
+    re-shows the identical error. Logs:
+      `direction_model_supabase_fetch_failed`
+      `error=libgomp.so.1: cannot open shared object file: No such file or directory`
+      `service_name=prediction_engine`
+  Fix: 1-line addition to `railpack.json` `deploy.aptPackages`
+  field per the official Railpack schema at
+  `https://schema.railpack.com` (also documented at
+  `https://railpack.com/config/file` under `## Deploy`):
+    `"aptPackages": ["libgomp1"]`
+  Two distinct apt-package fields exist in Railpack schema —
+  `buildAptPackages` (root, build-time only, NOT in final image)
+  and `deploy.aptPackages` (final image / runtime). Required
+  field for our case is `deploy.aptPackages` because the
+  failure site (`pickle.load(f)` triggering
+  `dlopen("libgomp.so.1")`) happens at app startup time, not
+  build time. The Q-D10 fall-through design from PR 2
+  correctly prevents uvicorn from crashing — but it equally
+  correctly prevents inference from running.
+  Cleanup: `nixpacks.toml` DELETED in same commit. The file
+  has been inert dead config since `f2c0b40`. Keeping it
+  caused exactly the recurrence pattern this PR fixes —
+  Cursor + operator both wasted a deploy cycle editing it
+  thinking it was active. Deletion forces clean failure-mode
+  (build fails fast with "no provider detected" if
+  `railway.json` is ever corrupted) rather than silent
+  fallback to a stale config.
+  - **Lessons-learned (PR 4 discipline addition for future
+    deploy-config edits):** Before authorizing any change to
+    `nixpacks.toml`, `railpack.json`, `Dockerfile`, `Procfile`,
+    `.platform.yaml`, or any builder-specific config, the
+    DIAGNOSE round MUST: (1) identify the AUTHORITATIVE
+    builder via `railway.json` `build.builder` field (or
+    equivalent for other PaaS — `fly.toml`, `app.json`); the
+    presence of a config file is necessary but NOT sufficient
+    evidence that it is active. (2) List ALL deploy-config
+    files at repo root via a single inventory command. (3) If
+    multiple deploy-config files exist, document which is
+    active and which is inert in the DIAGNOSE report. (4) For
+    inert configs, propose deletion in the same PR to prevent
+    recurrence. This discipline addition is also propagated to
+    `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md`
+    so the next agent inherits it without reading the
+    action-tracker.
+  - **Cumulative lessons-learned (PR 3 + PR 4 combined,
+    governance-grade DIAGNOSE checklist):**
+      a. (PR 3) Validate health-probe `service_name` against
+         migration files defining CHECK constraints, not just
+         runtime call sites.
+      b. (PR 4) For deploy-config edits, validate the
+         meta-config (`railway.json` or equivalent) that
+         selects the builder before editing any individual
+         deploy file.
+- **type:** infrastructure (deploy config)
+- **phase:** phase_5_post_action_8_unblock
+- **impact:** HIGH — same activation gate as T-ACT-042 for
+  T-ACT-041's full ROI trajectory. Without this PR, the
+  LightGBM model from PR 2 remains effectively a no-op in
+  production (Tier 2 Supabase download succeeds but unpickle
+  fails), and the system runs entirely on the GEX/ZG fallback
+  edge (Tier 3) — the 52.9% directional edge stays inert.
+  Combined with T-ACT-040 (AI synthesis output unblock),
+  T-ACT-041 (LightGBM hybrid deployment), and T-ACT-042's
+  Defect B (CHECK constraint), this PR completes the runtime
+  unblock chain. After this PR merges + Railway redeploys, the
+  next PredictionEngine cold start should successfully unpickle
+  the LightGBM model on Tier 2 Supabase fallback path.
+- **owner:** Cursor (DIAGNOSE + EXECUTE) + Operator (production
+  log capture from deploy `eaa7aa8` + per-defect authorization
+  + post-merge verification + redeploy)
+- **modules_affected:**
+  - `railpack.json` (adds `deploy.aptPackages: ["libgomp1"]`)
+  - `nixpacks.toml` (DELETED — inert config since `f2c0b40`)
+  - `trading-docs/06-tracking/action-tracker.md` (T-ACT-043
+    entry + in-place correction to T-ACT-042 entry adding
+    `superseded_by` field, INERT marker on Defect A's fix
+    line, and `verification_outcome_actual` field)
+  - `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md`
+    (appended discipline note to propagate lessons-learned to
+    next agent)
+- **docs_updated:**
+  - `trading-docs/06-tracking/action-tracker.md` (this entry +
+    T-ACT-042 in-place correction)
+  - `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md`
+    (lessons-learned appendix)
+- **foundation_impact:** NONE — `railpack.json` is
+  trading-image-scoped (the `sentinel/Dockerfile` GCP service
+  has its own separate base image and does not consume any
+  Railway/Railpack/Nixpacks config). `nixpacks.toml` deletion
+  has zero functional impact (file was inert since `f2c0b40`).
+- **verification:**
+  - **Pre-merge static checks:** `railpack.json` parses cleanly
+    via `python3 -c "import json; json.load(open('railpack.json'))"`
+    (1-line additive change inside `deploy` section). Schema
+    URL `https://schema.railpack.com` validates the
+    `deploy.aptPackages` field as `array of strings`.
+  - **Pre-merge schema citations (Q-D1):** field documented at
+    `https://railpack.com/config/file` under `## Deploy` table
+    AND verbatim in the live JSON schema at
+    `https://schema.railpack.com` as
+    `"deploy.aptPackages": { "items": { "type": "string" },
+    "type": "array", "description": "List of apt packages to
+    include at runtime" }`. Distinct from `buildAptPackages`
+    (root-level, build-time only).
+  - **Pre-merge builder-pin verification (Q-D2):** confirmed
+    `RAILPACK` via 3 sources (railway.json explicit pin, git
+    history, decisive empirical evidence from deploy
+    `eaa7aa8`). See "action" field above for full citations.
+  - **Post-deploy operator verification (after branch merged
+    + Railway redeploys; no migration needed this PR):**
+      a. Railway BUILD logs include
+         `Installing apt packages: libgomp1` line during
+         deploy phase (confirms the field was recognized).
+      b. Railway RUNTIME logs show
+         `direction_model_loaded source=supabase-fallback`
+         (no more `direction_model_supabase_fetch_failed`).
+      c. Supabase: `SELECT * FROM trading_system_health
+         WHERE service_name='direction_model';` returns
+         exactly 1 row with `status='degraded'` (Tier 2
+         Supabase fallback hit on cold start, expected
+         steady state) and `last_error_message LIKE
+         '%supabase fallback%'`.
+      d. T-ACT-041 verification SQL:
+         `SELECT source, COUNT(*) FROM
+         trading_prediction_outputs WHERE created_at >
+         NOW() - INTERVAL '1 hour' GROUP BY source;` —
+         expect `lgbm_v1` rows to appear (currently this
+         query returns 0 lgbm_v1 rows due to Defect A
+         still being unfixed; success criterion is >0).
+- **t_rules_checked:** T-Rule 1 (no foundation drift; sentinel
+  image untouched, no GCP changes), T-Rule 2 (Railpack edit is
+  additive 1-line; nixpacks.toml deletion is removing inert
+  dead config — net cleanup), T-Rule 7 (action-tracker updated
+  this turn including in-place T-ACT-042 correction per
+  Constitution accurate-audit-trail principle), T-Rule 9 (no
+  out-of-scope edits — strictly the 4 files listed).
+
+---
+
 ### T-ACT-042 — LightGBM runtime deps unblock (libgomp1 + CHECK constraint)
 
+> **STATUS UPDATE 2026-04-30 (post-deploy `eaa7aa8`):**
+> Defect A's fix via `nixpacks.toml` was **INERT**. Railway uses
+> Railpack (pinned via `railway.json:4` `"builder": "RAILPACK"`),
+> not Nixpacks. `nixpacks.toml` has been dead config since
+> commit `f2c0b40`. **Defect A superseded by T-ACT-043** (Railpack
+> `deploy.aptPackages` fix + `nixpacks.toml` deletion).
+> **Defect B (CHECK constraint migration) was applied
+> successfully and remains valid** — operator verified post-merge
+> that all 24 service names including `direction_model::text`
+> appear in the constraint allowlist via
+> `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE
+> conname='trading_system_health_service_name_check';`.
+
 - **id:** T-ACT-042
+- **superseded_by:** T-ACT-043 (Defect A only — Defect B closed
+  successfully via the CHECK constraint migration which was
+  applied and verified by operator post-merge)
 - **date:** 2026-04-30
 - **action:** Two production-only defects discovered during T-ACT-041
   deploy validation at Railway commit `a77195a`. Both block the
@@ -59,15 +238,20 @@ Single register of every trading change action. Every change to trading code, sc
     OpenMP runtime by default. The Q-D10 fall-through design
     correctly prevented uvicorn from crashing — but it also
     correctly prevented inference from happening.
-    Fix: 1-line addition to `nixpacks.toml` `[phases.setup]`:
+    Fix attempted (INERT — superseded by T-ACT-043): 1-line
+    addition to `nixpacks.toml` `[phases.setup]`:
       `aptPkgs = ["libgomp1"]`
     `libgomp1` is the canonical Debian package providing
-    `libgomp.so.1`. Confirmed via 3 independent sources: official
+    `libgomp.so.1` (confirmed via 3 independent sources: official
     LightGBM PyPI page docs, lightgbm-org issue #7141 wheel
-    inspector output, and Stack Overflow Q-55036740 (9.5K views,
-    accepted answer with `apt-get install libgomp1`).
-    Establishes the project's first use of Nixpacks `aptPkgs`;
-    cited in commit body so future contributors have a reference.
+    inspector output, and Stack Overflow Q-55036740). The package
+    name itself is correct. **What was wrong:** the file
+    `nixpacks.toml` is not consumed by Railway in this project
+    because `railway.json:4` pins `"builder": "RAILPACK"`. The
+    Nixpacks-vs-Railpack discrimination check was missed in PR 3's
+    DIAGNOSE round (see T-ACT-043 lessons-learned for the
+    discipline addition). Correct fix is in T-ACT-043 via
+    `railpack.json` `deploy.aptPackages`.
   - **Defect B — CHECK constraint rejects `service_name='direction_model'`:**
     Railway log at commit `a77195a`:
       `health_write_failed error={'code': '23514', 'details': 'Failing row contains (..., direction_model, error, ...)', 'message': 'new row for relation "trading_system_health" violates check constraint "trading_system_health_service_name_check"'}`
@@ -158,11 +342,35 @@ Single register of every trading change action. Every change to trading code, sc
          summary) — `lgbm_v1` source rows now appear in
          `trading_prediction_outputs` within the 1-hour
          post-deploy window.
+- **verification_outcome_actual:** [POST-DEPLOY commit `eaa7aa8`,
+  recorded 2026-04-30 by operator]
+  - **Defect A — FAILED to activate.** Railway logs at deploy
+    `eaa7aa8` show identical `libgomp.so.1: cannot open shared
+    object file: No such file or directory` error as pre-PR-3
+    deploy `a77195a`. Empirical proof that `nixpacks.toml`
+    edits do not propagate to the Railway image. Root cause:
+    `railway.json:3-6` pins `"builder": "RAILPACK"` with
+    `railpackVersion: 0.22.0`; Railway ignores `nixpacks.toml`
+    entirely. Superseded by T-ACT-043.
+  - **Defect B — SUCCEEDED.** Operator applied migration
+    `20260430_add_direction_model_to_health_constraint.sql`
+    via Supabase SQL editor before merging PR 3. Post-merge
+    verification SQL
+    (`SELECT pg_get_constraintdef(oid) FROM pg_constraint
+    WHERE conname='trading_system_health_service_name_check';`)
+    returned all 24 service names including `direction_model`
+    in the IN list. Defect B is closed. Health probe writes
+    will succeed once Defect A is also fixed (currently the
+    probe still raises because the model fails to load, but
+    the failure mode is now `model unavailable` not
+    `constraint violation`).
 - **t_rules_checked:** T-Rule 1 (no foundation drift; sentinel
   image untouched), T-Rule 2 (migration is additive + idempotent
   + matches established pattern), T-Rule 7 (action-tracker
   updated this turn), T-Rule 9 (no out-of-scope edits — strictly
-  the 3 files listed).
+  the 3 files listed). Audit-trail correction applied 2026-04-30
+  per Constitution accurate-audit-trail principle (see status
+  update header above + verification_outcome_actual field).
 
 ---
 
