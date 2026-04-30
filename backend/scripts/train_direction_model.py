@@ -10,10 +10,25 @@ Saves model to backend/models/direction_lgbm_v1.pkl
 Run from backend/ directory:
   python -m scripts.train_direction_model
 
-Gate: model must achieve >= 72% win rate on holdout before saving.
-If below 72%, script exits with error -- do NOT deploy a weak model.
+Gates:
+  1. Labeled-sessions auto-gate (default 90). Reads env var
+     ``LGBM_MIN_LABELED_SESSIONS`` (defaults to 90 if unset). Set
+     to 0 for the operator's one-time bootstrap training run when
+     the live system has not yet accumulated 90 labeled sessions
+     in ``trading_prediction_outputs``:
+
+         LGBM_MIN_LABELED_SESSIONS=0 python -m scripts.train_direction_model
+
+     The default 90 stays in place for any future scheduled / cron
+     invocations so the gate keeps its original protective intent
+     once organic labeled-session volume catches up.
+  2. Holdout accuracy gate ``MIN_ACCURACY_GATE`` (0.52). HARD-RAISE.
+     Model must beat 52% on the 2025+ holdout or training aborts
+     and no model file is written. NOT env-var-overridable — this
+     gate guards model quality, not training-readiness.
 """
 import json
+import os
 import sys
 import warnings
 from datetime import datetime, timezone
@@ -38,12 +53,35 @@ HOLDOUT_START = "2025-01-01"
 MIN_ACCURACY_GATE = 0.52  # Binary classifier: >50% = better than random
 
 # 12H Phase A auto-gate: hold off training until the live system has
-# produced 90 distinct labeled sessions in trading_prediction_outputs
+# produced N distinct labeled sessions in trading_prediction_outputs
 # (outcome_correct IS NOT NULL). Below this threshold LightGBM would
 # overfit the few dozen rows we have and never generalise, so the
 # script exits with `insufficient_data` rather than writing a weak
 # model file.
-MIN_LABELED_SESSIONS_FOR_TRAINING = 90
+#
+# IMPORTANT — this gate guards the *training-data-volume readiness*
+# of the LIVE system. It does NOT gate the actual training-set size,
+# which comes from the historical SPX bars in backend/data/historical
+# (typically ~98K samples after Phase A2 download). The two data
+# sources are independent.
+#
+# Env-var override (LGBM_MIN_LABELED_SESSIONS):
+#   - Default: 90, preserves original protective intent for any
+#     future scheduled / cron invocation.
+#   - Operator one-time bootstrap: set to 0 to bypass when training
+#     for the first time on a system that has not yet accumulated
+#     90 organic labeled sessions. Production runtime never reads
+#     this env var (the script is operator-driven, not invoked by
+#     uvicorn) so the override is local to the operator's training
+#     shell.
+#   - Documented in backend/.env.example.
+#
+# Conversion is via int(); a non-integer value raises ValueError at
+# import time, which is the right fail-loud behavior for an operator-
+# driven script.
+MIN_LABELED_SESSIONS_FOR_TRAINING = int(
+    os.getenv("LGBM_MIN_LABELED_SESSIONS", "90")
+)
 
 
 # -- Auto-gate: labeled-sessions threshold ------------------------------------

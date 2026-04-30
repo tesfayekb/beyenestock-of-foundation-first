@@ -65,28 +65,291 @@ class PredictionEngine:
             self.redis_client = None
         self._cycle_count = 0
 
-        # Phase A3: load trained LightGBM direction model if available
+        # Phase A3 + T-ACT-041: load trained LightGBM direction model
+        # via three-tier strategy. See _load_direction_model() for the
+        # local-cache → Supabase-fallback → silent-miss contract and
+        # the health-probe instrumentation.
         self._direction_model = None
         self._direction_features = None
-        model_path = Path(__file__).parent / "models" / "direction_lgbm_v1.pkl"
-        meta_path  = Path(__file__).parent / "models" / "model_metadata.json"
-        if model_path.exists():
-            try:
-                import pickle
-                with open(model_path, "rb") as f:
-                    self._direction_model = pickle.load(f)
-                if meta_path.exists():
-                    import json as _json
-                    meta = _json.loads(meta_path.read_text())
-                    self._direction_features = meta.get("features", [])
-                logger.info(
-                    "direction_model_loaded",
-                    model_version="v1",
-                    features=len(self._direction_features or []),
+        self._load_direction_model()
+
+    # ------------------------------------------------------------------
+    # T-ACT-041 — three-tier model loader (extracted from __init__ for
+    # test ergonomics per DIAGNOSE D5; bundles the partial-state fix
+    # per D3; wires Supabase fallback per Q-D2/D3/D4/D6/D10/D11).
+    # ------------------------------------------------------------------
+
+    def _load_direction_model(
+        self,
+        local_pkl:   Optional[Path] = None,
+        local_meta:  Optional[Path] = None,
+        cache_pkl:   Optional[Path] = None,
+        cache_meta:  Optional[Path] = None,
+    ) -> None:
+        """
+        Three-tier model load with health-probe instrumentation.
+
+        Tier 1 — local cache:
+          1a. ``backend/models/`` (operator's training output, present
+              on dev machines, absent on Railway since .gitignore at
+              lines 38-40 blocks committing model files).
+          1b. ``/tmp/lightgbm_cache/`` (populated by a previous
+              invocation of this method that hit Tier 2 in the same
+              container; lost on Railway cold-restart since /tmp is
+              ephemeral, so always empty on first PredictionEngine
+              instantiation per process).
+        Tier 2 — Supabase storage download from
+          ``ml-models/direction/v1/{direction_lgbm_v1.pkl, model_metadata.json}``,
+          atomically staged into ``/tmp/lightgbm_cache/.staging-<pid>/``
+          before move-into-place. Either both files land or neither
+          does — no partial cache state.
+        Tier 3 — total miss. ``_direction_model`` stays ``None``,
+          ``_direction_features`` stays ``None``, the GEX/ZG fallback
+          path at L545 takes over. Per Q-D10: fall-through over
+          fail-fast — keeps trading running at degraded conviction
+          rather than crashing uvicorn on a dependency hiccup.
+
+        Health-probe states (one-shot at this call site, written via
+        ``write_health_status("direction_model", state, ...)``):
+          - ``healthy``  — Tier 1 hit (local cache).
+          - ``degraded`` — Tier 2 hit (loaded from Supabase fallback).
+          - ``error``    — Tier 3 (both tiers missed).
+
+        Partial-state guard (D3): if a local cache has the .pkl but
+        not the .json (or vice versa), it is treated as a cache miss
+        and triggers Supabase fallback. Eliminates the pre-existing
+        silent failure at the previous L67-89 inline block where
+        ``direction_model_loaded`` would log but inference at L545
+        would short-circuit because ``_direction_features`` stayed
+        ``None``. The same guard is enforced inside
+        ``_load_pickle_and_metadata`` via the empty-features check.
+
+        Storage-client constraint (D2): supabase-py 2.10 uses a
+        SEPARATE httpx client for storage (NOT the HTTP/1.1-patched
+        postgrest client at db.py:132-167). Safe for this single-
+        threaded startup-time call. If storage calls ever fire from
+        scheduler threads later, apply the session-replacement patch
+        to the storage client too.
+
+        Concurrent-instantiation safety (D4 + Q-D11): main.py:1283
+        instantiates one PredictionEngine; trading_cycle.py:34 lazy-
+        instantiates a second. The atomic-rename pattern keeps both
+        safe — second instance either sees the cache populated by
+        the first OR re-downloads independently and atomically
+        replaces the cache file (last writer wins; both writers'
+        bytes are equivalent).
+
+        Test-friendly path overrides: kwargs default to the
+        production paths but accept overrides so unit tests can
+        exercise all three tiers against tmp dirs without monkey-
+        patching ``Path`` or ``__file__`` at module scope.
+        """
+        if local_pkl is None:
+            local_pkl = Path(__file__).parent / "models" / "direction_lgbm_v1.pkl"
+        if local_meta is None:
+            local_meta = Path(__file__).parent / "models" / "model_metadata.json"
+        if cache_pkl is None:
+            cache_pkl = Path("/tmp/lightgbm_cache/direction_lgbm_v1.pkl")
+        if cache_meta is None:
+            cache_meta = Path("/tmp/lightgbm_cache/model_metadata.json")
+
+        # Tier 1 — local cache (1a then 1b). Both files required per
+        # D3 partial-state guard.
+        for pkl_path, meta_path, source_label in (
+            (local_pkl, local_meta, "local-tree"),
+            (cache_pkl, cache_meta, "tmp-cache"),
+        ):
+            if pkl_path.exists() and meta_path.exists():
+                try:
+                    self._load_pickle_and_metadata(pkl_path, meta_path)
+                    logger.info(
+                        "direction_model_loaded",
+                        model_version="v1",
+                        features=len(self._direction_features or []),
+                        source=source_label,
+                    )
+                    self._safe_write_health(
+                        "healthy", last_error_message=None,
+                    )
+                    return
+                except Exception as exc:
+                    # Local cache is corrupt or partial — clear state
+                    # and fall through to Tier 2.
+                    self._direction_model = None
+                    self._direction_features = None
+                    logger.warning(
+                        "direction_model_local_load_failed",
+                        error=str(exc),
+                        source=source_label,
+                    )
+
+        # Tier 2 — Supabase storage fallback.
+        try:
+            self._download_model_from_supabase(cache_pkl, cache_meta)
+            self._load_pickle_and_metadata(cache_pkl, cache_meta)
+            logger.info(
+                "direction_model_loaded",
+                model_version="v1",
+                features=len(self._direction_features or []),
+                source="supabase-fallback",
+            )
+            self._safe_write_health(
+                "degraded",
+                last_error_message=(
+                    "loaded from supabase fallback — local cache absent "
+                    "(expected on Railway cold start)"
+                ),
+            )
+            return
+        except Exception as exc:
+            self._direction_model = None
+            self._direction_features = None
+            logger.warning(
+                "direction_model_supabase_fetch_failed",
+                error=str(exc),
+            )
+
+        # Tier 3 — total miss. Falls through to GEX/ZG at L545.
+        logger.warning(
+            "direction_model_unavailable",
+            message=(
+                "local cache and Supabase fallback both missed; "
+                "GEX/ZG fallback active at L545"
+            ),
+        )
+        self._safe_write_health(
+            "error",
+            last_error_message=(
+                "local cache and Supabase fallback both missed"
+            ),
+        )
+
+    def _load_pickle_and_metadata(
+        self, pkl_path: Path, meta_path: Path,
+    ) -> None:
+        """
+        Load both files together. Raises if either file is unreadable
+        OR if the metadata's ``features`` list is empty — the latter
+        is the D3 partial-state guard. Without this check, a model
+        could load successfully while ``_direction_features`` stayed
+        empty, causing the inference check at L545
+        (``if direction_model is not None and direction_features:``)
+        to short-circuit silently — the bug this PR closes.
+        """
+        import json as _json
+        import pickle
+
+        with open(pkl_path, "rb") as f:
+            model = pickle.load(f)
+        meta = _json.loads(meta_path.read_text())
+        features = meta.get("features", [])
+        if not features:
+            raise RuntimeError(
+                f"model_metadata.json at {meta_path} has empty features "
+                f"list — load aborted to prevent silent inference skip"
+            )
+        self._direction_model = model
+        self._direction_features = features
+
+    def _download_model_from_supabase(
+        self, dest_pkl: Path, dest_meta: Path,
+    ) -> None:
+        """
+        Atomic two-file download from
+        ``ml-models/direction/v1/{direction_lgbm_v1.pkl, model_metadata.json}``.
+
+        Stages both files in a per-process temp dir on the SAME
+        filesystem as the destination so that ``os.replace()`` is
+        atomic. Both downloads must succeed before either move-into-
+        place — if the second download fails, the first is discarded
+        with the staging dir.
+
+        See _load_direction_model() docstring for D2/D4/D11 context.
+        """
+        import os as _os
+        import tempfile
+
+        bucket = "ml-models"
+        pkl_remote_path  = "direction/v1/direction_lgbm_v1.pkl"
+        meta_remote_path = "direction/v1/model_metadata.json"
+
+        cache_root = dest_pkl.parent
+        cache_root.mkdir(parents=True, exist_ok=True)
+        staging_dir = Path(tempfile.mkdtemp(
+            prefix=f".staging-{_os.getpid()}-",
+            dir=str(cache_root),
+        ))
+
+        try:
+            client = get_client()
+            storage = client.storage.from_(bucket)
+
+            # Both downloads BEFORE any move so a mid-flight failure
+            # leaves zero partial state on disk.
+            pkl_bytes  = storage.download(pkl_remote_path)
+            meta_bytes = storage.download(meta_remote_path)
+
+            if not pkl_bytes:
+                raise RuntimeError(
+                    f"empty bytes from supabase {bucket}/{pkl_remote_path}"
                 )
-            except Exception as e:
-                logger.warning("direction_model_load_failed", error=str(e))
-                self._direction_model = None
+            if not meta_bytes:
+                raise RuntimeError(
+                    f"empty bytes from supabase {bucket}/{meta_remote_path}"
+                )
+
+            staged_pkl  = staging_dir / dest_pkl.name
+            staged_meta = staging_dir / dest_meta.name
+            staged_pkl.write_bytes(pkl_bytes)
+            staged_meta.write_bytes(meta_bytes)
+
+            # Per-file atomic rename. POSIX guarantees os.replace()
+            # is atomic within a single filesystem. Two-file rename
+            # is best-effort (a process kill between the two leaves
+            # the cache in partial state) — the D3 partial-state
+            # guard at the next process startup heals that case by
+            # treating partial cache as a miss and re-downloading.
+            _os.replace(str(staged_pkl),  str(dest_pkl))
+            _os.replace(str(staged_meta), str(dest_meta))
+
+            logger.info(
+                "direction_model_supabase_downloaded",
+                bucket=bucket,
+                pkl_path=pkl_remote_path,
+                pkl_bytes=len(pkl_bytes),
+                meta_bytes=len(meta_bytes),
+            )
+        finally:
+            # Best-effort cleanup of any leftover staging files
+            # (typical case: nothing left after rename, dir is empty).
+            try:
+                for p in staging_dir.iterdir():
+                    try:
+                        p.unlink()
+                    except Exception:
+                        pass
+                staging_dir.rmdir()
+            except Exception:
+                pass
+
+    def _safe_write_health(self, state: str, last_error_message: Optional[str] = None) -> None:
+        """
+        Wrap write_health_status so a Supabase write failure during
+        the model-load probe never blocks the model-load path itself.
+        Health is observability, not a runtime dependency.
+        """
+        try:
+            write_health_status(
+                "direction_model",
+                state,
+                last_error_message=last_error_message,
+            )
+        except Exception as exc:
+            logger.warning(
+                "direction_model_health_write_failed",
+                error=str(exc),
+                state=state,
+            )
 
     def _read_redis(self, key: str, default=None):
         if not self.redis_client:
