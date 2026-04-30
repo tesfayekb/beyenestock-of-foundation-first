@@ -463,7 +463,7 @@ class PredictionEngine:
                         datetime.now(timezone.utc)
                         - datetime.fromisoformat(gen_at)
                     ).total_seconds()
-                    if age_s < 1800:  # 30 min
+                    if age_s < 28800:  # 8 hours — coupled with synthesis_agent.py:201 TTL. Synthesis runs once per weekday at 09:15 ET; 8hr window covers full trading day after morning cron without a same-day refresh. If intra-day refresh is later added (cron */30), tighten this back to 1800.
                         direction = synth.get("direction", "neutral")
                         confidence = float(synth.get("confidence", 0.0))
                         strategy_hint = synth.get("strategy", "")
@@ -495,15 +495,44 @@ class PredictionEngine:
                                 _p_bull /= _total
                                 _p_bear /= _total
                                 _p_neutral /= _total
+                            # Match the dict shape emitted by other prediction
+                            # paths (LightGBM L571-573, GEX/ZG L620-622, regime
+                            # fallback L651-660): include signal_weak,
+                            # expected_move_pts, expected_move_pct so downstream
+                            # consumers (no-trade gate at L904, analytics) get
+                            # the same fields they get from non-AI-synth paths.
+                            #
+                            # KEEP strategy_hint (consumed by strategy_selector
+                            # L1019-1075 ai_hint_override path); KEEP
+                            # sizing_modifier (forward-compat pass-through);
+                            # KEEP source (consumed by strategy_selector L1517
+                            # telemetry routing). Schema columns added in
+                            # sibling migration 20260430_add_ai_synthesis_columns.
+                            #
+                            # NEUTRAL guard on signal_weak: a high-conviction
+                            # AI synth neutral prediction (p_bull == p_bear by
+                            # construction) is a real signal that the market
+                            # will pin — iron_condor is the literal play.
+                            # Treating it as signal_weak conflates it with the
+                            # placeholder/no-signal case (regime fallback) and
+                            # would silently block iron_condor trades. The
+                            # gate only fires for directional weakness.
+                            _signal_weak = (
+                                direction != "neutral"
+                                and abs(_p_bull - _p_bear) < 0.05
+                            )
                             return {
-                                "direction": direction,
-                                "p_bull": _p_bull,
-                                "p_bear": _p_bear,
-                                "p_neutral": _p_neutral,
-                                "confidence": confidence,
-                                "strategy_hint": strategy_hint,
-                                "sizing_modifier": sizing_modifier,
-                                "source": "ai_synthesis",
+                                "direction":         direction,
+                                "p_bull":            round(_p_bull, 4),
+                                "p_bear":            round(_p_bear, 4),
+                                "p_neutral":         round(_p_neutral, 4),
+                                "confidence":        round(confidence, 4),
+                                "expected_move_pts": round(10.0 * (_p_bull - _p_bear), 2),
+                                "expected_move_pct": round(0.002 * (_p_bull - _p_bear), 6),
+                                "signal_weak":       _signal_weak,
+                                "strategy_hint":     strategy_hint,
+                                "sizing_modifier":   sizing_modifier,
+                                "source":            "ai_synthesis",
                             }
             except Exception as e:
                 logger.warning("ai_synthesis_parse_failed", error=str(e))
