@@ -296,8 +296,8 @@ export default function ActivationPage() {
                         A/B Validation Gate — Real Capital Deployment
                     </CardTitle>
                     <CardDescription>
-                        Comparing AI synthesis (Portfolio B) vs
-                        rule-based baseline (Portfolio A). Gate
+                        Comparing live paper system (Portfolio B) vs
+                        rule-based shadow baseline (Portfolio A). Gate
                         requires ≥+8% annualized uplift over 90 days
                         and 100+ closed trades.
                     </CardDescription>

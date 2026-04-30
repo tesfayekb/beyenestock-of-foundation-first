@@ -2,9 +2,17 @@
  * A/B Validation Gate — /trading/ab-comparison
  *
  * Phase 3B dashboard. Visualises Portfolio A (rule-based shadow)
- * vs Portfolio B (live AI paper system) over the 90-day validation
+ * vs Portfolio B (live paper system) over the 90-day validation
  * window. The gate opens when ≥90 days, ≥100 closed trades, and
  * Portfolio B leads Portfolio A by ≥+8% annualized.
+ *
+ * Label note: while `agents:ai_synthesis:enabled` is OFF, Portfolio B
+ * uses the same rule-based prediction logic as Portfolio A — the A/B
+ * difference is "synthetic-P&L shadow vs live-execution paper trading"
+ * rather than "rule-based vs AI". When the synthesis flag flips on,
+ * Portfolio B starts consuming AI synthesis output and these labels
+ * may be revised to reflect the AI-vs-rules contrast the gate was
+ * originally designed to validate.
  *
  * Layout follows the MilestonesPage pattern: PageHeader, summary
  * card with progress bars, then a list of comparison cards / table.
@@ -86,7 +94,7 @@ export default function AbComparisonPage() {
         <div className="space-y-6">
             <PageHeader
                 title="A/B Validation Gate"
-                subtitle="Portfolio A (rule-based shadow) vs Portfolio B (live AI paper)"
+                subtitle="Portfolio A (rule-based shadow) vs Portfolio B (live paper system)"
             />
 
             {isError && (
@@ -234,7 +242,7 @@ export default function AbComparisonPage() {
                             {formatCurrency(gate?.b_total_pnl)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            Live AI paper system
+                            Live paper system
                         </p>
                     </CardContent>
                 </Card>
