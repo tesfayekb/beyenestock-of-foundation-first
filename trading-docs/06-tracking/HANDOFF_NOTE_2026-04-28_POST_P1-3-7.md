@@ -1164,12 +1164,32 @@ python -m scripts.preflight_training_env
 
 **Tracker entry:** [T-ACT-044](#t-act-044--sklearn-version-pin--training-env-capture--preflight-script-post-t-act-043-deploy-validation) (Fix PR 5).
 
-### A.4 Future additions
+### A.4 DIAGNOSE-FIRST cumulative-pattern discipline — explicitly check the meta-config that determines what your config does (added 2026-04-30 from T-ACT-040 through T-ACT-044 saga, ratified via Master Forward Plan v1.2 reconciliation PR)
 
-Append future discipline additions here as A.4, A.5, ... Each addition must include: (a) the rule text, (b) the defect that triggered it, (c) the action-tracker entry that documents the discovery.
+**Rule:** Before authorizing a fix proposed by a `DIAGNOSE-FIRST` round, the round MUST explicitly enumerate and verify the **meta-config layer that determines what the config layer actually does** — not just the config layer itself. If the fix touches a config file (`nixpacks.toml`, `requirements.txt`, schema migration, env var, etc.), the DIAGNOSE round MUST surface and verify:
+
+1. **What selects this config?** — e.g., `railway.json` `builder` field selects between Nixpacks and Railpack; `pyproject.toml` `[tool.poetry]` vs `requirements.txt` selects between pip and poetry; database constraint `CHECK` clauses determine which `INSERT` values are valid even when the column type would otherwise admit them; library version pins in `requirements.txt` determine which `.pkl` artifacts unpickle correctly even when the model class library is itself pinned.
+2. **Is the config layer being edited the one that's actually consulted at runtime?** — verify by reading the meta-config file at HEAD, not by assumption based on filename conventions.
+3. **What adjacent surfaces does this config layer participate in?** — e.g., a Python library version pin participates in the entire pickle-graph contributing-library set, not just the directly-imported library; a Postgres CHECK constraint participates in the entire `INSERT`/`UPDATE` validation surface, not just the column-name-matching set.
+
+**Defect pattern that triggered this lesson:** During the 5-PR LightGBM activation saga (T-ACT-040 through T-ACT-044, 2026-04-30), 3 of 5 PRs surfaced adjacent meta-discipline gaps that earlier `DIAGNOSE-FIRST` rounds had failed to enumerate:
+
+- **Fix PR 2 (T-ACT-041) DIAGNOSE missed CHECK constraint allowlist** — the three-tier model loader's health probe wrote `service_name='direction_model'` to `trading_system_health`. The Postgres CHECK constraint `trading_system_health_service_name_check` was an enumerated allowlist, NOT just a NOT NULL / type validator. The DIAGNOSE round verified the column existed and its type but did not verify the CHECK constraint membership. Production hit `psycopg2.errors.CheckViolation` on first probe call, requiring Fix PR 3 migration to expand the allowlist. **Lesson source for A.1.**
+- **Fix PR 3 (T-ACT-042) DIAGNOSE missed Railway builder-pin meta-config** — the fix added `aptPkgs = ["libgomp1"]` to `nixpacks.toml` to provide the OpenMP runtime library `libgomp.so.1` required by the LightGBM Cython binary. The DIAGNOSE round verified `nixpacks.toml` exists in the repo and the syntax for `aptPkgs` was correct. It did NOT verify `railway.json`'s `builder` field — which pins Railway to use **Railpack**, not Nixpacks, making `nixpacks.toml` an inert config. The deploy succeeded (no errors), production logs still showed `OSError: libgomp.so.1: cannot open shared object file`. Required Fix PR 4 to redirect the apt package addition to `railpack.json`'s `deploy.aptPackages` field. **Lesson source for A.2.**
+- **Fix PR 5 (T-ACT-044) DIAGNOSE missed numpy/pandas/scipy 3-library skew via Fix PR 2 Stage 0 freelance pip install** — the operator's local training environment was bootstrapped via Fix PR 2 Stage 0 instructions: `pip install lightgbm pandas pyarrow` with NO version pins. Pip resolved latest wheels (sklearn 1.8.0, numpy 2.4.4, pandas 3.0.2, scipy 1.17.1) — all incompatible with prod's pinned versions. The Fix PR 5 DIAGNOSE initially scoped only sklearn (the library that emitted the visible `InconsistentVersionWarning`). Diagnostic-deepening surfaced that the `.pkl` pickle graph contained references to numpy and scipy types from the LabelEncoder + transformers, AND pandas DataFrame dtypes from feature-engineering caches — making all 4 libraries pickle-critical, not just sklearn. **Lesson source for A.3 (broader scope) + A.4 (this entry, the meta-pattern).**
+
+**The cumulative pattern (this lesson, A.4):** Each `DIAGNOSE-FIRST` round verified its in-scope config layer, but missed an adjacent meta-layer that determined whether the in-scope layer would actually be honored at runtime. The fix is not "do more DIAGNOSE" — DIAGNOSE rounds were rigorous. The fix is "explicitly enumerate the meta-config decision tree before each fix" as a checklist item, not as an emergent insight that surfaces only after deploy validation fails.
+
+**Tracker entries:** Cumulative — T-ACT-041 (Fix PR 2), T-ACT-042 (Fix PR 3), T-ACT-043 (Fix PR 4), T-ACT-044 (Fix PR 5). See [`trading-docs/06-tracking/action-tracker.md`](../../trading-docs/06-tracking/action-tracker.md) for full per-PR audit trail.
+
+**Cross-reference:** `MASTER_ROI_PLAN.md` §1.8 (LightGBM v1 activation chain narrative — full PR sequence + commit SHAs) + §7 F-38 (findings register milestone). Master Forward Plan v1.2 reconciliation PR (`docs/master-forward-plan-v1-2-reconciliation`, 2026-04-30) ratifies this Appendix A.4 entry as part of the governance-doc reconciliation per Task 1 of the v1.2 forward plan.
+
+### A.5 Future additions
+
+Append future discipline additions here as A.5, A.6, ... Each addition must include: (a) the rule text, (b) the defect that triggered it, (c) the action-tracker entry that documents the discovery.
 
 ---
 
 *Handoff note authored 2026-04-28 22:10 UTC-4 by Cursor (Claude Opus 4.7) at end of P1.3.7 EXECUTE session. Owner: tesfayekb. File location: `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md`. End of handoff.*
 
-*Appendix A added 2026-04-30 (T-ACT-042 + T-ACT-043 lessons-learned consolidation; per operator decision D5 in Fix PR 4 DIAGNOSE round). A.3 added 2026-04-30 (T-ACT-044 lessons-learned; per operator decision D1 Scope B in Fix PR 5 DIAGNOSE round).*
+*Appendix A added 2026-04-30 (T-ACT-042 + T-ACT-043 lessons-learned consolidation; per operator decision D5 in Fix PR 4 DIAGNOSE round). A.3 added 2026-04-30 (T-ACT-044 lessons-learned; per operator decision D1 Scope B in Fix PR 5 DIAGNOSE round). A.4 ratified 2026-04-30 via Master Forward Plan v1.2 reconciliation PR (operator decision F7 → option E-ii: cumulative DIAGNOSE-FIRST meta-pattern lesson, distinct from A.1-A.3 single-PR lessons). A.5 reserved as the next "future additions" placeholder slot.*

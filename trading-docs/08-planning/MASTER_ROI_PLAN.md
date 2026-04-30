@@ -1,10 +1,12 @@
-# MarketMuse — Master ROI Plan v2.0.3
+# MarketMuse — Master ROI Plan v2.0.4
 **Owner:** tesfayekb
 **Drafted:** 2026-04-28 (ET)
+**Last reconciled:** 2026-04-30 (ET) — v2.0.3 → v2.0.4 reconciliation per `MarketMuse_Master_Forward_Plan_v1.2.docx` Task 1 (Cluster B closure ratification + 5-PR LightGBM activation chain + Gate B/C/F closure markers + Action 8 trigger TRIPPED).
 **Structural revision:** v1.6 (single document) → v2.0 (β-lite multi-plan governance) per Cursor v1.6 gap-scan structural recommendation. Patch v2.0.1 applied 4 must-fix items from Cursor v2.0 review (G-41 missing from §7; paused-flag enable order missing from §1.4; G-25 + G-29 missing from §7; §3 Gate E typo) plus 2 nice-to-haves.
 **Patch v2.0.2 applies 3 cross-doc consistency items from combined verification round across Master Plan v2.0.1 + Build Roadmap v1.5 + DP v1.5:** **CR-1** (§1.6 + §1.7 misciation: "Phase A LightGBM training → Phase 3E" was wrong; canonical home is Phase 5B Item 13 retraining substrate per Build Roadmap §3.11; Phase 3E is Item 5 Vol Fair-Value Engine which has zero LightGBM training; this was a silent-drop-equivalent that pointed future agents at the wrong phase) + **M-1** (3 sites — Cursor flagged 2 but verification surfaced 3 — AI-SPEC-014 / AI-SPEC-016 dual-naming acknowledged across §1.3 P1.3.9 row + §3 Cluster B + §3 Action 4b; canonical name selection deferred to D-024 ratification per AUDIT_DISPOSITION_PLAN.md §3) + **M-2** (§7 G-25 chain archive cascade scope qualified — was "primary cascade for AI-SPEC-001 V0.2 + 004 + 005 + 010"; Build Roadmap §0 dependency map and DP §1.3 both list only Items 4/5/10 V0.2 as direct cascade; AI-SPEC-001 V0.2 paper-binding depends on chain archive only INDIRECTLY via Item 4 replay harness producing the ≥200 cards). **Per operator standing rule (fix-now over defer-to-later) applied symmetrically to all 5 combined-round items: 3 here, 2 in companion DP v1.5 → v1.6.** Combined verification round caught the natural "settling cost" of Master Plan staying static while companions iterated through 5 review cycles each.
 **Patch v2.0.3 applies converged-state cleanup from second combined verification round (Cursor flagged 7 bounded residuals across the trio after O-2 cleanup advanced Build Roadmap v1.5 → v1.6 + DP v1.6 → v1.7 but didn't propagate companion-version references back to Master Plan). 3 sites in this document: status line (companion sub-plans Build Roadmap v1.5 + DP v1.6 → v1.7 + v1.8) + footer trio composition (Master Plan v2.0.2 + Build Roadmap v1.5 + DP v1.6 → v2.0.3 + v1.7 + v1.8). 4 logical fixes / 6 physical sites in companion Build Roadmap v1.6 → v1.7 (cross-doc version updates [2 sites] + forward-pointer roll-forward [1 site] + §6/§8/§8 H-1/H-2/H-3 carryover residuals from prior cycle [3 sites]). 4 logical fixes / 6 physical sites in companion DP v1.7 → v1.8 (cross-doc version updates [2 sites] + forward-pointer [1 site] + concurrent-note refresh [1 site] + cumulative-fix-count carryover with math correction [1 site] — inherited v1.6 typo "11 prior fixes" was mathematically wrong; should have been 16; v1.8 corrects to actually-correct count 21 prior fixes through v1.7).** Per operator standing rule (fix-now over defer-to-later) applied symmetrically including derived items per Cursor's "DO NOT INTRODUCE FURTHER REGRESSION" instruction. Trio settles at converged-state Master Plan v2.0.3 + Build Roadmap v1.7 + DP v1.8 with zero stale cross-doc version references.
-**Status:** **DRAFT v2.0.3** — awaiting final pre-commit Cursor spot-check on converged-state cleanup; on approval committed alongside companion sub-plans (Build Roadmap v1.7 + DP v1.8)
+**Patch v2.0.3 → v2.0.4 applies post-verification reconciliation per `MarketMuse_Master_Forward_Plan_v1.2.docx` Task 1, executed 2026-04-30 against HEAD `5162020`. Reconciles governance-doc drift between live system state and this document. 7 edit categories applied: (A.1) §1.3 audit-status table rows for P1.3.7 + P1.3.8 flipped from "📋 Next/After" to "✅ DONE" with PR + commit references; (A.2) §4 Action 3 + Action 4 + Action 4b status checkboxes flipped from "[ ] Pending" to current status (3 + 4 done; 4b contingent on C-AI-006-4 option 2 selection); (A.3) §3 Gate B + Gate C + Gate F closure markers added (Gate B locked Apr 28-29 baselines; Gate C closed per AUDIT_FINDINGS_REGISTER L9 Cluster B 4-of-4; Gate F closed PR #74); (A.4) Action 8 trigger flipped from "Conditional" to "TRIPPED" per Apr 28 baseline showing direction_signal_weak >50% pattern (table row L59 + section status L350); (A.5) new §1.8 LightGBM v1 activation chain documenting T-ACT-040 through T-ACT-044 / PRs #82-#86 / 5-PR sequence shipping 2026-04-30 (note: drafted as new §1.7 per Master Forward Plan v1.2 prescription but §1.7 slot already held by "TASK_REGISTER coverage statement", so inserted as new §1.8 to preserve no-cascade-rename intent); (A.6) §7 Findings Tracking Register row F-38 added for the 5-PR LightGBM activation milestone; (A.7) header version v2.0.3 → v2.0.4 + companion-version line updated. Companion sub-plan versions at HEAD: AI_BUILD_ROADMAP v1.8 (already post-audit ratified §3.9 + §3.10 in prior v1.7 → v1.8 cycle, NOT bumped this round per Master Forward Plan v1.2 reconciliation scope decision) + AUDIT_DISPOSITION_PLAN v1.9 (already at v1.9 in prior v1.8 → v1.9 cycle, NOT bumped this round; C-AI-006-4 disposition note deferred to Action 6 D-023 + D-024 ratification PR per operator scope decision). Per operator standing rule (fix-now over defer-to-later) applied symmetrically — but with reconciliation-scope discipline: only this document advances v2.0.3 → v2.0.4; companion sub-plans stay at their current correct versions (v1.8 + v1.9), not artificially bumped.**
+**Status:** **READY-TO-MERGE v2.0.4** — applied via reconciliation PR `docs/master-forward-plan-v1-2-reconciliation` 2026-04-30. Trio composition: Master Plan v2.0.4 + Build Roadmap v1.8 + DP v1.9 (companion versions stay).
 
 ---
 
@@ -56,7 +58,7 @@ This document encodes the agreed-upon plan from a multi-day session ending 2026-
 | 5 | `_RISK_PCT` ladder monotonicity fix (PRE-P11-3 / Action 7b) | ⏳ Pending — Days 7-14 | — |
 | 6 | VVIX z-score deferred fix (S7) — paired with `vix_daily_history` backfill primitive | ⏳ Pending — pre-Action-9 | — |
 | 7 | Phase 0 commission model fix (per TASK_REGISTER §11 Phase 0) | ⏳ Pending — pre-Action-9 | — |
-| 8 | `signal_weak` threshold change (TASK_REGISTER §11 Phase 0) | ⏳ Conditional — only if Action 2 log evidence justifies; conviction-conditional sizing not threshold-only | — |
+| 8 | `signal_weak` threshold change (TASK_REGISTER §11 Phase 0) | 🔴 TRIPPED — Apr 28 baseline showed `direction_signal_weak` at 100% of skips (146 outer + 73 inner over 73 cycles); Apr 29 append confirms dominance; trigger condition (>50%) exceeded by ~2× — queued for Days 7-14 as conviction-conditional sizing redesign | — |
 | 9 | IV/RV no-trade filter (TASK_REGISTER §11 Phase 0; `prediction_engine.py:706`) | ⏳ Pending — pre-Action-9 | — |
 | 10 | (TBD per FINAL_DEPLOY_PLAN_v2.md — operator paste required to enumerate) | ⏳ Pending paste | — |
 
@@ -71,8 +73,8 @@ This document encodes the agreed-upon plan from a multi-day session ending 2026-
 | P1.3.4 | AI-SPEC-010 Counterfactual P&L | A | ✅ Merged (PR #64) |
 | P1.3.5 | AI-SPEC-005 Vol Fair-Value | B | ✅ Merged (PR #65) |
 | P1.3.6 | AI-SPEC-006 Meta-Labeler | B | ✅ Merged (PR #67) |
-| P1.3.7 | AI-SPEC-008 OPRA Flow Alpha | B | 📋 Next — Action 3 |
-| P1.3.8 | AI-SPEC-009 Exit Optimizer | B | 📋 After P1.3.7 — Action 4 |
+| P1.3.7 | AI-SPEC-008 OPRA Flow Alpha | B | ✅ DONE 2026-04-28 (PR #75 `ff7495a`) |
+| P1.3.8 | AI-SPEC-009 Exit Optimizer | B | ✅ DONE 2026-04-29 (PR #77 `363a6ec` — CLOSES CLUSTER B + GATE C) |
 | P1.3.9 | AI-SPEC-014 LightGBM Direction Model (renamed AI-SPEC-016 in AI Build Roadmap; operator selects canonical name at D-024 ratification per `AUDIT_DISPOSITION_PLAN.md` §3) | B | ⚠️ CONTINGENT on C-AI-006-4 → option 2 (default position per audit register). See `AUDIT_DISPOSITION_PLAN.md` |
 | P1.3.10 | AI-SPEC-013 Drift Detection | C-promoted | 📋 First audit post-V0.1 (per AI Build Roadmap) |
 | P1.3.11+ | Remaining Cluster C (AI-SPEC-003/007/011/012) | C | 📋 Per AI Build Roadmap sequencing |
@@ -143,6 +145,27 @@ This is intent only — D-024 ratifies the binding sequence.
 
 If a TASK_REGISTER section is NOT named above, it is governed by other companion plans (AI Build Roadmap or Audit Disposition Plan) per §0 pointer table. No silent drops.
 
+### 1.8 LightGBM v1 activation (2026-04-30, 5 sequential Fix PRs)
+
+After ~8 hours of `DIAGNOSE-FIRST` debugging chained across 5 Fix PRs (T-ACT-040 through T-ACT-044, PRs #82-#86), LightGBM v1 went LIVE in production at commit `8094eff` (20:30 UTC), with full library version-pinning discipline locked at commit `5162020` (21:33 UTC).
+
+System flipped from hardcoded placeholder probabilities (0.35 / 0.30 / 0.35) to real ML conviction signals at holdout-validated 52.9% win rate across 23,668 samples (~9σ from coin-flip).
+
+**PR sequence (chronological, all merged 2026-04-30):**
+- PR #82 (`94edb9a`) — T-ACT-040 — AI synthesis output unblock (TTL coupling fix in `prediction_engine.py` + `synthesis_agent.py` + Supabase schema migration adding `strategy_hint` / `sizing_modifier` / `source` columns to `trading_prediction_outputs`; resolves PGRST204 schema-mismatch persistence failure that was silently dropping AI synthesis predictions)
+- PR #83 (`a77195a`) — T-ACT-041 — three-tier LightGBM model loader (`prediction_engine.py:_load_direction_model`: local file cache → Supabase storage download → silent miss) + Supabase storage `ml-models` bucket bootstrap + `lightgbm` bumped to `4.6.0` in `requirements.txt` + one-shot health probe + partial-state bug fix bundled
+- PR #84 (`eaa7aa8`) — T-ACT-042 — `libgomp1` via `nixpacks.toml` (subsequently confirmed INERT — Railway uses Railpack, see PR #85) + `trading_system_health` CHECK constraint expansion via migration `20260430_add_direction_model_to_health_constraint.sql` to admit `service_name='direction_model'` for the loader's health probe
+- PR #85 (`8094eff`) — T-ACT-043 — `railpack.json` `deploy.aptPackages: ["libgomp1"]` (the actually-effective fix — Railway's `railway.json` pins builder to RAILPACK, making `nixpacks.toml` inert) + `nixpacks.toml` deletion + audit corrections in `06-tracking/action-tracker.md` for T-ACT-042 inert state — **LIGHTGBM ACTIVATED** at this commit
+- PR #86 (`5162020`) — T-ACT-044 — `scikit-learn==1.5.2` exact pin in `requirements.txt` (resolves `InconsistentVersionWarning` 1.8.0-trained vs 1.5.2-prod skew) + `_capture_training_environment()` in `backend/scripts/train_direction_model.py` (writes Python + library + OS metadata into `model_metadata.json` at save time) + new `backend/scripts/preflight_training_env.py` validator script for operator pre-training environment check (covers the 4 pickle-critical libraries: scikit-learn, numpy, pandas, scipy)
+
+**Lessons-learned (HANDOFF NOTE Appendix A discipline additions, governance-grade):**
+- **A.1** — Health-probe `service_name` values must be allowlist-checked against `trading_system_health_service_name_check` migration before adding new probe (T-ACT-042 / Fix PR 3)
+- **A.2** — Deploy-config edits must validate the meta-config (Railway uses `railway.json` `builder` field to select between Nixpacks and Railpack; modifying the wrong builder's config is a silent no-op) (T-ACT-043 / Fix PR 4)
+- **A.3** — Pickled ML artifacts depend on every library that participated in the original `pickle.dump()` call graph, not just the model class library; pin scikit-learn + numpy + scipy + pandas + lightgbm exactly, capture training environment metadata in `model_metadata.json` at save time, validate with preflight script before training (T-ACT-044 / Fix PR 5)
+- **A.4** — Cumulative DIAGNOSE-FIRST pattern lesson — during the 5-PR saga, 3 of 5 PRs surfaced adjacent meta-discipline gaps that earlier DIAGNOSE rounds had missed (Fix PR 2 missed CHECK constraint allowlist; Fix PR 3 missed Railway builder-pin meta-config; Fix PR 5 missed numpy/pandas/scipy 3-library skew via Fix PR 2 Stage 0 freelance `pip install`); future DIAGNOSE rounds must explicitly check the "meta-config that determines what the config does" before authorizing the fix (ratified 2026-04-30 from cumulative T-ACT-040 through T-ACT-044 saga)
+
+See `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md` Appendix A for full lesson-learned text and discipline-rule integration.
+
 ---
 
 ## 2 — The Decision That Defines This Plan
@@ -182,15 +205,17 @@ Activating `agents:ai_synthesis:enabled` requires ALL of:
 - **Resolution:** Action 1 (Day 0)
 
 ### Gate B — Empirical baseline established
-- ✅ DO NOT activate without knowing post-Commit-3 no-trade-reason distribution
+**Status:** ✅ LOCKED 2026-04-30 — Apr 28 baseline (PR #73) + Apr 29 append (PR #78) confirms `direction_signal_weak` >50% pattern (100% of skips at Apr 28 across 73 cycles; dominance pattern persists at Apr 29 append). Apr 30 skipped intentionally per regime contamination during the 5-PR LightGBM activation chain. Sufficient evidence to ratify Action 8 trigger as TRIPPED. See `trading-docs/08-planning/ROI_LOG_BASELINE_2026-04-28.md`.
+- ✅ DO NOT activate without knowing post-Commit-3 no-trade-reason distribution (historical context, retained)
 - 13 distinct skip paths exist (12 enumerated + 1 implicit min-contracts floor)
 - Without baseline, AI-vs-rules attribution becomes impossible after activation
-- **Resolution:** Action 2 (Day 0)
+- **Resolution:** Action 2 (Day 0) — completed 2026-04-28 (PR #73) + 2026-04-29 append (PR #78)
 
 ### Gate C — Cluster B audit cadence complete
-- ✅ DO NOT activate before Cluster B closes
-- Cluster B = AI-SPEC-005 (done) + AI-SPEC-006 (done) + AI-SPEC-008 (next) + AI-SPEC-009 + possibly AI-SPEC-014 / AI-SPEC-016 (same spec — register uses 014, Build Roadmap uses 016 per Cursor v1.0 H-1 collision avoidance with deferred Item 14 Tournament Engine; canonical name selected at D-024 ratification per `AUDIT_DISPOSITION_PLAN.md` §3; contingent on C-AI-006-4 resolution)
-- **Resolution:** Actions 3, 4, conditional 4b (Days 1-5)
+**Status:** ✅ CLOSED 2026-04-29 — Cluster B complete 4 of 4 audits (P1.3.5 + P1.3.6 + PR #75 P1.3.7 + PR #77 P1.3.8). Per `AUDIT_FINDINGS_REGISTER.md` L9 verbatim attribution: *"CLUSTER B AUDIT 4 of 4 — CLUSTER B COMPLETE; CLOSES GATE C OF PATH Y ACTIVATION"*. Contingent P1.3.9 path-fork (Action 4b + C-AI-006-4 disposition) is INDEPENDENT of Gate C closure — Gate C closes on Cluster B alone; P1.3.9 is a 5th-audit candidate triggered only if C-AI-006-4 → option 2 selected at Action 5a.
+- ✅ DO NOT activate before Cluster B closes (historical context, retained)
+- Cluster B = AI-SPEC-005 (✅ PR #65) + AI-SPEC-006 (✅ PR #67) + AI-SPEC-008 (✅ PR #75 `ff7495a` 2026-04-28) + AI-SPEC-009 (✅ PR #77 `363a6ec` 2026-04-29 — closes Cluster B + Gate C) + possibly AI-SPEC-014 / AI-SPEC-016 (same spec — register uses 014, Build Roadmap uses 016 per Cursor v1.0 H-1 collision avoidance with deferred Item 14 Tournament Engine; canonical name selected at D-024 ratification per `AUDIT_DISPOSITION_PLAN.md` §3; contingent on C-AI-006-4 resolution; INDEPENDENT of Gate C closure)
+- **Resolution:** Actions 3, 4 complete (Days 1-2); Action 4b conditional on C-AI-006-4 option 2 at Action 5a
 
 ### Gate D — Activation criteria + governance ratified
 - ✅ DO NOT activate without measurable success/abort thresholds
@@ -207,11 +232,12 @@ Activating `agents:ai_synthesis:enabled` requires ALL of:
 - **Resolution:** Commit 4 (Action 7) runs in parallel with audit track
 
 ### Gate F — `_RISK_PCT` ladder monotonicity fix landed BEFORE Action 9
-- ✅ DO NOT activate (Action 9) until `_RISK_PCT` ladder is fixed
-- **Bug:** `backend/risk_engine.py:78-83` — Phase 1 core risk = 0.010 BUT Phase 2 core risk = 0.0075 → Phase 1 → 2 advancement DROPS sizing 25%
-- **Already tracked as PRE-P11-3** in `AUDIT_FINDINGS_REGISTER.md:53`
-- **Sequencing constraint from PRE-P12-2:** ladder fix must land BEFORE AI-SPEC-012 build begins; constraint satisfied automatically by Day 7-14 landing window
-- **Resolution:** Action 7b — hard Day 7-14 deliverable
+**Status:** ✅ CLOSED — PR #74 (`13d2b18`). Phase 2-4 core + satellite risk-pct values scaled 2× to preserve dollar-equivalent ladder post-2026-04-20 width widening; monotonicity restored across Phase 1 → 4 ladder. PRE-P11-3 closed in `AUDIT_FINDINGS_REGISTER.md`.
+- ✅ DO NOT activate (Action 9) until `_RISK_PCT` ladder is fixed (historical context, retained)
+- **Bug (now fixed):** `backend/risk_engine.py:78-83` previously had Phase 1 core risk = 0.010 BUT Phase 2 core risk = 0.0075 → Phase 1 → 2 advancement DROPPED sizing 25%
+- **Already tracked as PRE-P11-3** in `AUDIT_FINDINGS_REGISTER.md:53` (now closed per PR #74)
+- **Sequencing constraint from PRE-P12-2:** ladder fix must land BEFORE AI-SPEC-012 build begins; constraint satisfied — fix landed pre-Action-9
+- **Resolution:** Action 7b — completed via PR #74 `13d2b18`
 
 **Activation = ALL SIX GATES PASSED.**
 
@@ -262,13 +288,13 @@ Activating `agents:ai_synthesis:enabled` requires ALL of:
 **Owner:** Cursor (audit producer); Claude (audit prompt drafter); operator (review + merge)
 **Estimated work:** 1 day per existing P1.3.x cadence
 **ROI vector:** C
-**Status:** [ ] Pending Action 1 + Action 2 complete
+**Status:** [x] DONE 2026-04-28 (PR #75 `ff7495a`). AI-SPEC-008 redline at `trading-docs/08-planning/ai-architecture-audits/AI-SPEC-008.md` (583 lines, 14 sections + §0 Pre-Audit Verification). Findings: 2 Class A + 18 Class B + 4 Class C in `AUDIT_FINDINGS_REGISTER.md` (A-AI-008-1..2 + B-AI-008-1..18 + C-AI-008-1..4). Recommended status `RATIFY-WITH-AMENDMENTS`. Post-audit handoff note PR #76 (`de62378`).
 
 ### Days 3-4 (2026-05-01 to 05-02)
 
 #### Action 4 — P1.3.8 audit (AI-SPEC-009 Exit Optimizer) (Gate C)
 **Owner:** Same roles as Action 3
-**Status:** [ ] Pending Action 3 complete
+**Status:** [x] DONE 2026-04-29 (PR #77 `363a6ec`). AI-SPEC-009 redline at `trading-docs/08-planning/ai-architecture-audits/AI-SPEC-009.md` (771 lines; 4 Class A + 20 Class B + 6 Class C findings). **Closes Cluster B (4 of 4) and Gate C of Path Y activation per `AUDIT_FINDINGS_REGISTER.md` L9 verbatim attribution.**
 
 ### Day 4 — late-day decision gate
 
@@ -276,7 +302,7 @@ Activating `agents:ai_synthesis:enabled` requires ALL of:
 **Owner:** Operator + Claude (consultation)
 **Estimated work:** 30-45 minutes (single decision)
 **Scope:** Operator decides among C-AI-006-4 options 1/2/3 per `AUDIT_DISPOSITION_PLAN.md` enumeration. Outcome triggers Action 4b OR skips it.
-**Status:** [ ] Pending Action 4 complete
+**Status:** [ ] PENDING operator decision — Action 4 dependency is ✅ DONE 2026-04-29 (PR #77) so this gate is now unblocked. C-AI-006-4 disposition note will be folded into the Action 6 (D-023 + D-024) ratification PR per Master Forward Plan v1.2 reconciliation scope decision (operator F4).
 
 ### Day 5 — CONTINGENT (only if Action 5a → option 2)
 
@@ -284,7 +310,7 @@ Activating `agents:ai_synthesis:enabled` requires ALL of:
 **Trigger:** ONLY if Action 5a → option 2
 **Owner:** Cursor / Claude / operator
 **Estimated work:** 1 day per cadence
-**Status:** [ ] Conditional — pending Action 5a decision
+**Status:** [ ] CONTINGENT on C-AI-006-4 → option 2 operator decision (Action 5a). Cluster B is otherwise CLOSED (4 of 4 audits complete) without P1.3.9; option 2 selection triggers a 5th audit. AI-SPEC-014 / AI-SPEC-016 canonical naming pending D-024 ratification per `AUDIT_DISPOSITION_PLAN.md` §3. Action 4 (P1.3.8) and Cluster B closure are NOT blocked by this contingency.
 
 ### Days 5-6 — Activation criteria draft
 
@@ -302,7 +328,7 @@ Activating `agents:ai_synthesis:enabled` requires ALL of:
   - **A/B comparison methodology — leverages existing `backend/shadow_engine.py`** (Portfolio A rule-based baseline → `shadow_predictions` table). When AI activates, AI synthesis becomes Portfolio B; existing infrastructure handles attribution. **No new A/B infrastructure required.**
   - **Capital scaling tuning discipline** — D-024 documents minimum sessions of positive Sharpe before increase, max increase per amendment, etc.
 - Document committed to `trading-docs/00-governance/ai-synthesis-activation-criteria.md`
-**Status:** [ ] Pending Action 4 (and conditionally 4b) complete
+**Status:** [ ] PENDING Action 5a decision (and conditionally 4b). Action 4 (P1.3.8) is now ✅ DONE 2026-04-29 (PR #77), so the Action 4 dependency is satisfied; Action 5b D-024 drafting unblocks as soon as Action 5a operator decision lands. If Action 5a → option 2, additionally awaits Action 4b (P1.3.9) per Cluster B 5th-audit path-fork.
 
 ### Day 7 — Ratification
 
@@ -337,17 +363,17 @@ Activating `agents:ai_synthesis:enabled` requires ALL of:
 **Note on PRE-P12-2 sequencing:** Constraint satisfied automatically because AI-SPEC-012 / Cluster C is post-V0.1 per `AI_BUILD_ROADMAP.md`
 **Status:** [ ] Hard Day 7-14 deliverable
 
-#### Action 8 — CONDITIONAL: redesigned `signal_weak` change as conviction-conditional sizing
-**Trigger:** ONLY if Action 2 logs show `direction_signal_weak` is genuinely the dominant gate (>50% of skips post-2026-04-27 16:08 ET)
-**Decision rule:** If logs show another gate dominates, Action 8 is a no-op
-**Scope (if proceeding):**
+#### Action 8 — TRIPPED: redesigned `signal_weak` change as conviction-conditional sizing
+**Trigger:** TRIPPED 2026-04-30 — Apr 28 baseline showed `direction_signal_weak` at 100% of skips (146 outer + 73 inner over 73 cycles); Apr 29 append confirms dominance pattern. Trigger condition (>50%) exceeded by ~2×. Conditional status retired; conviction-conditional sizing redesign authorized for Days 7-14 sequencing per Gate E 3-way max formula.
+**Decision rule:** Was "if logs show another gate dominates, Action 8 is a no-op" — superseded by Apr 28-29 baseline evidence.
+**Scope (now committed for Days 7-14):**
 - Lower threshold from 0.05 → 0.03
 - ADD sizing modifier: trades in 0.03 ≤ |p_bull - p_bear| < 0.05 band get 0.5× contracts
 - Trades with |p_bull - p_bear| ≥ 0.05 retain 1.0× sizing
 - New test asserts borderline trades open at reduced size
 - Sequence ≥5 trading days BEFORE Action 7 deploy for clean Sharpe attribution
 - **Sequencing branch:** if Action 8 cannot ship ≥5 trading days before Action 7, defers to (Action 7 ship + 5 trading days) via Gate E 3-way max formula
-**Status:** [ ] Conditional
+**Status:** [ ] TRIPPED — queued for Days 7-14. Conviction-conditional sizing redesign authorized; implementation tracked in companion action-tracker (`trading-docs/06-tracking/action-tracker.md`) as new T-ACT-045 placeholder when build begins.
 
 ### Days 14-21 — Path Y activation
 
@@ -458,6 +484,7 @@ These are NOT in this plan's scope but are explicitly tracked elsewhere or defer
 | F-31 | `polygon:vvix:z_score` mislabeled 100-min intraday window bug | Cursor v1.2 MISS-2 | [ ] Pre-AI Commit 6 |
 | F-32 | Time-to-first-ML-model: meta-label is trade-gated; direction model is session-gated | Cursor v1.2 MISS-3 + v1.3 W3 | Informational |
 | F-37 | Min-contracts implicit 13th skip path | Cursor v1.2 (less critical) | [ ] Action 2 baseline |
+| F-38 | LightGBM v1 activation chain — 5 sequential Fix PRs (T-ACT-040 through T-ACT-044, PRs #82-#86) shipping 2026-04-30 from hardcoded 0.35/0.30/0.35 placeholder probabilities to real ML conviction signals at holdout-validated 52.9% win rate; activated at PR #85 (`8094eff`); version-pinning discipline locked at PR #86 (`5162020`); 4 governance-grade lessons-learned ratified into HANDOFF NOTE Appendix A.1-A.4 | Master Forward Plan v1.2 reconciliation (this PR) | [x] DONE 2026-04-30 — see `trading-docs/06-tracking/action-tracker.md` T-ACT-040..044 + §1.8 above |
 | **G-2N** | **Source register references for cross-tracking with other 2 sub-plans:** | | |
 | G-25 | Chain archive substrate operator decision (C-AI-004-4) — primary cascade dependency for AI-SPEC-004 V0.1 + AI-SPEC-005 V0.2 + AI-SPEC-010 V0.2 (per AI Build Roadmap §0 dependency map + AUDIT_DISPOSITION_PLAN §1.3); INDIRECT cascade to AI-SPEC-001 V0.2 paper-binding (≥200 cards via Item 4 replay harness — corrected from v2.0.1 "primary cascade for AI-SPEC-001 V0.2" overstatement per combined-round M-2); default position option 3 (V0.1-advisory-only) | Cursor gap scan §3.B | [ ] AUDIT_DISPOSITION_PLAN.md |
 | G-29 | C-AI-006-1 Authority Recovery automatic-vs-operator-mediated — first authority-boundary Class C in Cluster B; bilateral with AI-SPEC-005 §5; CRITICAL — governs Items 5 + 6 simultaneously | Cursor gap scan §3.B | [ ] AUDIT_DISPOSITION_PLAN.md |
@@ -493,4 +520,4 @@ Source reviews archived in conversation transcripts.
 
 ---
 
-*End of Master ROI Plan v2.0.3 — DRAFT awaiting final pre-commit Cursor spot-check on converged-state cleanup (3 sites in this doc; 4 in Build Roadmap v1.7; 4 in DP v1.8); on approval commit trio together as Phase 2 deliverable: Master Plan v2.0.3 + Build Roadmap v1.7 + DP v1.8. Historical: combined-round patches CR-1 + M-1 + M-2 were applied at v2.0.1 → v2.0.2 (intact through v2.0.3); v2.0.3 is converged-state cleanup only — no substantive content changes, only cross-doc version reference alignment.*
+*End of Master ROI Plan v2.0.4 — applied via reconciliation PR `docs/master-forward-plan-v1-2-reconciliation` 2026-04-30 against HEAD `5162020` per `MarketMuse_Master_Forward_Plan_v1.2.docx` Task 1. Trio composition at HEAD: Master Plan v2.0.4 (this doc, advanced this round) + Build Roadmap v1.8 (already post-audit ratified §3.9 + §3.10 in prior v1.7 → v1.8 cycle, NOT bumped this round per scope decision) + DP v1.9 (already at v1.9 from prior v1.8 → v1.9 cycle, NOT bumped this round; C-AI-006-4 disposition note deferred to Action 6 D-023 + D-024 ratification PR per operator scope decision). Historical: v2.0.1 → v2.0.2 applied combined-round patches CR-1 + M-1 + M-2; v2.0.2 → v2.0.3 applied converged-state cleanup; v2.0.3 → v2.0.4 applies post-Cluster-B-closure governance reconciliation (§1.3 audit table flips + §1.8 LightGBM activation chain + §3 Gate B/C/F closure markers + §4 Action 3/4/4b/8 status flips + §7 F-38 milestone row + companion-version alignment). All edits operator-authorized per per-flag decisions on F1-F9 DIAGNOSE flags.*

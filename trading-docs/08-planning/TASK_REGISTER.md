@@ -393,6 +393,17 @@ print('Thresholds: 5=butterfly, 20=kelly+straddle+flow+sentiment, 40=ai_hint, 10
 - [x] _safe_redis() in prediction_engine — staleness-aware Redis reads
 - [x] prediction_watchdog, emergency_backstop, position_reconciliation in health monitoring
 
+### LightGBM v1 Activation Chain — 2026-04-30 (5 sequential Fix PRs)
+- [x] T-ACT-040 / PR #82 (`94edb9a`) — AI synthesis output unblock (TTL coupling + schema migration)
+- [x] T-ACT-041 / PR #83 (`a77195a`) — three-tier LightGBM model loader + Supabase storage fallback + `lightgbm` 4.6.0 bump
+- [x] T-ACT-042 / PR #84 (`eaa7aa8`) — `trading_system_health` CHECK constraint expansion for `direction_model` (the `nixpacks.toml` portion of this PR was subsequently confirmed inert; superseded by T-ACT-043)
+- [x] T-ACT-043 / PR #85 (`8094eff`) — `railpack.json` `deploy.aptPackages: ["libgomp1"]` + `nixpacks.toml` deletion — **LightGBM activated in production at this commit**
+- [x] T-ACT-044 / PR #86 (`5162020`) — `scikit-learn==1.5.2` exact pin + training-environment metadata capture + `preflight_training_env.py` validator
+- [x] System flipped from hardcoded 0.35/0.30/0.35 placeholder probabilities to real ML conviction signals at holdout-validated 52.9% win rate across 23,668 samples
+- [x] 4 governance-grade lessons-learned (HANDOFF NOTE Appendix A.1-A.4) ratified
+
+**Full per-PR detail and audit trail:** `trading-docs/06-tracking/action-tracker.md` T-ACT-040 through T-ACT-044 entries. **Cross-references:** `trading-docs/08-planning/MASTER_ROI_PLAN.md` §1.8 (activation narrative) + §7 F-38 (findings register milestone) + `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md` Appendix A (cumulative DIAGNOSE-FIRST discipline additions).
+
 ---
 
 ## SECTION 8 — ONGOING HARDENING (Any Sprint)
