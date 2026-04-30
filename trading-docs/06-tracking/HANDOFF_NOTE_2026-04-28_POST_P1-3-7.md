@@ -1136,12 +1136,40 @@ For any change to `nixpacks.toml`, `railpack.json`, `Dockerfile`, `Procfile`, `.
 
 **Defect that triggered this:** PR 3 (T-ACT-042) edited `nixpacks.toml` to add `aptPkgs = ["libgomp1"]`. Empirically inert — Railway uses Railpack per `railway.json:4`. Same `libgomp.so.1` error appeared in deploy `eaa7aa8` post-PR-3-merge, costing a deploy cycle and forcing T-ACT-043 + Fix PR 4.
 
-### A.3 Future additions
+### A.3 Pickled ML artifacts — pin every contributing library (added 2026-04-30 from T-ACT-044 / Fix PR 5)
 
-Append future discipline additions here as A.3, A.4, ... Each addition must include: (a) the rule text, (b) the defect that triggered it, (c) the action-tracker entry that documents the discovery.
+For any pickled ML model artifact (e.g. `direction_lgbm_v1.pkl`), the pickle's deserialization at production load time depends on EVERY library whose objects are reachable from the pickled object graph, not just the headline ML library. Concretely, an `LGBMClassifier` pickle includes:
+
+- `lightgbm.Booster` state (lightgbm)
+- `sklearn.preprocessing.LabelEncoder` (auto-created by `LGBMClassifier` when fit on string labels — see `backend/scripts/train_direction_model.py:394-396`) — sklearn
+- `numpy.ndarray` for `classes_`, `feature_importances_`, internal feature buffers — numpy
+- Various scipy-derived utilities (scipy, transitively via sklearn)
+
+Discipline:
+
+1. **Identify the full set of pickle-critical libraries** for any new ML artifact format. For sklearn-flavored estimators: at minimum `{scikit-learn, numpy, pandas, scipy, lightgbm}` plus the headline ML library. The canonical list is maintained in `backend/scripts/preflight_training_env.py` `PICKLE_CRITICAL` tuple — update there whenever a new pickle-critical library is added.
+2. **Pin EVERY pickle-critical library to an exact version** (`==X.Y.Z`) in `backend/requirements.txt`. NO range pins (`>=`, `<`, `~=`) on pickle-critical libraries. A range pin is itself a defect surfaced by `preflight_training_env.py`.
+3. **Capture training-environment versions** of all pickle-critical libraries in `model_metadata.json` at training time. The `_capture_training_environment()` helper in `train_direction_model.py` writes a `training_environment` dict that records python, sklearn, numpy, pandas, scipy, lightgbm versions plus platform + hostname. This enables forensic reconstruction of any artifact's training context AND enables future runtime version-skew detection at model load (deferred to follow-up PR per T-ACT-044 D5).
+4. **Always install training venvs via `pip install -r backend/requirements.txt`** OR via the `preflight_training_env.py` cycle that validates versions against `requirements.txt`. NEVER freelance `pip install <pkg>` without version pins for pickle-critical libraries — this is exactly how T-ACT-044 was triggered.
+
+Operator-runnable preflight (run BEFORE every training session):
+
+```bash
+cd backend
+python -m scripts.preflight_training_env
+# Exit 0: safe to train. Exit 1: fix the venv first (script prints copy-paste pip command).
+```
+
+**Defect that triggered this lesson:** PR 2 Stage 0 instructed `pip install lightgbm pandas pyarrow` in a fresh Python 3.11 venv WITHOUT version pins. Pip resolved latest available wheels — sklearn 1.8.0, numpy 2.4.4 (MAJOR version skew vs prod's 1.26.4), pandas 3.0.2 (MAJOR), scipy 1.17.1. The resulting model loaded successfully in production but emitted `InconsistentVersionWarning: Trying to unpickle estimator LabelEncoder from version 1.8.0 when using version 1.5.2`, costing 1 deploy cycle to diagnose + retrain. Defense-in-depth at `prediction_engine.py:861-865` (string-name lookup via `direction_model.classes_` rather than integer-index from internal LabelEncoder mapping) silently absorbed the warning for an unknown number of prediction cycles — informational evidence that defensive coding patterns matter even when version pins fail.
+
+**Tracker entry:** [T-ACT-044](#t-act-044--sklearn-version-pin--training-env-capture--preflight-script-post-t-act-043-deploy-validation) (Fix PR 5).
+
+### A.4 Future additions
+
+Append future discipline additions here as A.4, A.5, ... Each addition must include: (a) the rule text, (b) the defect that triggered it, (c) the action-tracker entry that documents the discovery.
 
 ---
 
 *Handoff note authored 2026-04-28 22:10 UTC-4 by Cursor (Claude Opus 4.7) at end of P1.3.7 EXECUTE session. Owner: tesfayekb. File location: `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md`. End of handoff.*
 
-*Appendix A added 2026-04-30 (T-ACT-042 + T-ACT-043 lessons-learned consolidation; per operator decision D5 in Fix PR 4 DIAGNOSE round).*
+*Appendix A added 2026-04-30 (T-ACT-042 + T-ACT-043 lessons-learned consolidation; per operator decision D5 in Fix PR 4 DIAGNOSE round). A.3 added 2026-04-30 (T-ACT-044 lessons-learned; per operator decision D1 Scope B in Fix PR 5 DIAGNOSE round).*
