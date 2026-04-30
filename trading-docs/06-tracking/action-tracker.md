@@ -29,6 +29,143 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-042 — LightGBM runtime deps unblock (libgomp1 + CHECK constraint)
+
+- **id:** T-ACT-042
+- **date:** 2026-04-30
+- **action:** Two production-only defects discovered during T-ACT-041
+  deploy validation at Railway commit `a77195a`. Both block the
+  LightGBM model from actually executing in production. Without
+  this PR, the 1.56 MB `direction_lgbm_v1.pkl` artifact uploaded
+  to Supabase storage delivers correctly but unpickles to an
+  OSError, the Tier 2 path falls through to Tier 3 (GEX/ZG
+  fallback per the Q-D10 design), and the system runs entirely
+  on the GEX/ZG edge — the 52.9% directional edge from PR 2 stays
+  inert.
+  - **Defect A — `libgomp.so.1` missing in Railway container:**
+    Railway log at commit `a77195a`:
+      `direction_model_supabase_downloaded pkl_bytes=1638141 meta_bytes=929`
+      `direction_model_supabase_fetch_failed error=libgomp.so.1: cannot open shared object file: No such file or directory`
+      `direction_model_unavailable message=local cache and Supabase fallback both missed; GEX/ZG fallback active at L545`
+    Root cause: LightGBM 4.6.0 manylinux wheel intentionally does
+    NOT vendor `libgomp.so.1` (per `lightgbm-org/LightGBM#7141`
+    and `microsoft/LightGBM#3041` — design choice to avoid
+    OpenMP runtime conflicts; documented on the PyPI page). The
+    failure site is `pickle.load(f)` inside
+    `_load_pickle_and_metadata()` → Unpickler resolves
+    `LGBMClassifier` → triggers `import lightgbm.basic` →
+    `_lib_lightgbm.so.dlopen("libgomp.so.1")` → OSError because
+    Railway's Nixpacks base image (Ubuntu) doesn't include the
+    OpenMP runtime by default. The Q-D10 fall-through design
+    correctly prevented uvicorn from crashing — but it also
+    correctly prevented inference from happening.
+    Fix: 1-line addition to `nixpacks.toml` `[phases.setup]`:
+      `aptPkgs = ["libgomp1"]`
+    `libgomp1` is the canonical Debian package providing
+    `libgomp.so.1`. Confirmed via 3 independent sources: official
+    LightGBM PyPI page docs, lightgbm-org issue #7141 wheel
+    inspector output, and Stack Overflow Q-55036740 (9.5K views,
+    accepted answer with `apt-get install libgomp1`).
+    Establishes the project's first use of Nixpacks `aptPkgs`;
+    cited in commit body so future contributors have a reference.
+  - **Defect B — CHECK constraint rejects `service_name='direction_model'`:**
+    Railway log at commit `a77195a`:
+      `health_write_failed error={'code': '23514', 'details': 'Failing row contains (..., direction_model, error, ...)', 'message': 'new row for relation "trading_system_health" violates check constraint "trading_system_health_service_name_check"'}`
+    Root cause: PR 2's DIAGNOSE Q-D6 verified `direction_model`
+    didn't collide with the 23 existing service names in
+    `write_health_status()` call sites, but missed that
+    `service_name` has a CHECK constraint with an explicit
+    allowlist (defined originally at
+    `20260416172751_0ef832ac-fab6-4da7-a0d0-050df61b399f.sql:222`
+    and last updated at
+    `20260421_health_service_name_eod_jobs.sql:11-42`). The
+    `_safe_write_health()` wrapper at `prediction_engine.py`
+    correctly logs and swallows the constraint violation so the
+    model load is unaffected — but the Engine Health admin page
+    can't surface model state.
+    Fix: new migration
+    `20260430_add_direction_model_to_health_constraint.sql`
+    follows the established DROP IF EXISTS + ADD pattern from
+    20260419 and 20260421. Preserves all 23 prior allowlist
+    entries and appends `'direction_model'` with an inline
+    comment documenting the state semantics ('degraded' is the
+    expected steady state on Railway cold start, not an error
+    condition).
+  - **Lessons-learned (Q-D6 diagnostic checklist addition):**
+    For any new health-probe `service_name` in future PRs, the
+    DIAGNOSE round MUST validate against migration files
+    defining CHECK constraints, NOT just runtime call sites.
+    "No collision with existing names" is a necessary but not
+    sufficient check. Add to the future Q-D6 template:
+    "(b) verify `service_name` is in the most-recent migration
+    that defines `trading_system_health_service_name_check`; if
+    not, add a DROP+ADD migration in the same PR." This is a
+    one-line discipline addition that would have caught Defect
+    B in PR 2's DIAGNOSE round and saved a deploy cycle.
+- **type:** infrastructure + migration
+- **phase:** phase_5_post_action_8_unblock
+- **impact:** HIGH — activation gate for T-ACT-041's full ROI
+  trajectory. Without this PR, the LightGBM model from PR 2 is
+  effectively a no-op in production (loads from Supabase but
+  fails to unpickle). With this PR, the next Railway redeploy
+  unpickles successfully on first cold start, `lgbm_v1` source
+  rows appear in `trading_prediction_outputs`, and the Engine
+  Health admin page reflects model state correctly. Combined
+  with T-ACT-040 (AI synthesis output unblock) and T-ACT-041
+  (LightGBM hybrid deployment), this completes the chain that
+  unlocks Action 8 (Conviction-Conditional Sizing) authorization
+  once 3+ trading days of real-conviction data accumulate.
+- **owner:** Cursor (DIAGNOSE + EXECUTE) + Operator (production
+  log capture + per-defect authorization + post-merge migration
+  application + redeploy)
+- **modules_affected:**
+  - `nixpacks.toml` (adds `aptPkgs = ["libgomp1"]`)
+  - `supabase/migrations/20260430_add_direction_model_to_health_constraint.sql`
+    (NEW, expands the CHECK allowlist by 1 entry)
+- **docs_updated:**
+  - `trading-docs/06-tracking/action-tracker.md` (this entry)
+- **foundation_impact:** NONE — Nixpacks change is trading-image-
+  scoped (the `sentinel/Dockerfile` GCP service has its own
+  separate base image and does not consume nixpacks.toml).
+  Migration is additive + idempotent + scoped to the trading-
+  owned `trading_system_health` table.
+- **verification:**
+  - Pre-merge static checks: `nixpacks.toml` parses cleanly
+    (1-line additive change), migration SQL parses cleanly
+    (idempotent DROP IF EXISTS + ADD).
+  - Pre-merge Q-A2 triangulation: `libgomp1` confirmed canonical
+    package via 3 independent authoritative sources (LightGBM
+    PyPI docs, lightgbm-org/LightGBM#7141 wheel inspector,
+    Stack Overflow Q-55036740 accepted answer).
+  - Pre-merge Q-B-conflict-scan: no other branches or pending
+    PRs touch `supabase/migrations/`; established 2-prior-migration
+    precedent (20260419, 20260421) for the DROP+ADD pattern.
+  - Post-deploy operator verification (after migration applied
+    + branch merged + Railway redeploys):
+      a. Railway log grep: `direction_model_loaded source=supabase-fallback`
+         appears (no more `direction_model_supabase_fetch_failed`).
+      b. Supabase: `SELECT * FROM trading_system_health WHERE
+         service_name='direction_model';` returns exactly 1 row
+         with `status='degraded'` (Tier 2 Supabase fallback hit
+         on cold start, expected steady state) and
+         `last_error_message LIKE '%supabase fallback%'`.
+      c. Constraint-applied SQL probe (operator runs immediately
+         after migration + before merge):
+         `SELECT pg_get_constraintdef(oid) FROM pg_constraint
+          WHERE conname='trading_system_health_service_name_check';`
+         Expect `'direction_model'` in the returned IN list.
+      d. T-ACT-041 verification SQL (Step 4 of PR 2 EXECUTE
+         summary) — `lgbm_v1` source rows now appear in
+         `trading_prediction_outputs` within the 1-hour
+         post-deploy window.
+- **t_rules_checked:** T-Rule 1 (no foundation drift; sentinel
+  image untouched), T-Rule 2 (migration is additive + idempotent
+  + matches established pattern), T-Rule 7 (action-tracker
+  updated this turn), T-Rule 9 (no out-of-scope edits — strictly
+  the 3 files listed).
+
+---
+
 ### T-ACT-041 — LightGBM model deployment via hybrid path (env-var gate + Supabase storage fallback)
 
 - **id:** T-ACT-041
