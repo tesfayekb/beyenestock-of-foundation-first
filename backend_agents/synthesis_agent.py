@@ -198,7 +198,7 @@ def run_synthesis_agent(redis_client) -> dict:
             try:
                 redis_client.setex(
                     "ai:synthesis:latest",
-                    1800,  # 30 min TTL — stale synthesis should not affect trades
+                    28800,  # 8hr TTL — matches docstring at L7. Coupled with prediction_engine.py:466 freshness gate; both extended together. Consumer-side staleness check based on synth["generated_at"] is the active filter.
                     json.dumps(validated),
                 )
                 # CSP-fix mirror: dashboard reads via direct supabase-js.

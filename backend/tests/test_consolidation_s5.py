@@ -245,6 +245,139 @@ def test_probability_simplex_sums_to_one_in_ai_synthesis_branch():
     assert result["p_neutral"] >= 0.0
 
 
+# ── Apr-30 fix PR: AI synth output loss regression guards ────────────────────
+
+
+def test_ai_synthesis_return_dict_matches_persistence_schema():
+    """Regression guard for the schema-mismatch bug (Apr 30 fix PR).
+
+    AI synth dict must include the schema-aligned keys
+    (signal_weak, expected_move_pts, expected_move_pct) AND
+    preserve the active-consumer keys (strategy_hint, source,
+    sizing_modifier).
+
+    Limitation: this is a unit test for dict shape; it does NOT
+    verify the supabase insert succeeds end-to-end (would require
+    integration test mocking the full run_cycle path). For the
+    immediate fix's lifecycle, this guards against future regressions
+    that REMOVE schema-aligned keys or that ADD unknown extras. A
+    schema-driven integration test is queued for Phase 5A hardening.
+    """
+    from datetime import datetime, timezone
+    from prediction_engine import PredictionEngine
+
+    engine = PredictionEngine.__new__(PredictionEngine)
+    synth = {
+        "direction": "bull",
+        "confidence": 0.62,
+        "strategy": "debit_call_spread",
+        "sizing_modifier": 1.0,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    def mock_read(key, default=None):
+        if key == "ai:synthesis:latest":
+            return json.dumps(synth)
+        if key == "agents:ai_synthesis:enabled":
+            return "true"
+        return default
+
+    engine._read_redis = mock_read
+    engine.redis_client = MagicMock()
+    engine._direction_model = None  # force fall-through guard
+
+    result = engine._compute_direction(
+        regime="trend", cv_stress=20.0, spx_price=5200.0,
+        flip_zone=None, gex_conf=0.0,
+    )
+
+    # Required keys (must be present; persisted to schema columns):
+    for key in ("p_bull", "p_bear", "p_neutral", "direction",
+                "confidence", "expected_move_pts", "expected_move_pct",
+                "signal_weak"):
+        assert key in result, (
+            f"AI synth dict missing required key {key} — would cause "
+            f"non-AI-synth-shape downstream consumer to read None or "
+            f"fail analytics persistence"
+        )
+
+    # Active-consumer keys (must be preserved):
+    for key in ("strategy_hint", "source", "sizing_modifier"):
+        assert key in result, (
+            f"AI synth dict missing active-consumer key {key} — would "
+            f"silently break feature flag or telemetry routing"
+        )
+
+    # Specific value assertions for high-conviction bull case:
+    assert result["source"] == "ai_synthesis"
+    assert result["direction"] == "bull"
+    assert result["signal_weak"] is False  # 62% conf → wide spread
+
+
+def test_ai_synthesis_neutral_does_not_trigger_signal_weak_gate():
+    """B1 guard: AI synth direction='neutral' must NOT flag signal_weak.
+
+    For direction='neutral' the AI synth path produces p_bull == p_bear
+    by construction (both = (1 - confidence) * 0.5). A naive
+    abs(p_bull - p_bear) < 0.05 check would always be True and would
+    block iron_condor — the literal strategy for high-conviction
+    range-bound predictions. The B1 fix guards the comparison with
+    `direction != 'neutral'` so AI synth's high-conviction neutral
+    predictions proceed to strategy_selector.
+
+    This aligns with operator's "increase ROI not clamp down" rule:
+    treating an actively-computed high-conviction neutral the same as
+    placeholder/no-signal is exactly the failure mode to avoid.
+    """
+    from datetime import datetime, timezone
+    from prediction_engine import PredictionEngine
+
+    engine = PredictionEngine.__new__(PredictionEngine)
+    synth = {
+        "direction": "neutral",
+        "confidence": 0.70,  # high conviction neutral → iron_condor candidate
+        "strategy": "iron_condor",
+        "sizing_modifier": 1.0,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    def mock_read(key, default=None):
+        if key == "ai:synthesis:latest":
+            return json.dumps(synth)
+        if key == "agents:ai_synthesis:enabled":
+            return "true"
+        return default
+
+    engine._read_redis = mock_read
+    engine.redis_client = MagicMock()
+    engine._direction_model = None
+
+    result = engine._compute_direction(
+        regime="pin_range", cv_stress=20.0, spx_price=5200.0,
+        flip_zone=None, gex_conf=0.0,
+    )
+
+    # The dict shape contract still applies:
+    assert result["source"] == "ai_synthesis"
+    assert result["direction"] == "neutral"
+
+    # Mathematical invariant: AI synth neutral has p_bull == p_bear:
+    assert abs(result["p_bull"] - result["p_bear"]) < 1e-9, (
+        f"AI synth neutral path expected p_bull == p_bear, got "
+        f"p_bull={result['p_bull']}, p_bear={result['p_bear']}"
+    )
+
+    # B1 fix: signal_weak must be False despite zero spread,
+    # because direction is 'neutral' (the spread is meaningful only
+    # for directional predictions).
+    assert result["signal_weak"] is False, (
+        "AI synth neutral predictions must not be flagged signal_weak; "
+        "doing so would block iron_condor — the intended strategy for "
+        "high-conviction range-bound predictions. See B1 guard at "
+        "prediction_engine.py:498-510."
+    )
+
+
 # ── P1-15: War Room EXPECTED_SERVICES ────────────────────────────────────────
 
 

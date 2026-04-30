@@ -29,6 +29,112 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-040 — Fix PR: AI synthesis output loss (TTL/freshness coupling + schema migration)
+
+- **id:** T-ACT-040
+- **date:** 2026-04-30
+- **action:** Two coupled bugs unblocked AI synthesis output flow
+  to `trading_prediction_outputs`.
+  - **Bug A (TTL + freshness gate, both 30 min, coterminous):**
+    `backend_agents/synthesis_agent.py:201` set
+    `ai:synthesis:latest` Redis TTL = 1800s and
+    `backend/prediction_engine.py:466` rejected payloads at
+    `age_s >= 1800`. Synthesis runs once per weekday at 09:15 ET via
+    cron, so AI synth was consumable for ~30 min/day; rest of day
+    fell through to LightGBM (missing) → GEX/ZG (insufficient) →
+    regime fallback (`0.35/0.30/0.35` placeholder). Both gates
+    extended to 28800s (8 hours) so synthesis covers the full
+    trading day after the morning cron.
+  - **Bug B (AI synth dict schema mismatch):**
+    `backend/prediction_engine.py:498-510` AI synth return dict
+    emitted three keys (`strategy_hint`, `sizing_modifier`,
+    `source`) that are NOT columns in the production
+    `trading_prediction_outputs` schema. PostgREST rejected each
+    insert with PGRST204; the outer `try/except Exception` at
+    `:985-991` swallowed the error; cycle returned None; no row
+    persisted. Production schema query (operator-run via
+    `information_schema.columns`) confirmed these 3 columns were
+    absent while regime-fallback's extras (`signal_weak`,
+    `allocation_tier`, `gex_conf_at_regime`,
+    `gex_flip_zone_used`) WERE present as operator-induced drift.
+    New migration `20260430_add_ai_synthesis_columns.sql` adds
+    `strategy_hint TEXT`, `sizing_modifier NUMERIC(8,4)`,
+    `source TEXT` (all NULLable, idempotent). AI synth dict also
+    gained the 3 schema-aligned keys other paths emit
+    (`signal_weak`, `expected_move_pts`, `expected_move_pct`).
+  - **B1 guard on `signal_weak`:** AI synth direction='neutral'
+    produces `p_bull == p_bear` by construction. A naive
+    `abs(p_bull - p_bear) < 0.05` check would flag every neutral
+    AI synth prediction as `signal_weak=True`, blocking iron_condor
+    (the literal strategy for high-conviction range-bound
+    predictions). Guard wraps the comparison with
+    `direction != "neutral" and ...` so neutral cycles proceed to
+    strategy_selector.
+  - **Empirical confirmation pre-fix:** Apr 30 13:30-13:45 UTC had
+    4 `prediction_from_ai_synthesis` Railway log events; same
+    window in supabase: 0 rows. After 13:45 UTC: key TTL expired;
+    0 events for rest of day. All 22 cycles for Apr 30 in supabase
+    show `0.35/0.30/0.35` placeholder.
+  - **Why ADD columns instead of REMOVE keys:** `strategy_hint` is
+    consumed by `strategy_selector.py:1019-1075` (the
+    `strategy:ai_hint_override:enabled` feature flag's logic);
+    `source` is consumed at `strategy_selector.py:1517` (telemetry
+    routing of `ai_hint` vs `regime`). Removing them would silently
+    regress two existing capabilities and 4 existing tests. Adding
+    3 columns is the cheaper + schema-disciplined path. This is
+    Phase 5A schema-hardening starting here.
+  - **Manual trigger script:** new
+    `backend/scripts/trigger_synthesis_now.py` enables same-day
+    operator validation post-deploy without waiting for next
+    morning's cron. Cost ~$0.05/call.
+- **type:** code + migration
+- **phase:** phase_5_pre_action_8
+- **impact:** HIGH — unblocks AI synthesis as a real conviction
+  signal source for the prediction engine. Once both this fix and
+  Fix PR 2 (LightGBM model deployment) land, the system has two
+  independent conviction sources instead of running entirely on
+  regime-fallback placeholders. Action 8 (Conviction-Conditional
+  Sizing) stays in DRAFT until both PRs land.
+- **owner:** Cursor
+- **modules_affected:**
+  - `backend_agents/synthesis_agent.py` (TTL extension)
+  - `backend/prediction_engine.py` (freshness gate + AI synth dict
+    shape)
+  - `backend/tests/test_consolidation_s5.py` (regression tests)
+  - `backend/scripts/trigger_synthesis_now.py` (NEW, validation
+    helper)
+  - `supabase/migrations/20260430_add_ai_synthesis_columns.sql`
+    (NEW, schema migration)
+- **docs_updated:**
+  - `trading-docs/06-tracking/action-tracker.md` (this entry)
+- **foundation_impact:** NONE — all changes within trading module
+  boundaries; no `src/integrations/`, no foundation Python, no
+  shared types beyond the trading_prediction_outputs schema (which
+  is a trading-owned table per migration 20260416172751).
+- **verification:**
+  - Pytest: all 6 baseline tests
+    (`test_consolidation_s5.py -k "ai_synthesis or synthesis"` and
+    `test_iron_butterfly_safety_gates.py -k "ai_hint"`) still pass
+    post-edit.
+  - 2 new regression tests added:
+    `test_ai_synthesis_return_dict_matches_persistence_schema` and
+    `test_ai_synthesis_neutral_does_not_trigger_signal_weak_gate`.
+  - Schema migration is idempotent (`IF NOT EXISTS`); operator
+    applies via `npx supabase db push` per DEPLOYMENT SEQUENCING
+    section in PR commit body.
+  - Post-deploy: operator runs
+    `python backend/scripts/trigger_synthesis_now.py` and verifies
+    a row appears in `trading_prediction_outputs` with `p_bull`
+    matching the AI synth's confidence (e.g., 0.62 for the morning
+    Bull rec) instead of `0.35` placeholder.
+- **t_rules_checked:** T-Rule 1 (no foundation drift), T-Rule 2
+  (migration is additive + idempotent), T-Rule 5 (tests pass at
+  baseline pre-edit and post-edit), T-Rule 7 (action tracker
+  updated this turn), T-Rule 9 (no out-of-scope edits — strictly
+  bounded to the 6 files listed).
+
+---
+
 ### T-ACT-039 — Phase 3C: Calendar Spread (post-catalyst IV crush)
 
 - **id:** T-ACT-039
