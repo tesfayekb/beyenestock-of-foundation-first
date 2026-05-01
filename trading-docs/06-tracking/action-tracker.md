@@ -29,6 +29,42 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-047 — Try/except discipline mitigation in `prediction_engine.run_cycle` (stub — full description in TASK_REGISTER §14)
+
+- **id:** T-ACT-047
+- **date:** 2026-05-01 (registered; pending implementation)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (severity, scope, fix proposal, acceptance criteria).
+- **type:** code (planned)
+- **phase:** post_phase_1_diagnostic
+- **impact:** MEDIUM
+- **owner:** Cursor (per operator authorization in next session)
+- **status:** PENDING — Cursor work in next session
+- **cross_refs:** HANDOFF NOTE Appendix A.5 mitigation #3 (original lesson) + HANDOFF NOTE Appendix A.6 (post-mortem context).
+
+### T-ACT-046 — Fix `tradier_feed.py:282-283` silent-staleness vector (stub — full description in TASK_REGISTER §14)
+
+- **id:** T-ACT-046
+- **date:** 2026-05-01 (registered; pending implementation)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (severity, scope, fix, acceptance criteria).
+- **type:** code (planned)
+- **phase:** post_phase_1_diagnostic
+- **impact:** MEDIUM (fallback-only concern post-PR-#90; was critical pre-PR-#90)
+- **owner:** Cursor (per operator authorization in next session)
+- **status:** PENDING — Cursor work in next session
+- **cross_refs:** HANDOFF NOTE Appendix A.6 (post-mortem context) + PR #90 risks register R-1.
+
+### T-ACT-045 — Post-PR-#90 empirical SPX real-time validation (stub — full description in TASK_REGISTER §14)
+
+- **id:** T-ACT-045
+- **date:** 2026-05-01 (registered; pending operator action)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (acceptance criteria, validation queries, verdict criteria).
+- **type:** verification
+- **phase:** post_phase_1_diagnostic
+- **impact:** HIGH (validation-blocking; pre-Action-6 prerequisite per MASTER_ROI_PLAN v2.0.6)
+- **owner:** operator
+- **status:** PENDING — operator action required (~10 min)
+- **cross_refs:** HANDOFF NOTE Appendix A.6 (post-mortem context) + MASTER_ROI_PLAN Action 6 prerequisites + PR #90 (the architectural fix being validated).
+
 ### T-ACT-044 — sklearn version pin + training-env capture + preflight script (post-T-ACT-043 deploy validation)
 
 - **id:** T-ACT-044
