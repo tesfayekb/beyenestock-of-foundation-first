@@ -1184,12 +1184,40 @@ python -m scripts.preflight_training_env
 
 **Cross-reference:** `MASTER_ROI_PLAN.md` §1.8 (LightGBM v1 activation chain narrative — full PR sequence + commit SHAs) + §7 F-38 (findings register milestone). Master Forward Plan v1.2 reconciliation PR (`docs/master-forward-plan-v1-2-reconciliation`, 2026-04-30) ratifies this Appendix A.4 entry as part of the governance-doc reconciliation per Task 1 of the v1.2 forward plan.
 
-### A.5 Future additions
+### A.5 Schema migrations must ship with the code that depends on them — and integration tests must validate persistence (added 2026-05-01 from incident: model_source PGRST204 silent-failure since LightGBM v1 activation)
 
-Append future discipline additions here as A.5, A.6, ... Each addition must include: (a) the rule text, (b) the defect that triggered it, (c) the action-tracker entry that documents the discovery.
+**Lesson:** When a code change introduces a new column write to a database table, the migration adding that column MUST ship in the same PR. PR-level review must cross-check that every new column referenced in code has a corresponding `ADD COLUMN` in a migration file in the same merge. Unit tests that check dict-level outputs are NOT sufficient; integration tests that exercise the actual database insert path must be present (or, at minimum, a post-merge smoke check that runs one end-to-end cycle against a real database before declaring the PR validated).
+
+**Defect that triggered this lesson:**
+
+- PR #82 (T-ACT-040, 94edb9a, 2026-04-30) shipped migration `20260430_add_ai_synthesis_columns.sql` adding columns `strategy_hint`, `sizing_modifier`, `source` to `trading_prediction_outputs`.
+- PR #83 (T-ACT-041, a77195a, 2026-04-30) added code at `backend/prediction_engine.py:883` writing `"model_source": "lgbm_v1"` — referring to a column with a name that did NOT exist in PR #82's migration. The names `source` and `model_source` are NOT the same column (different semantic scope: `source` = broader pipeline provenance; `model_source` = direction-model-specific).
+- Neither PR's tests caught the gap. Unit tests at `backend/tests/test_phase_a3.py:95-96` validated `result.get("model_source") != "lgbm_v1"` at the dict level, never exercising the database insert.
+- Outer `try/except` in `prediction_engine.py:run_cycle()` swallowed the resulting PGRST204 error.
+- Symptom only surfaced on 2026-05-01 13:30 UTC (~16+ hours post-LightGBM-v1-activation) when operator ran empirical validation queries against `trading_prediction_outputs` and got "column does not exist" errors. Railway logs showed `prediction_cycle_failed` every cycle since 2026-04-30 21:33 UTC, but the failures were not surfaced as alerts because the try/except masked them at the application layer.
+
+**Net runtime impact:** ~16+ hours of zero-row persistence post-LightGBM-v1-activation. Model compute pipeline worked correctly throughout (verified empirically from traceback `locals` dump showing `p_bull: 0.4905, p_bear: 0.5095, model_source: 'lgbm_v1'` — model-derived, NOT placeholder). Persistence layer was the silent-failure surface.
+
+**Mitigations going forward:**
+
+1. **Schema-code coupling check at PR review:** Reviewer must run `git diff main..HEAD --name-only | grep -E "supabase/migrations|backend/.*\.py$"` and cross-check that every new column written in code has a corresponding `ADD COLUMN` in the migrations diff. If the PR touches `backend/` and writes a new dict key that maps to a database insert, AND the PR does NOT touch `supabase/migrations/`, that is a flag for explicit reviewer confirmation.
+
+2. **Integration smoke-test after schema-touching PRs:** Operator runs one end-to-end cycle against a real Supabase instance (production paper-trading, dev mirror, or test schema) before marking the PR as validated. Acceptance: at least one row written to the affected table in the post-merge cycle. Record the row count in HANDOFF NOTE follow-up.
+
+3. **Try/except discipline:** The outer `try/except` in `prediction_engine.py:run_cycle()` should re-raise PostgrestAPIError and similar schema errors at WARN level (or higher). Schema errors are fundamentally different from transient DB connectivity failures and should not be silenced by the same handler. (Tracked as a separate follow-up; not part of this fix's scope.)
+
+4. **Empirical validation BEFORE declaring activation success:** The 5-PR LightGBM activation chain declared success at PR-merge time without an end-to-end persistence check. Future activation milestones must include a "post-merge ≥1 row persisted to target table" smoke check before being marked done.
+
+**Tracker entries:** T-ACT-NNN (to be assigned post-validation) for the column-consolidation between `source` and `model_source`. Migration sync to repo: this PR (`fix/migration-model_source-repo-sync`).
+
+Ratified 2026-05-01 via this PR.
+
+### A.6 Future additions
+
+Append future discipline additions here as A.6, A.7, ... Each addition must include: (a) the rule text, (b) the defect that triggered it, (c) the action-tracker entry that documents the discovery.
 
 ---
 
 *Handoff note authored 2026-04-28 22:10 UTC-4 by Cursor (Claude Opus 4.7) at end of P1.3.7 EXECUTE session. Owner: tesfayekb. File location: `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md`. End of handoff.*
 
-*Appendix A added 2026-04-30 (T-ACT-042 + T-ACT-043 lessons-learned consolidation; per operator decision D5 in Fix PR 4 DIAGNOSE round). A.3 added 2026-04-30 (T-ACT-044 lessons-learned; per operator decision D1 Scope B in Fix PR 5 DIAGNOSE round). A.4 ratified 2026-04-30 via Master Forward Plan v1.2 reconciliation PR (operator decision F7 → option E-ii: cumulative DIAGNOSE-FIRST meta-pattern lesson, distinct from A.1-A.3 single-PR lessons). A.5 reserved as the next "future additions" placeholder slot.*
+*Appendix A added 2026-04-30 (T-ACT-042 + T-ACT-043 lessons-learned consolidation; per operator decision D5 in Fix PR 4 DIAGNOSE round). A.3 added 2026-04-30 (T-ACT-044 lessons-learned; per operator decision D1 Scope B in Fix PR 5 DIAGNOSE round). A.4 ratified 2026-04-30 via Master Forward Plan v1.2 reconciliation PR (operator decision F7 → option E-ii: cumulative DIAGNOSE-FIRST meta-pattern lesson, distinct from A.1-A.3 single-PR lessons). A.5 ratified 2026-05-01 via PR `fix/migration-model_source-repo-sync` (model_source schema-code drift silent-failure post-mortem; ~16+ hours of zero-row persistence post-LightGBM-v1-activation surfaced via operator empirical validation). A.6 reserved as the next "future additions" placeholder slot.*
