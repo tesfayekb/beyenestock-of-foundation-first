@@ -98,16 +98,35 @@ def _get_next_friday_expiry() -> str:
 
 
 def _get_spx_price_from_redis(redis_client) -> float:
-    """Read current SPX price from Redis. Returns 5200.0 if unavailable."""
+    """Read current SPX price from Redis.
+
+    PRIMARY:   polygon:spx:current  (real-time per Polygon Stocks
+               Advanced; written by polygon_feed.py).
+    FALLBACK:  tradier:quotes:SPX   (15-min delayed in sandbox).
+    SENTINEL:  5200.0  (legacy last resort).
+    """
+    try:
+        raw = redis_client.get("polygon:spx:current")
+        if raw:
+            data = json.loads(raw)
+            price = float(data.get("price") or 0)
+            if price > 0:
+                return round(price, 2)
+    except Exception:
+        pass
+
     try:
         raw = redis_client.get("tradier:quotes:SPX")
         if raw:
             data = json.loads(raw)
-            return float(
-                data.get("last") or data.get("ask") or data.get("bid") or 5200.0
+            price = float(
+                data.get("last") or data.get("ask") or data.get("bid") or 0
             )
+            if price > 0:
+                return round(price, 2)
     except Exception:
         pass
+
     return 5200.0
 
 

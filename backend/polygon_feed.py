@@ -157,6 +157,37 @@ class PolygonFeed:
                             # multi-timeframe LightGBM features.
                             self.spx_history = self.spx_history[-60:]
 
+                            # 2026-05-01 SPX-real-time-feed fix: write the
+                            # real-time SPX spot price to a dedicated Redis
+                            # key for live-decision-path consumers
+                            # (prediction_engine, mark_to_market,
+                            # strike_selector, strategy_selector,
+                            # shadow_engine, gex_engine, databento_feed).
+                            # Previously these all read tradier:quotes:SPX
+                            # which is 15-min delayed in Tradier sandbox per
+                            # empirical verification (Polygon 13:45 SPX bar
+                            # 7244.80-7249.24 vs system-recorded 7209.01).
+                            # TTL = 600s (2x the 5-min poll period above)
+                            # so the key spans 2 poll cycles; downstream
+                            # freshness guard uses 330s threshold.
+                            try:
+                                self.redis_client.setex(
+                                    "polygon:spx:current",
+                                    600,
+                                    json.dumps({
+                                        "price": float(spx_price),
+                                        "fetched_at": datetime.now(
+                                            timezone.utc
+                                        ).isoformat(),
+                                        "source": "polygon_v3_snapshot",
+                                    }),
+                                )
+                            except Exception as spx_write_err:
+                                logger.warning(
+                                    "polygon_spx_current_write_failed",
+                                    error=str(spx_write_err),
+                                )
+
                         # T1-4: fetch true prior-session close once per
                         # day. Re-fetch at the open minute (9:30) so a
                         # process that was already running yesterday
