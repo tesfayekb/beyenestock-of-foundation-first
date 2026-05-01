@@ -1212,12 +1212,45 @@ python -m scripts.preflight_training_env
 
 Ratified 2026-05-01 via this PR.
 
-### A.6 Future additions
+### A.6 Validate upstream feed freshness against an independent source BEFORE declaring activation success — paper-trading P&L is meaningless if the inputs are stale (added 2026-05-01 from incident: 15-min Tradier sandbox SPX delay surfaced via empirical Polygon comparison)
 
-Append future discipline additions here as A.6, A.7, ... Each addition must include: (a) the rule text, (b) the defect that triggered it, (c) the action-tracker entry that documents the discovery.
+**Lesson:** When declaring an activation milestone "validated," operator MUST empirically compare the system's recorded inputs against an independent real-time source. Validation queries that confirm only "the model is producing varying outputs" are insufficient — they confirm the model is responsive to its inputs without confirming those inputs reflect real market state. A model fed 15-min-stale data will produce varying outputs that look healthy but represent decisions based on a market that no longer exists.
+
+**Defect that triggered this lesson:**
+
+- 2026-04-30 21:33 UTC — LightGBM v1 activated (T-ACT-044, commit 5162020). Activation declared successful at PR-merge time.
+- 2026-05-01 ~13:35 UTC — Operator empirical validation queries against `trading_prediction_outputs` confirmed the model was emitting model-derived (non-placeholder) probabilities and varying outputs across cycles.
+- 2026-05-01 ~13:45 UTC — System entered paper trade `033f55dc-e44c-4cd6-a694-13452f5cd3c4` (long_straddle, strike 7210). System-recorded `entry_spx_price = 7209.01`.
+- 2026-05-01 ~13:46 UTC — Position exited at `take_profit_debit_100pct` with simulated +$3,493.70 net P&L in 54 seconds (entry $4.15 debit → exit $39.25, ~9.5x return).
+- 2026-05-01 ~14:00 UTC — Operator flagged: "I don't think markets move that fast" — surfaced suspicion that the speed/magnitude was inconsistent with real-market dynamics.
+- 2026-05-01 ~17:00 UTC — Empirical Polygon comparison confirmed: at 13:45 UTC, Polygon's actual SPX 1-min bar was 7244.80–7249.24 (~$37 above the system's recorded 7209.01). System was reading 15-min-delayed Tradier sandbox SPX data; the 9.5x return was the option-chain feed (real-time per Tradier OPRA exception) catching up to a real underlying move that had already happened ~15 min earlier.
+- The +$3,493.70 was **phantom alpha** — paper-trading artifact from a feed-recency mismatch. In real markets with real-time SPX, the system would have seen SPX at ~7245 and would NOT have entered an at-the-money straddle at strike 7210 (already deep ITM on one leg).
+
+**Net runtime impact:** Every prediction cycle from LightGBM v1 activation (2026-04-30 21:33 UTC) through PR #90 deploy (2026-05-01 ~end of day UTC) was made on 15-min-stale SPX inputs. **Pre-merge validation queries that declared "LightGBM v1 empirically validated" were operating on stale data and need to be re-validated post-PR-#90 deploy.**
+
+**Mitigations going forward:**
+
+1. **Activation milestones require independent-source feed comparison:** Before declaring any data-driven feature activated (LightGBM, AI synthesis, new feed integration), operator runs a comparison query against an independent real-time source (Polygon for equities/indices; Databento for OPRA; etc.) to confirm the system's recorded inputs match contemporaneous real-time prints within tolerance (e.g., ±$5 for SPX). Document the comparison output in the activation's PR or HANDOFF NOTE.
+
+2. **Subscription-vs-runtime audit:** Periodically (e.g., quarterly) verify that real-time data subscriptions documented in `SUBSCRIPTION_REGISTRY.md` are actually consumed by the live decision path. PR #90 surfaced that Polygon Stocks Advanced ($199/mo) and Databento OPRA Standard ($199/mo) were paid for but only feeding auxiliary signals; the primary SPX feed was still Tradier sandbox. This kind of "paying for it but not using it" gap should be caught by audit, not by an empirical surprise.
+
+3. **Freshness guards on critical feeds:** Every Redis-cached feed key consumed by the live decision path should have a freshness check at the consumer side (PR #90's `prediction_engine.run_cycle` model). If the upstream timestamp is older than a documented threshold, log a WARN and either skip the cycle or fall back to a known-real-time source. Default behavior on stale primary should be "no decision" rather than "wrong decision."
+
+4. **Sandbox semantics must be explicitly verified, not inferred:** Tradier sandbox's "real-time for SPX/VIX index options" exception (per Tradier policy) was inferred to apply to SPX index *underlying* quotes too — it did not. Future sub onboarding must confirm sandbox-vs-production data semantics for every endpoint the system reads, with empirical timestamp comparison as the verification method.
+
+**Tracker entries:**
+- T-ACT-045 (post-PR-#90 empirical re-validation)
+- T-ACT-046 (`tradier_feed.py:282-283` silent-staleness fix — fallback-only concern but still real)
+- T-ACT-047 (try/except discipline mitigation from A.5 #3 — outer try/except in `prediction_engine.run_cycle` still silences PostgrestAPIError-class errors)
+
+Ratified 2026-05-01 via this PR.
+
+### A.7 Future additions
+
+Reserved placeholder for the next governance-discipline lesson surfaced by future incident, audit cycle, or post-mortem. Append future discipline additions here as A.7, A.8, ... rolling forward.
 
 ---
 
 *Handoff note authored 2026-04-28 22:10 UTC-4 by Cursor (Claude Opus 4.7) at end of P1.3.7 EXECUTE session. Owner: tesfayekb. File location: `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md`. End of handoff.*
 
-*Appendix A added 2026-04-30 (T-ACT-042 + T-ACT-043 lessons-learned consolidation; per operator decision D5 in Fix PR 4 DIAGNOSE round). A.3 added 2026-04-30 (T-ACT-044 lessons-learned; per operator decision D1 Scope B in Fix PR 5 DIAGNOSE round). A.4 ratified 2026-04-30 via Master Forward Plan v1.2 reconciliation PR (operator decision F7 → option E-ii: cumulative DIAGNOSE-FIRST meta-pattern lesson, distinct from A.1-A.3 single-PR lessons). A.5 ratified 2026-05-01 via PR `fix/migration-model_source-repo-sync` (model_source schema-code drift silent-failure post-mortem; ~16+ hours of zero-row persistence post-LightGBM-v1-activation surfaced via operator empirical validation). A.6 reserved as the next "future additions" placeholder slot.*
+*Appendix A added 2026-04-30 (T-ACT-042 + T-ACT-043 lessons-learned consolidation; per operator decision D5 in Fix PR 4 DIAGNOSE round). A.3 added 2026-04-30 (T-ACT-044 lessons-learned; per operator decision D1 Scope B in Fix PR 5 DIAGNOSE round). A.4 ratified 2026-04-30 via Master Forward Plan v1.2 reconciliation PR (operator decision F7 → option E-ii: cumulative DIAGNOSE-FIRST meta-pattern lesson, distinct from A.1-A.3 single-PR lessons). A.5 ratified 2026-05-01 via PR `fix/migration-model_source-repo-sync` (model_source schema-code drift silent-failure post-mortem; ~16+ hours of zero-row persistence post-LightGBM-v1-activation surfaced via operator empirical validation). A.6 ratified 2026-05-01 via PR `docs/post-may-1-followups` (15-min Tradier sandbox SPX delay phantom-alpha post-mortem; empirical-validation-against-independent-source discipline lesson). A.7 reserved as the next "future additions" placeholder slot.*

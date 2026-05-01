@@ -1736,4 +1736,108 @@ No panel affects any trade decision — pure read-only observability.
 
 ---
 
+## SECTION 14 — POST-2026-05-01 DIAGNOSTIC FIXES + FOLLOW-UPS
+
+Tasks surfaced during the 2026-05-01 trading session validation. See HANDOFF NOTE Appendix A.6 for the canonical post-mortem context.
+
+### T-ACT-045 — Post-PR-#90 empirical SPX real-time validation
+
+**Severity:** HIGH (validation-blocking)
+**Owner:** operator
+**Estimated time:** 10 minutes
+
+**Description:** PR #90 routed SPX through Polygon real-time and added a freshness guard. The pre-PR-#90 LightGBM v1 "empirical validation" (declared 2026-05-01 morning) was made on 15-min-stale Tradier sandbox SPX data. After PR #90 deploy and ~10 minutes of stable cycle execution, operator must re-run the validation comparing system-recorded `entry_spx_price` to Polygon's contemporaneous 1-minute SPX bar.
+
+**Acceptance criteria:**
+
+1. Run this query (anytime within 1 hour of writing this section, post-PR-#90 deploy):
+   ```sql
+   SELECT predicted_at, spx_price
+   FROM trading_prediction_outputs
+   WHERE predicted_at >= NOW() - INTERVAL '20 minutes'
+   ORDER BY predicted_at DESC;
+   ```
+
+2. For each row, compare `spx_price` against Polygon's 1-min SPX bar containing the timestamp:
+   ```bash
+   curl -s "https://api.polygon.io/v2/aggs/ticker/I:SPX/range/1/minute/$(date +%Y-%m-%d)/$(date +%Y-%m-%d)?apiKey=$POLYGON_API_KEY&adjusted=true&sort=asc"
+   ```
+
+3. Verdict:
+   - All `spx_price` values within ±$5 of the contemporaneous Polygon bar [low, high] envelope → **VALIDATED.** PR #90 closed the architectural delay; LightGBM v1 empirical validation can be re-declared on real-time inputs. Mark this T-ACT done.
+   - Any `spx_price` deviates >$5 → **NOT VALIDATED.** Either Polygon poll is failing, freshness guard isn't firing correctly, or another stale path remains. Open follow-up investigation; do NOT mark done.
+
+**Status:** [ ] Pending — operator action required
+
+---
+
+### T-ACT-046 — Fix `tradier_feed.py:282-283` silent-staleness vector
+
+**Severity:** MEDIUM (now fallback-only concern post-PR-#90; was critical pre-PR-#90)
+**Owner:** Cursor (per operator authorization in next session)
+**Estimated time:** 10-15 min
+
+**Description:** `backend/tradier_feed.py:282-283` writes the cache timestamp using a wall-clock fallback (`datetime.now(timezone.utc).isoformat()`) when the Tradier upstream response lacks one. This means downstream freshness checks based on the Redis-stored timestamp are blind to upstream staleness — the cache always looks "fresh" because the timestamp is stamped at write time, not at upstream-quote time.
+
+**Why it matters now:** Post-PR-#90, Tradier is fallback-only for SPX. But this silent-staleness vector still affects `tradier:quotes:{SPXW…}` (option chain quotes) which remain Tradier-primary per the OPRA-exception. If Tradier sandbox ever returns a stale option quote without a `trade_date`, the system writes `now()` and consumers see a "fresh" key while the upstream is silently lagging.
+
+**Fix:**
+
+1. In `backend/tradier_feed.py` `process_quote()` (~L282-283), do NOT fall back to `datetime.now()` for the timestamp. Use the upstream's `trade_date` / `bid_date` / `ask_date` epoch field directly. If absent in the upstream payload, write a sentinel (`null` or omit the field) and let downstream consumers detect the staleness.
+2. Update consumers of `tradier:quotes:{symbol}` to handle the null/missing-timestamp case explicitly (likely already handled gracefully; verify no consumer assumes timestamp-always-present).
+
+**Acceptance criteria:**
+
+- `tradier_feed.py` no longer writes wall-clock-now as a fallback timestamp
+- `mark_to_market.py`, `strike_selector.py`, etc. handle null-timestamp option quotes without crashing
+- New test verifies that a Tradier response with missing trade_date results in a null/missing timestamp in Redis, NOT a wall-clock-now stamp
+
+**Status:** [ ] Pending — Cursor work in next session
+
+---
+
+### T-ACT-047 — Try/except discipline mitigation in `prediction_engine.run_cycle`
+
+**Severity:** MEDIUM (silent-failure surface remains)
+**Owner:** Cursor (per operator authorization in next session)
+**Estimated time:** 20-30 min
+
+**Description:** Per HANDOFF NOTE Appendix A.5 mitigation #3: the outer `try/except` in `backend/prediction_engine.py` `run_cycle()` silences `PostgrestAPIError` and similar schema-class errors. This is the surface that hid the `model_source` bug for ~16 hours on 2026-04-30 to 2026-05-01.
+
+Schema errors are fundamentally different from transient DB connectivity errors and should NOT be silenced by the same handler. Examples:
+
+- Schema cache miss (PGRST204) — code-vs-DB drift; permanent until migration applied
+- RLS policy violation — permission misconfiguration; permanent until fixed
+- Unique constraint violation — usually a logic bug; not a transient issue
+- Connection refused / timeout — transient; retry semantics appropriate
+
+**Fix proposal:**
+
+1. Identify the outer `try/except` blocks in `prediction_engine.run_cycle()` that swallow database errors
+2. Add an inner `except PostgrestAPIError as e:` (or equivalent for the actual exception type used by the Supabase client) that re-raises as a structured WARN log + cycle skip with a distinct reason code (e.g., `cycle_skipped reason=schema_error_persistent` vs `cycle_skipped reason=db_transient`)
+3. Add a structured `db_persist_failed` log emission specifically for permanent-class errors so they show up in alerting
+4. New test: simulate a PGRST204 from Supabase client and verify that the error surfaces at WARN level (not silent), the cycle skips with the correct reason code, and the watchdog can detect repeated occurrences
+
+**Acceptance criteria:**
+
+- Schema errors surface at WARN/ERROR level instead of being silently caught
+- Cycle skip reason codes distinguish persistent (schema/permission) vs transient (network/timeout) failures
+- Test coverage for at least one persistent-error scenario
+- Watchdog (`prediction_engine_silent` alert) continues to fire correctly for the silenced case but a NEW alert fires for repeated schema errors
+
+**Status:** [ ] Pending — Cursor work in next session
+
+---
+
+### Section 14 cross-references
+
+- HANDOFF NOTE Appendix A.6 — full post-mortem context for the 2026-05-01 phantom-alpha incident
+- PR #90 risks R-1 (T-ACT-046) and R-2 (T-ACT-047) — original risk identification
+- HANDOFF NOTE Appendix A.5 mitigation #3 — original lesson surfacing the try/except discipline issue
+- SUBSCRIPTION_REGISTRY.md — canonical reference for subscription-vs-runtime audit (mitigation #2 in A.6)
+
+*Section 14 opened: 2026-05-01 | Owner: tesfayekb*
+
+---
+
 *Task Register v1.0 — April 2026 — tesfayekb*
