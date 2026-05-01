@@ -305,7 +305,27 @@ class DatabentoFeed:
         self._push_trade(trade)
 
     def _get_underlying_price(self) -> float:
-        """Read SPX spot from Redis (populated by tradier_websocket)."""
+        """Read SPX spot from Redis.
+
+        PRIMARY:   polygon:spx:current  (real-time; written by polygon_feed).
+        FALLBACK:  tradier:quotes:SPX   (15-min delayed in sandbox).
+        SENTINEL:  5200.0.
+
+        Per 2026-05-01 SPX-real-time-feed fix: this Databento internal
+        SPX reference now matches the Polygon-first priority chain used
+        by all 6 prod live-decision-path readers; previously inherited
+        Tradier's 15-min delay.
+        """
+        try:
+            poly_raw = self.redis_client.get("polygon:spx:current")
+            if poly_raw:
+                poly_data = json.loads(poly_raw)
+                price = float(poly_data.get("price") or 0)
+                if price > 0:
+                    return round(price, 2)
+        except Exception:
+            pass
+
         try:
             spx_raw = self.redis_client.get("tradier:quotes:SPX")
         except Exception:

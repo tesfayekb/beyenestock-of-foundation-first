@@ -420,18 +420,49 @@ class PredictionEngine:
             return raw, True
 
     def _get_spx_price(self) -> float:
-        """Read current SPX price from Redis. Falls back to 5200.0."""
+        """Read current SPX price from Redis.
+
+        PRIMARY:   polygon:spx:current  (real-time per Polygon Stocks
+                   Advanced subscription; populated by polygon_feed.py).
+        FALLBACK:  tradier:quotes:SPX  (15-min delayed in Tradier sandbox
+                   per empirical verification 2026-05-01 — kept ONLY as
+                   fallback when Polygon write is missing or stale).
+        SENTINEL:  5200.0  (legacy hardcoded last resort).
+
+        Logs WARN when Tradier fallback triggers — operator alert that
+        Polygon feed is unhealthy and the system is operating on stale
+        data. Logs ERROR when both sources fail.
+        """
+        import json
+        # Primary: Polygon real-time
+        try:
+            raw = self._read_redis("polygon:spx:current", None)
+            if raw:
+                data = json.loads(raw)
+                price = float(data.get("price") or 0)
+                if price > 0:
+                    return round(price, 2)
+        except Exception:
+            pass
+
+        # Fallback: Tradier sandbox (15-min delayed)
         try:
             raw = self._read_redis("tradier:quotes:SPX", None)
             if raw:
-                import json
                 data = json.loads(raw)
                 price = float(
-                    data.get("last") or data.get("ask") or data.get("bid") or 5200.0
+                    data.get("last") or data.get("ask") or data.get("bid") or 0
                 )
-                return round(price, 2)
+                if price > 0:
+                    logger.warning(
+                        "spx_price_polygon_unavailable_tradier_fallback",
+                        fallback_price=price,
+                    )
+                    return round(price, 2)
         except Exception:
             pass
+
+        logger.error("spx_price_all_sources_failed_using_sentinel")
         return 5200.0
 
     def _compute_regime(self) -> dict:
@@ -1139,6 +1170,59 @@ class PredictionEngine:
                 return {
                     "no_trade_signal": True,
                     "no_trade_reason": "feed_data_unavailable",
+                    "regime": "unknown",
+                    "rcs": 0.0,
+                    "allocation_tier": "danger",
+                    "spx_price": self._get_spx_price(),
+                }
+
+            # 2026-05-01 SPX-real-time-feed freshness guard: refuse to
+            # make trade decisions on stale SPX data. polygon_feed.py
+            # writes polygon:spx:current every 5 min (poll cadence); the
+            # threshold of 330s = 1 poll period + 30s slack. If the key
+            # is missing or older than 330s, the system has fallen back
+            # to Tradier sandbox (15-min delayed per 2026-05-01 empirical
+            # verification) and the better default is to skip the cycle
+            # rather than enter a position on stale data. MTM (separate
+            # 1-min cadence) does NOT apply this guard — open positions
+            # still need repricing even when the feed degrades; the
+            # _get_spx_price() Tradier fallback handles that case.
+            import json as _json
+            spx_fresh = False
+            try:
+                spx_raw = self._read_redis("polygon:spx:current", None)
+                if spx_raw:
+                    spx_meta = _json.loads(spx_raw)
+                    fetched_at = datetime.fromisoformat(
+                        spx_meta["fetched_at"]
+                    )
+                    age_seconds = (
+                        datetime.now(timezone.utc) - fetched_at
+                    ).total_seconds()
+                    if age_seconds <= 330:
+                        spx_fresh = True
+                    else:
+                        logger.warning(
+                            "spx_price_stale",
+                            age_seconds=round(age_seconds, 1),
+                            source="polygon",
+                            threshold_seconds=330,
+                        )
+            except Exception as fresh_err:
+                logger.warning(
+                    "spx_freshness_check_failed",
+                    error=str(fresh_err),
+                )
+
+            if not spx_fresh:
+                logger.info(
+                    "cycle_skipped",
+                    reason="spx_price_stale_or_unavailable",
+                    service_name="main",
+                )
+                return {
+                    "no_trade_signal": True,
+                    "no_trade_reason": "spx_price_stale_or_unavailable",
                     "regime": "unknown",
                     "rcs": 0.0,
                     "allocation_tier": "danger",

@@ -114,7 +114,12 @@ def _compute_rule_based_prediction(redis_client) -> Optional[dict]:
         raw_vvix_z    = _read(redis_client, "polygon:vvix:z_score", "0.0")
         raw_gex_net   = _read(redis_client, "gex:net", "0")
         raw_gex_conf  = _read(redis_client, "gex:confidence", "0.5")
-        raw_spx       = _read(redis_client, "tradier:quotes:SPX", None)
+        # 2026-05-01 SPX-real-time-feed fix: read polygon:spx:current first
+        # (real-time), fall back to tradier:quotes:SPX (15-min delayed).
+        # Mirrors prediction_engine._get_spx_price() priority chain so the
+        # shadow harness sees the same SPX value the production path sees.
+        raw_spx_polygon = _read(redis_client, "polygon:spx:current", None)
+        raw_spx_tradier = _read(redis_client, "tradier:quotes:SPX", None)
         raw_flip_zone = _read(redis_client, "gex:flip_zone", "0")
         raw_wall      = _read(redis_client, "gex:nearest_wall", "0")
 
@@ -122,29 +127,33 @@ def _compute_rule_based_prediction(redis_client) -> Optional[dict]:
         vvix_z       = float(raw_vvix_z)
         gex_net      = float(raw_gex_net)
         gex_conf     = float(raw_gex_conf)
-        # Bug-fix: tradier:quotes:SPX is a JSON string written by
-        # tradier_feed ({"last":..., "bid":..., "ask":..., ...}),
-        # not a plain float. Previous code did float(raw_spx) which
-        # crashed with "could not convert string to float" every
-        # shadow cycle during live trading. Mirrors the canonical
-        # parser at prediction_engine._get_spx_price().
+        # SPX parser: try polygon:spx:current (price field) first; fall
+        # back to tradier:quotes:SPX (last/ask/bid). Both are JSON strings.
+        # Bug-fix history: tradier:quotes:SPX is a JSON string written by
+        # tradier_feed ({"last":..., "bid":..., "ask":..., ...}), not a
+        # plain float — previous float(raw_spx) crashed every shadow cycle.
+        spx_price = 5200.0
         try:
             import json as _json
-            if raw_spx:
-                spx_data = _json.loads(raw_spx)
-                if isinstance(spx_data, dict):
+            if raw_spx_polygon:
+                poly_data = _json.loads(raw_spx_polygon)
+                if isinstance(poly_data, dict):
+                    candidate = float(poly_data.get("price") or 0)
+                    if candidate > 0:
+                        spx_price = candidate
+            if spx_price == 5200.0 and raw_spx_tradier:
+                trad_data = _json.loads(raw_spx_tradier)
+                if isinstance(trad_data, dict):
                     spx_price = float(
-                        spx_data.get("last")
-                        or spx_data.get("ask")
-                        or spx_data.get("bid")
+                        trad_data.get("last")
+                        or trad_data.get("ask")
+                        or trad_data.get("bid")
                         or 5200.0
                     )
                 else:
                     # Defensive fallback: someone wrote a plain numeric
                     # (e.g. legacy cache) — accept it rather than crash.
-                    spx_price = float(raw_spx)
-            else:
-                spx_price = 5200.0
+                    spx_price = float(raw_spx_tradier)
         except (ValueError, TypeError, _json.JSONDecodeError):
             spx_price = 5200.0
         flip_zone    = float(raw_flip_zone)

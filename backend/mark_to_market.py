@@ -50,16 +50,39 @@ def _bs_option_price(
 
 
 def _get_spx_price(redis_client) -> float:
-    """Get current SPX price from Redis."""
+    """Get current SPX price from Redis.
+
+    PRIMARY:   polygon:spx:current  (real-time; written by polygon_feed).
+    FALLBACK:  tradier:quotes:SPX   (15-min delayed in sandbox).
+    SENTINEL:  5200.0.
+
+    MTM runs every 1 minute against open positions. A stale Polygon key
+    falls through to Tradier rather than skipping (positions still need
+    repricing — better delayed P&L than no P&L). The freshness guard in
+    prediction_engine.run_cycle handles entry-decision discipline.
+    """
+    try:
+        raw = redis_client.get("polygon:spx:current")
+        if raw:
+            data = json.loads(raw)
+            price = float(data.get("price") or 0)
+            if price > 0:
+                return round(price, 2)
+    except Exception:
+        pass
+
     try:
         raw = redis_client.get("tradier:quotes:SPX")
         if raw:
             data = json.loads(raw)
-            return float(
-                data.get("last") or data.get("ask") or data.get("bid") or 5200.0
+            price = float(
+                data.get("last") or data.get("ask") or data.get("bid") or 0
             )
+            if price > 0:
+                return round(price, 2)
     except Exception:
         pass
+
     return 5200.0
 
 

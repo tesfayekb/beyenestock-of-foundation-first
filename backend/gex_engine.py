@@ -145,15 +145,29 @@ class GexEngine:
             gex_by_strike[K] = gex_by_strike.get(K, 0.0) + dealer_gamma
             net_gex += dealer_gamma
 
-        # Read SPX price from Redis
+        # Read SPX price from Redis — Polygon real-time first (2026-05-01
+        # fix), Tradier sandbox fallback (15-min delayed). Mirrors
+        # prediction_engine._get_spx_price() priority chain.
         spx_price = 5200.0
         try:
-            raw = self.redis_client.get("tradier:quotes:SPX")
+            raw = self.redis_client.get("polygon:spx:current")
             if raw:
-                quote = json.loads(raw)
-                spx_price = float(quote.get("last", 5200.0))
+                poly_data = json.loads(raw)
+                candidate = float(poly_data.get("price") or 0)
+                if candidate > 0:
+                    spx_price = candidate
         except Exception:
             pass
+        if spx_price == 5200.0:
+            try:
+                raw = self.redis_client.get("tradier:quotes:SPX")
+                if raw:
+                    quote = json.loads(raw)
+                    candidate = float(quote.get("last") or 0)
+                    if candidate > 0:
+                        spx_price = candidate
+            except Exception:
+                pass
 
         nearest_wall = self._nearest_positive_wall(gex_by_strike, spx_price)
         flip_zone = self._nearest_flip_zone(gex_by_strike)

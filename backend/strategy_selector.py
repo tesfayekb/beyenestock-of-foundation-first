@@ -521,18 +521,35 @@ class StrategySelector:
             return 1.0, "error"
 
     def _get_spx_price(self) -> float:
-        """Read current SPX price from Redis. Returns 5200.0 fallback."""
+        """Read current SPX price from Redis.
+
+        PRIMARY:   polygon:spx:current  (real-time; written by polygon_feed).
+        FALLBACK:  tradier:quotes:SPX   (15-min delayed in sandbox).
+        SENTINEL:  5200.0.
+        """
+        if not self.redis_client:
+            return 5200.0
+        import json
         try:
-            raw = (
-                self.redis_client.get("tradier:quotes:SPX")
-                if self.redis_client else None
-            )
+            raw = self.redis_client.get("polygon:spx:current")
             if raw:
-                import json
                 data = json.loads(raw)
-                return float(data.get("last") or data.get("ask") or 5200.0)
+                price = float(data.get("price") or 0)
+                if price > 0:
+                    return round(price, 2)
         except Exception:
             pass
+
+        try:
+            raw = self.redis_client.get("tradier:quotes:SPX")
+            if raw:
+                data = json.loads(raw)
+                price = float(data.get("last") or data.get("ask") or 0)
+                if price > 0:
+                    return round(price, 2)
+        except Exception:
+            pass
+
         return 5200.0
 
     # 12G: butterfly threshold auto-tuning. Two helpers — one to
