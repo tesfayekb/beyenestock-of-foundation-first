@@ -78,17 +78,18 @@ Single register of every trading change action. Every change to trading code, sc
 - **status:** [x] Docstring fix DONE (Track B PR); [ ] SUBSCRIPTION_REGISTRY row addition PENDING
 - **cross_refs:** HANDOFF NOTE Appendix A.6 mitigation #2 (subscription-vs-runtime audit) + Cursor 2026-05-03 morning audit + Cursor 2026-05-03 verdict-reversal review N-3 finding.
 
-### T-ACT-047 — Try/except discipline mitigation in `prediction_engine.run_cycle` (stub — full description in TASK_REGISTER §14)
+### T-ACT-047 — Try/except discipline mitigation in `prediction_engine.run_cycle` (Choice C: inner-block-specific; stub — full description in TASK_REGISTER §14)
 
 - **id:** T-ACT-047
-- **date:** 2026-05-01 (registered; pending implementation)
-- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (severity, scope, fix proposal, acceptance criteria).
-- **type:** code (planned)
+- **date:** 2026-05-01 (registered) → 2026-05-02 (implemented in PR `fix/t-act-047-postgrest-error-classification`)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (severity, scope, Choice C selection rationale, acceptance criteria, post-deploy verification protocol revised per F3).
+- **type:** code (DONE)
 - **phase:** post_phase_1_diagnostic
-- **impact:** MEDIUM
-- **owner:** Cursor (per operator authorization in next session)
-- **status:** PENDING — Cursor work in next session
-- **cross_refs:** HANDOFF NOTE Appendix A.5 mitigation #3 (original lesson) + HANDOFF NOTE Appendix A.6 (post-mortem context) + HANDOFF NOTE Appendix A.7 (silent-failure-class family convention pointer ratified 2026-05-03).
+- **impact:** MEDIUM (silent-failure surface — closed by this PR; family A.7 fully closed)
+- **owner:** Cursor — implemented 2026-05-02
+- **status:** [x] DONE — implemented 2026-05-02 in PR `fix/t-act-047-postgrest-error-classification` (1 modified `prediction_engine.py` + 1 new test file + 3 doc updates = 5 files; ~22 logical edits; 5 tests). Branched from main @ `575e79d` (T-ACT-054 PR #94 squash-merge tip). Plan-review refinements: 7 (R1 canonical full-path import + R2 error_count_1h auto-increment comment + R3 hint in alert body + R4 NON-NEGOTIABLE pytest.importorskip submodule-level + R5 split test 4a/4b for httpx.ConnectError vs RuntimeError + R6 env-var precondition + R7 concrete operator-facing trigger SQL with 3 deterministic outcomes). DIAGNOSE-round flag resolutions: 4 (F1-a postgrest import after redis try-block PEP 8 alignment + F2 REFINE Smoke 4 unique-marker grep + F3 REVISE §2.6 to Option C decoupled protocol pytest primary + temp-branch optional + F4 TIGHTEN to `postgrest.exceptions` submodule importorskip).
+- **post_deploy_verification:** (Step 0 PRECONDITION) Operator confirms `ALERT_EMAIL` + `ALERT_GMAIL_APP_PASSWORD` env vars set on Railway. (Step 1 PRIMARY) Run pytest `tests/test_t_act_047_persistent_error_classification.py` in dev/staging — 5/5 PASS validates acceptance criteria 1-4 at code level. (Step 2 OPTIONAL) Path A passive: wait for organic schema-drift incident; Path B active: temp throwaway branch with `output["nonexistent_t_act_047_test_col"] = "test"` deployed to dev/staging only NEVER production, observe email + log + service_health row arrival per 3 deterministic outcomes, delete branch after. (Step 3) Step 1 = 5/5 PASS → DONE; Step 2 supplementary; failure of Step 2 surfaces specifically (likely env-var) but is NOT a T-ACT-047 blocker.
+- **cross_refs:** HANDOFF NOTE Appendix A.5 mitigation #3 (original lesson — try/except discipline at the persist site) + HANDOFF NOTE Appendix A.6 (post-mortem context) + HANDOFF NOTE Appendix A.7 (silent-failure-class family — T-ACT-047 closes the family as the 5th and final member; A.7 status: FULLY CLOSED) + T-ACT-046 (sibling — silent-staleness in feed timestamps) + T-ACT-054 (sibling — derived-feature NULL semantics) + Cursor 2026-05-02 design memo §SQ4 (DB schema constraint per A.1 vs. alert-channel separation) + Cursor 2026-05-02 plan review §1.3 / §2.2 / §4.2-4.3 / §6.2-6.3 (the 7 refinements).
 
 ### T-ACT-046 — Fix silent-staleness pattern in `tradier_feed.py:282-283` AND `polygon_feed.py:174-184` (bundled — same root pattern; stub — full description in TASK_REGISTER §14)
 
