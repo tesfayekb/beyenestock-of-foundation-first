@@ -731,6 +731,26 @@ def train_meta_label_model(redis_client=None) -> dict:
       prior_session_return, vix_term_ratio, spx_momentum_4h,
       gex_flip_proximity.
 
+    NULL-handling contract (T-ACT-054 Meta-3, ratified in
+    `fix/t-act-054-cv-stress-null-on-degenerate`):
+      cv_stress_score may be persisted as NULL in the database when
+      _compute_cv_stress detected degenerate inputs (Choice A). All
+      three feature-vector sites — this trainer, the champion-
+      challenger _row_to_features (L1071), and the live inference
+      path at execution_engine.open_virtual_position (L388) — convert
+      NULL → float("nan") via the pattern:
+        (float(r["cv_stress_score"]) if r.get("cv_stress_score") is not None
+         else float("nan"))
+      LightGBM handles NaN natively as a missing value (zero_as_missing
+      defaults to False; missing values traverse a learned default
+      direction at each split). DO NOT replace this with `or 0.0` —
+      that pattern silently coerces NULL to a real 0.0 reading and
+      defeats the explicit semantic distinction Choice A creates. All
+      three sites MUST stay byte-equivalent on this column or the
+      .predict_proba() shape contract holds but the model output is
+      corrupted; tests in test_t_act_054_cv_stress_null_semantics.py
+      enforce lockstep.
+
     `signal_weak` was dropped in Section 13 Batch 1 because its
     training distribution is a constant 0 (no_trade_signal=True when
     signal_weak=True, and the training set filters to
@@ -814,7 +834,18 @@ def train_meta_label_model(redis_client=None) -> dict:
                     float(r.get("confidence") or 0),
                     float(r.get("vvix_z_score") or 0),
                     float(r.get("gex_confidence") or 0),
-                    float(r.get("cv_stress_score") or 0),
+                    # T-ACT-054 Meta-3: NaN sentinel preserves NULL-on-
+                    # degenerate-input semantics through the meta-label
+                    # training feature contract. LightGBM natively
+                    # handles NaN as missing; the model learns to split
+                    # on "is cv_stress observed?" as a feature. Lockstep
+                    # with run_meta_label_champion_challenger._row_to_features
+                    # (L1071) and execution_engine.open_virtual_position (L388).
+                    (
+                        float(r["cv_stress_score"])
+                        if r.get("cv_stress_score") is not None
+                        else float("nan")
+                    ),
                     float(r.get("vix") or 18.0),
                     float(r.get("prior_session_return") or 0),
                     float(r.get("vix_term_ratio") or 1.0),
@@ -1054,11 +1085,21 @@ def run_meta_label_champion_challenger(redis_client=None) -> dict:
             # silently corrupts every comparison this scaffold ever
             # produces — and the execution_engine inference side must
             # match, or .predict_proba() raises on a shape mismatch.
+            #
+            # T-ACT-054 Meta-3: cv_stress_score uses NaN sentinel (NOT
+            # 0.0) when the source row had degenerate inputs at compute
+            # time. Must stay in lockstep with
+            # train_meta_label_model (L817) and
+            # execution_engine.open_virtual_position (L388).
             return [
                 float(r.get("confidence") or 0),
                 float(r.get("vvix_z_score") or 0),
                 float(r.get("gex_confidence") or 0),
-                float(r.get("cv_stress_score") or 0),
+                (
+                    float(r["cv_stress_score"])
+                    if r.get("cv_stress_score") is not None
+                    else float("nan")
+                ),
                 float(r.get("vix") or 18.0),
                 float(r.get("prior_session_return") or 0),
                 float(r.get("vix_term_ratio") or 1.0),

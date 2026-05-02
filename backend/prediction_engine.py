@@ -73,6 +73,17 @@ class PredictionEngine:
         self._direction_features = None
         self._load_direction_model()
 
+        # T-ACT-054: one-time observability marker for cv_stress
+        # degenerate-input cycles. First cycle that hits the
+        # NULL-on-degenerate-input path emits an INFO log so future
+        # sessions can verify the AND-logic gate is firing as intended;
+        # subsequent degenerate cycles are silent to avoid log noise.
+        # Pattern matches Track B's `_quote_fields_logged` /
+        # `_spx_fields_logged` markers from `tradier_feed.py` and
+        # `polygon_feed.py`. See HANDOFF NOTE A.7 silent-failure-class
+        # family convention.
+        self._cv_stress_degenerate_logged: bool = False
+
     # ------------------------------------------------------------------
     # T-ACT-041 — three-tier model loader (extracted from __init__ for
     # test ergonomics per DIAGNOSE D5; bundles the partial-state fix
@@ -685,21 +696,110 @@ class PredictionEngine:
 
     def _compute_cv_stress(self) -> dict:
         """
-        CV_Stress computation.
+        CV_Stress computation with NULL-on-degenerate-input semantics.
+
         Phase 2 proxy: uses VVIX Z-score and GEX confidence.
         Real charm/vanna velocities from options chain in Phase 4.
         Formula: cv_stress = 60% * proxy_vanna + 40% * proxy_charm
+
+        NULL semantics (T-ACT-054, ratified in PR
+        `fix/t-act-054-cv-stress-null-on-degenerate`):
+        Returns {"cv_stress_score": None, "charm_velocity": None,
+        "vanna_velocity": None} when BOTH input arms are degenerate
+        simultaneously:
+          - vvix_z arm: baseline not warmed, vvix_z key absent, OR
+            vvix_z parses to exactly 0.0
+          - gex_conf arm: gex_confidence key absent OR saturated at
+            >= 1.0
+
+        The AND-logic is critical: gex_conf=1.0 alone is the normal
+        RTH steady-state (per gex_engine.py:175 saturation
+        `min(1.0, len(trades) / 1000)`), so OR-logic would NULL the
+        majority of healthy cycles. Empirical Query 1 (2026-05-02)
+        found 29.2% of cycles have BOTH conditions simultaneously —
+        that is the precise subset Choice A targets. Without the
+        AND-logic discipline, cv_stress would silently NULL across
+        the majority of RTH cycles and break downstream gates that
+        actually have meaningful signal to act on.
+
+        Consumers MUST handle None explicitly per HANDOFF A.7
+        silent-failure-class family convention. See:
+          - prediction_engine.py:1031 (no_trade > 85, active gate)
+          - prediction_engine.py:961, 972 (rule-based tilt — discipline floor)
+          - strategy_selector.py:176 (long_gamma override, active gate)
+          - position_monitor.py:778 (D-017 cv_stress exit, active gate)
+          - model_retraining.py:817, 1061 (meta-label training — Meta-3 NaN sentinel)
+          - execution_engine.py:388 (meta-label inference — Meta-3 NaN sentinel)
         """
         gex_conf_raw = self._read_redis("gex:confidence", None)
-        gex_conf = float(gex_conf_raw) if gex_conf_raw is not None else None
-        try:
-            vvix_z = float(self._read_redis("polygon:vvix:z_score", "0.0"))
-        except (ValueError, TypeError):
-            vvix_z = 0.0
+        vvix_z_raw = self._read_redis("polygon:vvix:z_score", None)
+        baseline_ready_raw = self._read_redis(
+            "polygon:vvix:baseline_ready", "False"
+        )
+        baseline_ready = baseline_ready_raw == "True"
 
-        # Proxy velocities based on available data
-        # Treat None gex_conf (no Redis data yet) as neutral 0.5 not full confidence 1.0
-        gex_conf_val = gex_conf if gex_conf is not None else 0.5
+        # Parse vvix_z defensively: None on missing OR non-numeric
+        try:
+            vvix_z_parsed = (
+                float(vvix_z_raw) if vvix_z_raw is not None else None
+            )
+        except (ValueError, TypeError):
+            vvix_z_parsed = None
+
+        # Parse gex_conf defensively: None on missing OR non-numeric
+        try:
+            gex_conf_parsed = (
+                float(gex_conf_raw) if gex_conf_raw is not None else None
+            )
+        except (ValueError, TypeError):
+            gex_conf_parsed = None
+
+        # AND-logic degenerate detection — both input arms must be
+        # degenerate for the formula to produce semantically
+        # meaningless output. See docstring above for why OR-logic
+        # would be a critical defect.
+        vvix_z_degenerate = (
+            not baseline_ready
+            or vvix_z_parsed is None
+            or vvix_z_parsed == 0.0
+        )
+        gex_conf_degenerate = (
+            gex_conf_parsed is None
+            or gex_conf_parsed >= 1.0
+        )
+        degenerate = vvix_z_degenerate and gex_conf_degenerate
+
+        if degenerate:
+            # One-time INFO log per process startup (observability per
+            # F2-c convention from Track B). Subsequent degenerate
+            # cycles are silent to avoid log noise — operators only
+            # need to know the gate is firing, not log every match.
+            if not self._cv_stress_degenerate_logged:
+                logger.info(
+                    "cv_stress_degenerate_first_cycle",
+                    baseline_ready=baseline_ready,
+                    vvix_z_present=(vvix_z_parsed is not None),
+                    vvix_z_value=vvix_z_parsed,
+                    gex_conf_value=gex_conf_parsed,
+                    gex_conf_saturated=(
+                        gex_conf_parsed is not None
+                        and gex_conf_parsed >= 1.0
+                    ),
+                )
+                self._cv_stress_degenerate_logged = True
+            return {
+                "cv_stress_score": None,
+                "charm_velocity": None,
+                "vanna_velocity": None,
+            }
+
+        # Healthy-input path — at least one arm carries real signal.
+        # Treat None gex_conf as neutral 0.5 (existing convention
+        # preserved for backward compat with tests/calibration logic).
+        vvix_z = vvix_z_parsed if vvix_z_parsed is not None else 0.0
+        gex_conf_val = (
+            gex_conf_parsed if gex_conf_parsed is not None else 0.5
+        )
         proxy_vanna = abs(vvix_z) * 0.6 + (1.0 - gex_conf_val) * 2.0
         proxy_charm = abs(vvix_z) * 0.4 + (1.0 - gex_conf_val) * 1.5
         raw = 0.6 * proxy_vanna + 0.4 * proxy_charm
@@ -714,7 +814,7 @@ class PredictionEngine:
     def _compute_direction(
         self,
         regime: str,
-        cv_stress: float,
+        cv_stress: Optional[float],
         spx_price: float = 5200.0,
         flip_zone: float = None,
         gex_conf: float = 0.0,
@@ -947,7 +1047,12 @@ class PredictionEngine:
             p_neutral_raw = 0.12  # small fixed neutral component
 
             # Overlay CV_Stress: high stress tilts toward bear
-            if cv_stress > 70:
+            # T-ACT-054: guard with `is not None` as discipline floor.
+            # This branch is dormant when LightGBM v1 is loaded but
+            # would silently TypeError-skip via outer try/except if
+            # the model becomes unavailable. Per HANDOFF A.7 fix all
+            # known instances of the silent-failure-class family.
+            if cv_stress is not None and cv_stress > 70:
                 p_bear_raw += 0.08
                 p_bull_raw -= 0.04
 
@@ -958,7 +1063,9 @@ class PredictionEngine:
 
         else:
             # --- Fallback: regime-based probabilities (Phase 2 placeholder) ---
-            if cv_stress > 70:
+            # T-ACT-054: guard with `is not None` as discipline floor
+            # (sister to the L1050 patch above). Per HANDOFF A.7.
+            if cv_stress is not None and cv_stress > 70:
                 p_bull, p_bear, p_neutral = 0.25, 0.35, 0.40
             elif regime in ("quiet_bullish",):
                 p_bull, p_bear, p_neutral = 0.45, 0.25, 0.30
@@ -997,13 +1104,21 @@ class PredictionEngine:
     def _evaluate_no_trade(
         self,
         rcs: float,
-        cv_stress: float,
+        cv_stress: Optional[float],
         vvix_z: float,
         session: dict,
     ) -> tuple:
         """
         Returns (no_trade: bool, reason: Optional[str]).
         Implements D-018 (VVIX), D-022 (capital preservation), RCS gate.
+
+        T-ACT-054: cv_stress is Optional[float] — None when degenerate
+        inputs (per _compute_cv_stress NULL contract). The cv_stress
+        gate at L1120 below explicitly guards `is not None` and skips
+        the no_trade-trigger when the signal is degenerate. Conservative
+        choice: do NOT emergency-stop on missing data; keep trading on
+        the signals we DO have. Per HANDOFF A.7 silent-failure-class
+        family convention.
         """
         if session and session.get("session_status") == "halted":
             return True, "session_halted"
@@ -1017,8 +1132,18 @@ class PredictionEngine:
             return True, f"rcs_too_low_{rcs:.0f}"
 
         # CV_Stress critical
-        if cv_stress > 85:
+        # T-ACT-054: guard with `is not None` — under Choice A NULL
+        # semantics cv_stress is None when inputs are degenerate. Do
+        # NOT trigger emergency no_trade on missing data (conservative:
+        # the absence of stress signal is not itself a stress signal).
+        # Per HANDOFF A.7 NULL-on-degenerate-input convention.
+        if cv_stress is not None and cv_stress > 85:
             return True, f"cv_stress_critical_{cv_stress:.0f}"
+        if cv_stress is None:
+            logger.debug(
+                "cv_stress_no_trade_gate_skipped",
+                reason="cv_stress_is_none_degenerate_inputs",
+            )
 
         # D-022: 5 consecutive losses = halt
         if session:

@@ -29,17 +29,18 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
-### T-ACT-054 — `charm_velocity` / `vanna_velocity` / `cv_stress_score` silent-zero pattern (stub — full description in TASK_REGISTER §14)
+### T-ACT-054 — `charm_velocity` / `vanna_velocity` / `cv_stress_score` silent-zero pattern (Choice A NULL-on-degenerate-input remediation — DONE)
 
 - **id:** T-ACT-054
-- **date:** 2026-05-03 (registered; root cause locked; remediation pending separate PR)
-- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (Hypothesis E confirmation, Choice A NULL-on-degenerate-input, downstream consumer audit, acceptance criteria). Cv_stress design memo (Cursor 2026-05-03) for Choice A/B/C analysis and recommendation reasoning.
-- **type:** code (planned — separate Cursor PR after Track B merges)
+- **date:** 2026-05-02 (implemented in PR `fix/t-act-054-cv-stress-null-on-degenerate`)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description and implementation summary (AND-logic degenerate gate; 4 direct consumer guards including newly-surfaced D-017 in `position_monitor.py`; 3 propagation-boundary patches; Meta-3 NaN sentinel at 3 lockstep meta-label sites; 4 type-signature updates for full Optional[float] consistency; 14 tests including critical regression `test_gex_saturation_alone_does_not_null_cv_stress`).
+- **type:** code
 - **phase:** post_phase_1_diagnostic
-- **impact:** MEDIUM (silent-failure-class; same family as A.5/A.6/T-ACT-046; ~29.2% of cycles silently neutralize 2 active downstream consumers — emergency no-trade gate at `prediction_engine.py:1008` and strategy_selector long-gamma override at `strategy_selector.py:176`)
-- **owner:** Cursor (separate follow-up PR after Track B merges)
-- **status:** INVESTIGATION-COMPLETE; ROOT-CAUSE-LOCKED; DESIGN-CHOSEN (Choice A); REMEDIATION-PENDING
-- **cross_refs:** HANDOFF NOTE Appendix A.5 (precedent — same silent-failure class) + HANDOFF NOTE Appendix A.7 (silent-failure-class family convention pointer ratified by Track B PR) + T-ACT-046 (sibling — same family, distinct surface — silent-staleness in feed timestamps).
+- **impact:** MEDIUM (silent-failure-class; same family as A.5/A.6/T-ACT-046; restores ~29.2% of cycles to explicit NULL distinguishability — emergency no-trade gate at `prediction_engine.py:1120` and strategy_selector long-gamma override at `strategy_selector.py:184` now correctly skip on absence-of-signal rather than silently disable on stress-saturation)
+- **owner:** Cursor
+- **status:** [x] DONE — implemented 2026-05-02 in PR `fix/t-act-054-cv-stress-null-on-degenerate` (8 modified + 1 new test file; ~17-18 logical edits; 14 tests). Branched from main @ `e887c39` (Track B PR #93 squash-merge tip). Plan-review modifications: 10 (1 critical OR-logic-vs-AND-logic gate fix + 1 missed D-017 consumer + 1 Meta-3 over Meta-2 selection + 3 propagation-boundary fixes + 1 path attribution fix + 1 test surface expansion 5→14 + 3 type-signature updates).
+- **post_deploy_verification:** (1) Re-run disambiguating SQL ≥7 days post-merge — `both_at_extremes ≈ triple_zeros` pattern should be replaced by NULL rows. (2) Verify `cv_stress_degenerate_first_cycle` INFO log appears once per process restart. (3) Verify `strategy_selector_observed_null_cv_stress` INFO log fires when degenerate cycles propagate. (4) Confirm meta-label retrain (auto-triggered) produces non-trivial split on cv_stress NaN-missing direction. (5) Verify D-017 exit fires correctly when `current_cv_stress` genuinely > 70 and is NOT silently disabled when None.
+- **cross_refs:** HANDOFF NOTE Appendix A.5 (precedent — same silent-failure class) + HANDOFF NOTE Appendix A.7 (silent-failure-class family convention pointer; T-ACT-054 implementation now serves as canonical example for derived-feature surface) + T-ACT-046 (sibling — same family, distinct surface — silent-staleness in feed timestamps) + T-ACT-054 cv_stress design memo (Cursor 2026-05-03) + T-ACT-054 plan review (Cursor 2026-05-02).
 
 ### T-ACT-051 — Consolidate duplicate I:SPX direct fetches (stub — full description in TASK_REGISTER §14)
 
