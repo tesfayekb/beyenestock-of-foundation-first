@@ -13,7 +13,7 @@ from logger import get_logger
 logger = get_logger("criteria_evaluator")
 
 
-def _upsert_criterion(
+def _update_criterion(
     criterion_id: str,
     status: str,
     current_value_text: str,
@@ -21,18 +21,65 @@ def _upsert_criterion(
     observations_count: int = 0,
     notes: Optional[str] = None,
 ) -> None:
-    """Upsert a single criterion row. Never raises."""
+    """Update a single criterion row. Never raises.
+
+    T-ACT-055 (2026-05-02): reverted from .upsert(..., on_conflict='X') to
+    .update().eq('criterion_id', X). The .upsert() form (introduced in
+    commit 836a83c, PR #17, 2026-04-17) silently failed because the
+    paper_phase_criteria schema requires criterion_name TEXT NOT NULL and
+    target_description TEXT NOT NULL, neither of which is in this payload.
+    PostgreSQL's INSERT-phase NOT NULL check fired with code 23502 BEFORE
+    ON CONFLICT could engage, the outer try/except swallowed it, and 8 of
+    12 GLC rows were silently frozen at seed values for ~16 days. The
+    .update().eq() form is correct because the seed migration creates all
+    12 rows with non-null criterion_name + target_description, and UPDATE
+    only touches columns in the payload — non-payload columns are
+    preserved. See HANDOFF A.7 vector 2 (database-persistence surface).
+
+    Function renamed from _upsert_criterion → _update_criterion in this
+    PR for semantic correctness (the body uses .update().eq(), not
+    .upsert()). The ERROR log event name 'criterion_upsert_failed' is
+    deliberately preserved for dashboard/log-search continuity — see the
+    inline comment at the logger.error call below.
+
+    Defensive WARN amendment: surfaces the row-deleted edge case
+    explicitly. If a criterion row has been deleted from the DB (manual
+    ops error or migration regression), .update() silently no-ops with
+    empty result.data — the WARN log converts that into an observable
+    signal instead of another silent-failure surface.
+    """
     try:
-        get_client().table("paper_phase_criteria").upsert({
-            "criterion_id": criterion_id,
-            "status": status,
-            "current_value_text": current_value_text,
-            "current_value_numeric": current_value_numeric,
-            "observations_count": observations_count,
-            "last_evaluated_at": datetime.now(timezone.utc).isoformat(),
-            "notes": notes,
-        }, on_conflict="criterion_id").execute()
+        result = (
+            get_client()
+            .table("paper_phase_criteria")
+            .update({
+                "status": status,
+                "current_value_text": current_value_text,
+                "current_value_numeric": current_value_numeric,
+                "observations_count": observations_count,
+                "last_evaluated_at": datetime.now(timezone.utc).isoformat(),
+                "notes": notes,
+            })
+            .eq("criterion_id", criterion_id)
+            .execute()
+        )
+        if not result.data:
+            logger.warning(
+                "criterion_update_no_match",
+                criterion_id=criterion_id,
+                hint=(
+                    "Row may have been deleted from paper_phase_criteria; "
+                    "re-run the seed migration "
+                    "(supabase/migrations/20260417000001_paper_phase_criteria.sql) "
+                    "if this criterion_id is expected to exist."
+                ),
+            )
     except Exception as e:
+        # Event name 'criterion_upsert_failed' deliberately PRESERVED (not
+        # renamed to 'criterion_update_failed') for dashboard/log-search
+        # continuity. Per T-ACT-055 plan-review §R3: function-name rename
+        # affects internal code only; event-name change would break existing
+        # log-aggregation queries and Railway dashboard filters.
         logger.error("criterion_upsert_failed", criterion_id=criterion_id, error=str(e))
 
 
@@ -70,7 +117,7 @@ def evaluate_glc001_prediction_accuracy() -> None:
                 .execute()
             )
             total_signals = total_result.count or 0
-            _upsert_criterion(
+            _update_criterion(
                 "GLC-001",
                 "in_progress",
                 f"{total_labeled} labeled predictions ({total_signals} signals total, need 50)",
@@ -99,7 +146,7 @@ def evaluate_glc001_prediction_accuracy() -> None:
             "failed" if total_labeled >= 100 else "in_progress"
         )
 
-        _upsert_criterion(
+        _update_criterion(
             "GLC-001",
             status,
             f"{accuracy:.1%} directional accuracy ({correct}/{total_labeled} correct)",
@@ -134,7 +181,7 @@ def evaluate_glc002_per_regime_accuracy() -> None:
         total_labeled = len(predictions)
 
         if total_labeled < 8:
-            _upsert_criterion(
+            _update_criterion(
                 "GLC-002",
                 "in_progress",
                 f"{total_labeled} labeled predictions across regimes (need 8 per regime)",
@@ -198,7 +245,7 @@ def evaluate_glc002_per_regime_accuracy() -> None:
             / total_regimes
         ) if total_regimes > 0 else 0.0
 
-        _upsert_criterion(
+        _update_criterion(
             "GLC-002",
             overall_status,
             f"{passing_regimes}/{total_regimes} regimes passing "
@@ -226,7 +273,7 @@ def evaluate_glc003_training_examples() -> None:
         total = result.count or 0
 
         if not result.data:
-            _upsert_criterion(
+            _update_criterion(
                 "GLC-003", "not_started",
                 "No closed positions recorded yet",
                 0.0,
@@ -252,7 +299,7 @@ def evaluate_glc003_training_examples() -> None:
         )
         text = f"{total} positions, {unique_cells} cells, min cell={min_cell}"
 
-        _upsert_criterion(
+        _update_criterion(
             "GLC-003", status, text,
             float(min_cell),
             observations_count=total,
@@ -276,7 +323,7 @@ def evaluate_glc004_undersampled_handling() -> None:
         )
         total = result.count or 0
         status = "in_progress" if total > 0 else "not_started"
-        _upsert_criterion(
+        _update_criterion(
             "GLC-004", status,
             "Under-sampled sizing logic implemented in risk_engine (Phase 2B)",
             None,
@@ -307,7 +354,7 @@ def evaluate_glc005_sharpe_ratio() -> None:
             status = "not_started"
             text = "Insufficient data — need 20+ sessions"
 
-        _upsert_criterion(
+        _update_criterion(
             "GLC-005", status, text,
             float(sharpe) if sharpe is not None else None,
             notes="Target: >= 1.5 over full 45-day paper period",
@@ -340,7 +387,7 @@ def evaluate_glc006_zero_exceptions() -> None:
         session_count = len(sessions)
 
         if session_count < 20:
-            _upsert_criterion(
+            _update_criterion(
                 "GLC-006",
                 "in_progress",
                 f"{session_count}/20 sessions completed",
@@ -385,7 +432,7 @@ def evaluate_glc006_zero_exceptions() -> None:
 
         status = "passed" if total_errors == 0 else "failed"
         text = f"{total_errors} errors in last {session_count} sessions"
-        _upsert_criterion(
+        _update_criterion(
             "GLC-006", status, text, float(total_errors),
             observations_count=session_count,
         )
@@ -406,7 +453,7 @@ def evaluate_glc011_slippage_observations() -> None:
         status = "passed" if total >= 200 else "in_progress" if total > 0 else "not_started"
         pct = min(100, int(total / 2))
         text = f"{total} / 200 observations ({pct}%)"
-        _upsert_criterion(
+        _update_criterion(
             "GLC-011", status, text, float(total),
             observations_count=total,
         )
@@ -419,7 +466,7 @@ def evaluate_glc012_gex_tracking() -> None:
     try:
         # CBOE DataShop account pending approval
         # Cannot evaluate until CBOE feed is connected
-        _upsert_criterion(
+        _update_criterion(
             "GLC-012", "blocked",
             "Blocked — awaiting CBOE DataShop account approval",
             None,

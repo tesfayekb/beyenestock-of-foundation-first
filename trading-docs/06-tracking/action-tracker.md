@@ -29,6 +29,23 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-055 — `paper_phase_criteria` upsert NOT NULL violation regression (Choice B revert + rename + WARN; stub — full description in TASK_REGISTER §14)
+
+- **id:** T-ACT-055
+- **date:** 2026-05-02 (implemented in PR `fix/t-act-055-criteria-evaluator-update-revert`)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description. Reverted `_upsert_criterion` body from `.upsert(..., on_conflict='criterion_id')` to `.update(...).eq('criterion_id', X)` (the form on `fea0ace` PR #6 baseline before PR #17 regression). Renamed function `_upsert_criterion` → `_update_criterion` for semantic correctness. Added defensive WARN log on empty `result.data` to surface row-deleted edge case. Event name `criterion_upsert_failed` preserved at `logger.error` line for dashboard continuity. 12 production caller sites + 6 test references renamed mechanically. 5 new unit tests added covering regression form (`.update` vs `.upsert`), regression mechanism (payload columns), defensive WARN path, false-positive guard, and never-raises contract.
+- **severity:** HIGH (regression — 8 of 12 GLC rows silently frozen at seed values for ~16 days)
+- **vintage:** Regression introduced 2026-04-17 in commit `836a83c` (PR #17). NOT a long-standing bug.
+- **reopens:** A.7 silent-failure-class family (was claimed "FULLY CLOSED" per T-ACT-047 earlier on 2026-05-02; T-ACT-055 surfaced a 6th member same-day, reversing the closure). Discipline-meta-lesson: convention pointer ≠ exhaustive audit.
+- **post-deploy verification:** Confirm `last_evaluated_at` updates for all 12 GLC rows on day-after-deploy. Confirm no `criterion_upsert_failed` errors in Railway logs for ≥24h. Spot-check `current_value_text` reflects current data, NOT seed values.
+- **status:** DONE
+- **owner:** Cursor
+- **estimated_time:** 1.5-2 hours (actual: see EXECUTE Report)
+- **verification:** S1-S13 smoke checks (S1/S2 ast.parse syntax; S3 pytest collection 8 tests; S4 callable-pattern grep `_upsert_criterion\(` returns 0 matches per operator's S4 amendment; S5 event-name preservation `criterion_upsert_failed` returns 1 match; S6 def line `def _update_criterion`; S7 callable-pattern grep `_update_criterion(` returns 13 matches = 1 def + 12 calls; S8 `pytest -v` all 8 tests pass; S9-S13 doc anchor + reference completeness).
+- **t_rules_checked:** Constitution Rule 8 (no scope expansion — regression fix, in-scope), Rule 9 (stable IDs — T-ACT-055 unique), Rule 10 (governance documentation — A.7 amendment + TASK_REGISTER + action-tracker), regression-strategy.md (R5 unit-test-only WARN verification + R6 amendment-writer-discipline stop-condition).
+
+---
+
 ### T-ACT-054 — `charm_velocity` / `vanna_velocity` / `cv_stress_score` silent-zero pattern (Choice A NULL-on-degenerate-input remediation — DONE)
 
 - **id:** T-ACT-054

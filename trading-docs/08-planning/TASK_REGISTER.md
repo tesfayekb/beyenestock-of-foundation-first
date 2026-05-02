@@ -1920,6 +1920,31 @@ Wrap ONLY the supabase insert site at `prediction_engine.py:1495-1500` (post-Tra
 
 ---
 
+### T-ACT-055 — `paper_phase_criteria` upsert NOT NULL violation regression (HIGH; 2026-04-17 to 2026-05-02; 6th member of A.7 silent-failure-class family — REOPENS A.7)
+
+- **Status:** DONE (2026-05-02)
+- **Severity:** HIGH (regression — 8 of 12 GLC paper-phase criteria silently frozen at seed values for ~16 days, blocking go-live)
+- **Vintage:** Regression introduced 2026-04-17 in commit `836a83c` (PR #17). NOT a long-standing bug. Same-day reversal of T-ACT-047's "A.7 FULLY CLOSED" claim from earlier on 2026-05-02.
+- **Root cause:** PR #17 changed `_upsert_criterion` body from `.update(...).eq('criterion_id', X)` to `.upsert(..., on_conflict='criterion_id')`. The `paper_phase_criteria` schema requires `criterion_name TEXT NOT NULL` and `target_description TEXT NOT NULL` (per `supabase/migrations/20260417000001_paper_phase_criteria.sql:8-9`), neither of which is in the payload. PostgreSQL's INSERT-phase NOT NULL check fires with code 23502 BEFORE `ON CONFLICT` engages. The outer `try/except Exception` at the original L35-36 swallowed the failure with `logger.error("criterion_upsert_failed", ...)`, masking the silent freeze.
+- **Discovery:** Operator surfaced via `criterion_upsert_failed` errors in Railway logs for GLC-001 through GLC-004 on 2026-05-02. Cursor's verification report identified all 12 GLCs were affected (not just 4) and pinpointed the regression vintage via `git log --follow` on `criteria_evaluator.py`.
+- **Remediation (Choice B per design memo):** Direct revert to `.update().eq()` form + function rename `_upsert_criterion` → `_update_criterion` (semantic correctness; body uses `.update()`, not `.upsert()`) + defensive WARN log on empty `result.data` (surfaces the row-deleted edge case that `.update()` silently no-ops on). Event name `criterion_upsert_failed` preserved at the `logger.error` line for dashboard/log-search continuity (deliberate; see inline code comment in `criteria_evaluator.py`). 12 production caller sites + 6 test references renamed mechanically.
+- **Acceptance criteria:**
+  - [x] `_update_criterion` function uses `.update().eq()` form, NOT `.upsert(...)` — verified S4/S6/S7
+  - [x] All 12 production caller sites in `criteria_evaluator.py` updated to call `_update_criterion(...)` — verified S4 (0 callable matches of old name) + S7 (12 callable matches of new name)
+  - [x] All 6 test references updated; new test file has 8 tests total (3 renamed existing + 5 new) — verified S3
+  - [x] HANDOFF A.7 amended to reflect REOPENED status (6 members; over-confident "FULLY CLOSED" claim preserved as discipline-meta-lesson per R6 stop-condition) — 6 amendment sites: L1253 header, L1259 claim, L1269+ member 6 append, L1285 closure verdict, L1287 ratification footer (added per F2-a), L1297 appendix footer
+  - [x] `pytest backend/tests/test_criteria_evaluator.py` passes 8/8 — verified S8
+- **Post-deploy verification protocol:**
+  1. Confirm next nightly evaluation updates `last_evaluated_at` for all 12 GLC rows in `paper_phase_criteria`.
+  2. Confirm no `criterion_upsert_failed` errors in Railway logs for ≥24h after merge.
+  3. Spot-check 2-3 GLC rows: `current_value_text` reflects current data, NOT seed values.
+- **Files modified:** `backend/criteria_evaluator.py`, `backend/tests/test_criteria_evaluator.py`, `trading-docs/08-planning/TASK_REGISTER.md`, `trading-docs/06-tracking/action-tracker.md`, `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md`.
+- **Related entries:** T-ACT-047 (try/except discipline at `prediction_engine` persist site — same-day "FULLY CLOSED" claim was empirically over-confident; T-ACT-055 reopens A.7 as 6th member). T-ACT-056 reserved for future formal exhaustive persist-site audit before A.7 may be formally re-closed.
+- **Discipline-meta-lesson:** "Convention pointer ≠ exhaustive audit." T-ACT-047 closed A.7 based on remediation of 5 known members but did not perform an exhaustive audit of all persist sites in the codebase. T-ACT-055 surfaced a 6th member (`criteria_evaluator` persist site) on the SAME DAY (2026-05-02) that was OUTSIDE T-ACT-047's audit scope and therefore not caught by the convention pointer. Future "family closed" claims must explicitly distinguish (a) convention-establishment closure (which T-ACT-047 achieved) from (b) exhaustive-audit closure (which is reserved as T-ACT-056 follow-up). Original "FULLY CLOSED" claim is preserved verbatim in HANDOFF A.7 (L1253/L1259/L1269/L1285/L1287/L1297) as discipline-meta-lesson — sanitizing it would lose the lesson.
+- **Cross-references:** HANDOFF A.7 (REOPENED 2026-05-02 same-day reversal — 6th member, T-ACT-055 cited as canonical example for regression-vintage discipline applied to database-persistence surface). T-ACT-047 (sibling — same family, same surface (DB persist), but different vintage class — long-standing bug vs. regression). T-ACT-054 (sibling — same family, derived-feature surface). T-ACT-046 (sibling — same family, silent-staleness in feed timestamps). Cursor 2026-05-02 verification report (DIAGNOSE finding + git archaeology to commit 836a83c). Cursor 2026-05-02 plan review §R1-R8 (8 refinements; R3 sharpened to MEDIUM with rename, R8 reconfirmed annotation correct).
+
+---
+
 ### T-ACT-048 — SUBSCRIPTION_REGISTRY.md + `prediction_engine.py` docstring corrections (doc-only)
 
 **Severity:** LOW (documentation discipline)
