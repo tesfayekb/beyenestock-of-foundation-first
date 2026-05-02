@@ -381,11 +381,25 @@ class ExecutionEngine:
                     # training distribution was a constant 0 (the
                     # training filter is no_trade_signal=False and
                     # signal_weak=True forces no_trade_signal=True).
+                    # T-ACT-054 Meta-3: cv_stress_score uses NaN
+                    # sentinel (NOT 0.0) when the source had degenerate
+                    # inputs at prediction time. LightGBM natively
+                    # handles NaN as missing during inference. Lockstep
+                    # with model_retraining.train_meta_label_model
+                    # (L817) and run_meta_label_champion_challenger
+                    # ._row_to_features (L1071) — these three sites
+                    # materialise the SAME feature vector; any
+                    # divergence breaks .predict_proba() shape contract
+                    # or silently corrupts comparison.
                     _feat = np.array([[
                         float(_pred.get("confidence") or 0),
                         float(_pred.get("vvix_z_score") or 0),
                         float(_pred.get("gex_confidence") or 0),
-                        float(_pred.get("cv_stress_score") or 0),
+                        (
+                            float(_pred["cv_stress_score"])
+                            if _pred.get("cv_stress_score") is not None
+                            else float("nan")
+                        ),
                         float(_pred.get("vix") or 18.0),
                         float(_pred.get("prior_session_return") or 0),
                         float(_pred.get("vix_term_ratio") or 1.0),
@@ -446,6 +460,12 @@ class ExecutionEngine:
                 "entry_spx_price": prediction.get("spx_price", 5000.0),
                 "entry_regime": signal.get("regime_at_signal"),
                 "entry_rcs": signal.get("rcs_at_signal"),
+                # T-ACT-054: entry_cv_stress may be None when degenerate
+                # inputs at signal time (cv_stress_at_signal originates
+                # from strategy_selector.py:994 which preserves None
+                # under Choice A). Schema permits NULL on
+                # trading_positions.entry_cv_stress NUMERIC(5,2).
+                # Calibration-log write at L822 also preserves None.
                 "entry_cv_stress": signal.get("cv_stress_at_signal"),
                 "entry_touch_prob": 0.05,
                 "entry_greeks": {},
@@ -460,7 +480,16 @@ class ExecutionEngine:
                 "current_pnl": 0.0,
                 "peak_pnl": 0.0,
                 "current_touch_prob": 0.05,
-                "current_cv_stress": prediction.get("cv_stress_score", 0.0),
+                # T-ACT-054: drop the 0.0 default to preserve the NULL
+                # contract end-to-end. dict.get returns the value when
+                # key exists with value None (NOT the default), so this
+                # propagates None into the position dict's
+                # current_cv_stress. Schema permits NULL on
+                # trading_positions.current_cv_stress NUMERIC(5,2). The
+                # position_monitor.py:778 D-017 exit gate guards with
+                # `is not None`. Per HANDOFF A.7 silent-failure-class
+                # family convention.
+                "current_cv_stress": prediction.get("cv_stress_score"),
                 "status": "open",
             }
 

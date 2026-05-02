@@ -1940,9 +1940,42 @@ When `cv_stress` is silently 0, the system loses (a) emergency stop, (b) defensi
 3. After merge + 7 days of cycles: re-run the disambiguating SQL; the `both_at_extremes ≈ triple_zeros` pattern should disappear (replaced by NULL rows where degenerate inputs occurred).
 4. Action 6 not affected by this T-ACT (cv_stress is independent of T-ACT-045 SPX delay question).
 
-**Status:** [ ] INVESTIGATION-COMPLETE; ROOT-CAUSE-LOCKED; DESIGN-CHOSEN (Choice A); REMEDIATION-PENDING (separate Cursor PR after Track B merges)
+**Status:** [x] DONE — implemented 2026-05-02 via PR `fix/t-act-054-cv-stress-null-on-degenerate` (branch from main @ `e887c39` post-Track B merge).
 
-**Cross-references:** HANDOFF A.5 (precedent — same silent-failure class), HANDOFF A.7 (silent-failure-class family convention pointer ratified by Track B PR), T-ACT-046 (sibling — same family, distinct surface — silent-staleness in feed timestamps; bundled tradier+polygon fixes), T-ACT-047 (sibling — same family, try/except discipline)
+**Implementation summary (2026-05-02):**
+
+*Scope:* 8 modified files + 1 new test file = 9 files total. ~17-18 logical edits. 14 tests.
+
+*Files modified:*
+
+1. `backend/prediction_engine.py` — `__init__` instance marker (`_cv_stress_degenerate_logged`); `_compute_cv_stress` rewritten with **AND-logic degenerate-input gate** (vvix_z_degenerate AND gex_conf_degenerate; OR-logic was a critical defect identified in plan review — gex_conf=1.0 is normal RTH steady-state); `_compute_direction` and `_evaluate_no_trade` signatures updated to `cv_stress: Optional[float]`; consumer guards at L1050/L1061/L1120 patched with `is not None`.
+2. `backend/strategy_selector.py` — `__init__` instance marker (`_strategy_selector_null_cv_stress_logged`); `_stage0_time_gate` and `_check_time_window` signatures updated to `cv_stress: Optional[float]` (`_check_time_window` default now `None`); long-gamma override patched with `is not None`; propagation site (formerly L994) preserves None and emits one-time INFO log on first observation.
+3. `backend/position_monitor.py` — D-017 cv_stress exit gate (formerly L773-778) patched: dropped `or 0.0` coercion (preserves NULL contract end-to-end) + added `is not None` guard. Conservative semantics: do NOT exit on absence-of-signal.
+4. `backend/model_retraining.py` — Meta-3 NaN sentinel applied at training site (formerly L817) and champion-challenger `_row_to_features` (formerly L1071); feature-contract docstring (L727-733) updated with full Meta-3 lockstep contract.
+5. `backend/execution_engine.py` — Meta-3 NaN sentinel at meta-label inference (formerly L388); `current_cv_stress` propagation patched (dropped `0.0` default, preserves None into position dict); `entry_cv_stress` site augmented with documenting comment.
+6. `tests/test_t_act_054_cv_stress_null_semantics.py` — **NEW** — 14 tests covering AND-logic gate correctness (including critical regression test `test_gex_saturation_alone_does_not_null_cv_stress`), NULL contract preservation, NaN sentinel propagation in 3 lockstep meta-label sites, type contract, healthy paths, direct consumer NULL handling, D-017 exit, propagation/integration, calibration engine NULL-aware behavior, and meta-label NaN sentinel training/inference.
+
+*Schema verification:* All 8 affected DB columns confirmed NULL-permissive in `supabase/migrations/20260416172751_*.sql` (`trading_prediction_outputs.cv_stress_score / charm_velocity / vanna_velocity`, `trading_positions.entry_cv_stress / current_cv_stress`, `trading_calibration_log.cv_stress_score / charm_velocity / vanna_velocity`). NO migration required.
+
+*Plan-review modifications incorporated (10 total, all from Cursor's READ-ONLY review of Claude's draft plan):*
+
+1. **CRITICAL** — AND-logic degenerate gate (replaced Claude's OR-logic which would have NULLed majority of healthy RTH cycles).
+2. Added missing D-017 consumer (`position_monitor.py`) — Claude's plan missed this active production gate.
+3. Adopted Meta-3 NaN sentinel (vs. Claude's Meta-2 row-filter); preserves training data volume and leverages LightGBM native missing-value handling.
+4-6. Three propagation-boundary silent-coercion fixes (`strategy_selector.py:994`, `execution_engine.py:463`, `position_monitor.py:773`).
+7. File path attribution fix (Claude cited `prediction_engine.py:449/463` which are actually in `execution_engine.py`).
+8. Test surface expanded from 5 → 14 (added regression test for AND-logic that would have caught the OR-logic defect).
+9-10. Added 3 type-signature updates flagged as F1/F2/F3 in DIAGNOSE round (`_evaluate_no_trade`, `_stage0_time_gate`, `_check_time_window`) for full NULL-contract type-system consistency.
+
+**Post-deploy verification (operator action, ≥7 days post-merge):**
+
+1. Re-run the disambiguating SQL from cv_stress design memo §3 — the `both_at_extremes ≈ triple_zeros` pattern should be replaced by NULL rows in `trading_prediction_outputs` where degenerate inputs occurred.
+2. Verify `cv_stress_degenerate_first_cycle` INFO log appears once per `prediction_engine` process restart in production logs.
+3. Verify `strategy_selector_observed_null_cv_stress` INFO log appears once per `strategy_selector` process restart when degenerate cycles propagate.
+4. Confirm meta-label retrain (auto-triggered after ≥7 days of NULL/NaN-bearing data accumulates) produces a model with non-trivial split on the cv_stress NaN-missing direction.
+5. Verify D-017 exit fires correctly in cycles where `current_cv_stress` is genuinely > 70 (NOT silently disabled when None).
+
+**Cross-references:** HANDOFF A.5 (precedent — same silent-failure class), HANDOFF A.7 (silent-failure-class family convention pointer ratified by Track B PR; T-ACT-054 implementation now serves as the canonical example for derived-feature surface), T-ACT-046 (sibling — same family, distinct surface — silent-staleness in feed timestamps; bundled tradier+polygon fixes), T-ACT-047 (sibling — same family, try/except discipline)
 
 ---
 

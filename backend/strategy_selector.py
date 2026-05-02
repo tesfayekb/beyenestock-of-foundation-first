@@ -126,9 +126,16 @@ class StrategySelector:
         self.redis_client = redis_lib.Redis.from_url(
             REDIS_URL, decode_responses=True
         )
+        # T-ACT-054: one-time observability marker — first cycle that
+        # observes None cv_stress at L994 propagation site emits an
+        # INFO log so future sessions can verify the NULL contract is
+        # propagating end-to-end. Subsequent cycles silent. Pattern
+        # matches Track B's `_quote_fields_logged` /
+        # `_spx_fields_logged` markers.
+        self._strategy_selector_null_cv_stress_logged: bool = False
 
     def _stage0_time_gate(
-        self, cv_stress: float
+        self, cv_stress: Optional[float]
     ) -> Tuple[Union[bool, str], Optional[str]]:
         """
         Stage 0: time and volatility gate.
@@ -173,7 +180,13 @@ class StrategySelector:
                 return "long_gamma_only", "after_230pm_d010"
 
             # CV_Stress override — high stress favours long-gamma protection
-            if cv_stress > 70:
+            # T-ACT-054: guard with `is not None` per HANDOFF A.7 NULL
+            # convention. Under Choice A degenerate-input semantics,
+            # cv_stress is None when both VVIX and GEX inputs are
+            # degenerate; do NOT trigger long-gamma override on missing
+            # data (conservative: keep the operator's chosen strategy
+            # rather than force-flip on absence-of-signal).
+            if cv_stress is not None and cv_stress > 70:
                 return "long_gamma_only", "cv_stress_high"
 
             return True, None
@@ -213,12 +226,21 @@ class StrategySelector:
             return default
 
     def _check_time_window(
-        self, cv_stress: float = 0.0
+        self, cv_stress: Optional[float] = None
     ) -> Tuple[Union[bool, str], Optional[str]]:
         """
         Public alias for _stage0_time_gate. Signal-B uses this name and
         the test surface in test_signal_enhancements.py also calls it.
         Behavior identical to _stage0_time_gate.
+
+        T-ACT-054: signature aligned with NULL contract. Default value
+        changed from 0.0 to None for consistency. Backward compat
+        preserved: callers passing no arg get None instead of 0.0,
+        but the patched cv_stress override at L182 is `is not None`
+        guarded — both defaults produce identical end-of-method
+        behavior (no long-gamma override fires under either default).
+        Existing callers in test_signal_enhancements.py that pass an
+        explicit cv_stress value (0, etc.) continue to work unchanged.
         """
         return self._stage0_time_gate(cv_stress)
 
@@ -991,7 +1013,27 @@ class StrategySelector:
             direction = prediction.get("direction", "neutral")
             p_bull = prediction.get("p_bull", 0.35)
             p_bear = prediction.get("p_bear", 0.30)
-            cv_stress = prediction.get("cv_stress_score", 0.0)
+            # T-ACT-054: dict.get(key, default) returns the VALUE when
+            # the key is present with value None, NOT the default. So
+            # `prediction.get("cv_stress_score", 0.0)` returns None
+            # under Choice A NULL semantics. Allow None to propagate;
+            # the downstream long-gamma override at L182 is patched
+            # with `is not None` guard. Emit one-time INFO log marking
+            # the first observation of a None cv_stress at this
+            # propagation boundary so future sessions can verify the
+            # NULL contract is reaching the strategy selector
+            # end-to-end. Per HANDOFF A.7 silent-failure-class family.
+            _cv_stress_raw = prediction.get("cv_stress_score")
+            if (
+                _cv_stress_raw is None
+                and not self._strategy_selector_null_cv_stress_logged
+            ):
+                logger.info(
+                    "strategy_selector_observed_null_cv_stress",
+                    reason="degenerate_inputs_t_act_054",
+                )
+                self._strategy_selector_null_cv_stress_logged = True
+            cv_stress = _cv_stress_raw  # may be None; downstream guards it
             rcs = prediction.get("rcs", 0.0)
             regime_agreement = prediction.get("regime_agreement", True)
             session_id = session.get("id", "")

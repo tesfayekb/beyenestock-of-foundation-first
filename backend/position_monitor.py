@@ -769,13 +769,29 @@ def run_position_monitor() -> dict:
                         continue
 
                 # D-017: CV_Stress exit — only when P&L ≥ 50% of max profit
+                # T-ACT-054: drop the `or 0.0` coercion to preserve the
+                # NULL-on-degenerate-input contract from
+                # _compute_cv_stress through to this exit-side gate.
+                # Silent coercion of None → 0.0 here would disable the
+                # D-017 exit during ~29% of cycles whenever
+                # `current_cv_stress` is None on the position dict
+                # (set from prediction.cv_stress_score at
+                # execution_engine.py:463, which can be None per Choice
+                # A). Per HANDOFF A.7 silent-failure-class family
+                # convention. Conservative behavior: do NOT exit on
+                # absence-of-signal; require an explicitly observed
+                # high cv_stress reading before closing the position.
                 if not is_debit and max_profit > 0:
-                    cv_stress = pos.get("current_cv_stress") or 0.0
+                    cv_stress = pos.get("current_cv_stress")
                     pct_profit = (
                         current_pnl / max_profit if max_profit > 0 else 0.0
                     )
                     # CV_Stress > 70 AND P&L ≥ 40% of max profit → exit (B3)
-                    if cv_stress > 70.0 and pct_profit >= 0.40:
+                    if (
+                        cv_stress is not None
+                        and cv_stress > 70.0
+                        and pct_profit >= 0.40
+                    ):
                         ok = engine.close_virtual_position(
                             position_id=pos["id"],
                             exit_reason="cv_stress_exit_d017",
