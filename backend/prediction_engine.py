@@ -11,6 +11,13 @@ try:
 except ModuleNotFoundError:
     redis_lib = None
 
+# T-ACT-047 Choice C: classify postgrest persistent (schema/RLS) errors at
+# the prediction-engine persist site. Canonical full path per the project
+# convention; alias to PostgrestAPIError for readability at the catch site.
+# postgrest is a transitive dep via supabase==2.10.0 (requirements.txt:1)
+# so the hard import is guaranteed in production.
+from postgrest.exceptions import APIError as PostgrestAPIError
+
 from config import REDIS_URL
 from db import get_client, write_health_status, write_audit_log
 from logger import get_logger
@@ -1485,12 +1492,78 @@ class PredictionEngine:
                 **phase_a_features,
             }
 
-            result = (
-                get_client()
-                .table("trading_prediction_outputs")
-                .insert(output)
-                .execute()
-            )
+            # T-ACT-047 Choice C: classify postgrest schema/RLS errors at
+            # the persist site (the A.5 trigger — PR #82 → PR #89, ~16+
+            # hours of silent PGRST204 column-not-found errors). Persistent
+            # errors do NOT self-heal via retry — escalate to operator via
+            # email alert and structured WARN log. Non-postgrest exceptions
+            # fall through to the outer except Exception handler below
+            # (current ERROR-level behavior preserved per Choice C scope).
+            #
+            # Per Cursor's 2026-05-02 design memo §SQ4: keep DB
+            # service_health.status at "error" (the schema CHECK constraint
+            # at supabase/migrations/20260420_add_idle_health_status.sql:11
+            # allows ONLY 'healthy'/'degraded'/'error'/'offline'/'idle';
+            # writing "critical" would violate the constraint per HANDOFF
+            # A.1 lesson). Express critical severity via the
+            # alerting.send_alert(CRITICAL, ...) channel instead.
+            try:
+                result = (
+                    get_client()
+                    .table("trading_prediction_outputs")
+                    .insert(output)
+                    .execute()
+                )
+            except PostgrestAPIError as persist_err:
+                pgrst_code = getattr(persist_err, "code", None)
+                pgrst_details = getattr(persist_err, "details", None)
+                pgrst_hint = getattr(persist_err, "hint", None)
+                logger.warning(
+                    "prediction_cycle_persistent_error",
+                    error_class="postgrest_api_error",
+                    pgrst_code=pgrst_code,
+                    pgrst_details=pgrst_details,
+                    pgrst_hint=pgrst_hint,
+                    error=str(persist_err),
+                    exc_info=True,
+                )
+                # T-ACT-047 acceptance criterion #4 (R2): write_health_status
+                # with status="error" auto-increments
+                # trading_system_health.error_count_1h via db.py:233-249.
+                # That counter is the sustained-error escalation channel,
+                # independent of the per-cycle alert below. Both fire
+                # together; they detect different patterns (per-cycle
+                # observability vs. accumulated-pattern escalation).
+                write_health_status(
+                    "prediction_engine",
+                    "error",
+                    last_error_message=(
+                        f"PERSISTENT[{pgrst_code or 'unknown'}]: "
+                        f"{str(persist_err)[:200]}"
+                    ),
+                )
+                try:
+                    from alerting import send_alert, CRITICAL
+                    send_alert(
+                        CRITICAL,
+                        "prediction_engine_persistent_error",
+                        (
+                            f"Postgrest schema/RLS error on "
+                            f"trading_prediction_outputs insert: "
+                            f"code={pgrst_code}, "
+                            f"detail={pgrst_details}, "
+                            f"hint={pgrst_hint}. "
+                            f"Persistent class — will not self-heal via "
+                            f"retry. Investigate schema-code coupling."
+                        ),
+                    )
+                except Exception as alert_err:
+                    logger.warning(
+                        "prediction_cycle_persistent_alert_failed",
+                        alert_error=str(alert_err),
+                        original_error=str(persist_err),
+                    )
+                return None
 
             if no_trade:
                 write_audit_log(
