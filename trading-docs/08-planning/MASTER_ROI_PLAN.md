@@ -359,7 +359,9 @@ In addition to the original D-023 + D-024 ratification scope, Action 6 now incor
 - T-ACT-045 (post-PR-#90 SPX validation) MUST complete with VALIDATED verdict before Action 6 begins. Without empirical confirmation that PR #90 closed the delay, Action 6's data-quality assumptions are unsupported.
 - T-ACT-046 and T-ACT-047 are NOT prerequisites for Action 6; they can run in parallel.
 
-**Status (post 2026-05-01):** [ ] Pending — awaiting T-ACT-045 validation, then collaborative operator + Claude session as originally scoped.
+**2026-05-03 update:** T-ACT-045 was attempted on 2026-05-03 against pre-PR-#90-merge data (last cycle 2026-05-01 19:55 UTC; merge 19:59 UTC). Cursor's independent review reversed an initial VALIDATED verdict to NOT-YET-VALIDATED on the grounds that the data set was structurally pre-deploy. T-ACT-045 status updated to PENDING-RE-RUN; target Monday 2026-05-04 ≥10 min after Railway deploy is confirmed stable. Action 6 prerequisite "T-ACT-045 must complete with VALIDATED verdict" remains the gate; it is now augmented (per N-2 finding) to require a validation artifact at `trading-docs/06-tracking/T-ACT-045-validation-artifact-2026-05-XX.md` to make the verdict independently re-verifiable. Until both T-ACT-045 = VALIDATED AND the validation artifact exists at the documented path, Action 6 is blocked. T-ACT-046 was implemented in Track B PR `docs/track-b-silent-staleness-and-governance` (2026-05-03) — bundles `tradier_feed.py:282-283` AND `polygon_feed.py:174-184` per Cursor recommendation; same root pattern; T-ACT-046 is no longer in-flight. T-ACT-047 (try/except discipline) remains pending, runnable in parallel. T-ACT-054 (cv_stress NULL-on-degenerate-input remediation) was added 2026-05-03 — it is NOT an Action 6 prerequisite (cv_stress is independent of the SPX delay question) and runs in parallel.
+
+**Status (post 2026-05-03):** [ ] Pending — awaiting T-ACT-045 PENDING-RE-RUN completion AND validation artifact, then collaborative operator + Claude session as originally scoped.
 
 ### Days 7-14 — parallel tracks
 

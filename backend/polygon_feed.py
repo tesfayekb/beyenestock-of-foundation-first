@@ -79,6 +79,21 @@ class PolygonFeed:
         # B-2: latest VIX9D value (Signal A term ratio numerator).
         self.last_vix9d: Optional[float] = None
         self._stop_event = asyncio.Event()
+        # 2026-05-03 silent-staleness fix (T-ACT-046, F1-c side-channel):
+        # carries the upstream timestamp from the most recent successful
+        # _fetch_spx_price call so the setex in the poll loop can stamp
+        # polygon:spx:current.fetched_at with Polygon's quote-time, NOT
+        # wall-clock-now. Wall-clock-now made the freshness guard at
+        # prediction_engine.run_cycle blind to upstream-side staleness;
+        # this side-channel preserves the existing fetcher signature
+        # while routing the upstream timestamp to the cache writer.
+        # See HANDOFF NOTE A.7 silent-failure-class family convention.
+        self._last_spx_upstream_ts: Optional[str] = None
+        # F2-c: one-time observability marker. Logged once per process
+        # at the first successful SPX fetch so future sessions can verify
+        # which Polygon /v3/snapshot indices upstream timestamp fields
+        # are actually populated (session.last_updated vs other names).
+        self._spx_fields_logged: bool = False
 
     async def start(self) -> None:
         # A-startup: seed vix_history from Polygon daily aggregates so
@@ -170,15 +185,33 @@ class PolygonFeed:
                             # TTL = 600s (2x the 5-min poll period above)
                             # so the key spans 2 poll cycles; downstream
                             # freshness guard uses 330s threshold.
+                            #
+                            # 2026-05-03 silent-staleness fix (T-ACT-046):
+                            # `fetched_at` now reads from the side-channel
+                            # `self._last_spx_upstream_ts` populated by
+                            # _fetch_spx_price from the upstream response.
+                            # If the upstream response lacked a timestamp
+                            # field, the value is None and downstream
+                            # consumers (the freshness guard at
+                            # prediction_engine.run_cycle) treat the cycle
+                            # as stale and skip — which is the correct
+                            # conservative behaviour. `fetched_at_source`
+                            # is a new observability marker letting
+                            # consumers and humans distinguish "we got the
+                            # upstream timestamp" from "upstream omitted it."
+                            upstream_ts = self._last_spx_upstream_ts
                             try:
                                 self.redis_client.setex(
                                     "polygon:spx:current",
                                     600,
                                     json.dumps({
                                         "price": float(spx_price),
-                                        "fetched_at": datetime.now(
-                                            timezone.utc
-                                        ).isoformat(),
+                                        "fetched_at": upstream_ts,
+                                        "fetched_at_source": (
+                                            "polygon_upstream"
+                                            if upstream_ts is not None
+                                            else "missing"
+                                        ),
                                         "source": "polygon_v3_snapshot",
                                     }),
                                 )
@@ -822,20 +855,116 @@ class PolygonFeed:
                 if resp.status_code == 200:
                     results = resp.json().get("results", [])
                     if results:
-                        session_data = results[0].get("session", {})
+                        result0 = results[0]
+                        session_data = result0.get("session", {}) or {}
                         price = float(
                             session_data.get("close")
                             or session_data.get("last")
                             or 0.0
                         )
                         if price > 0:
+                            # 2026-05-03 silent-staleness fix (T-ACT-046,
+                            # F1-c side-channel + F2-c defensive chain):
+                            # extract upstream quote timestamp so the
+                            # poll-loop setex at L173-184 can stamp
+                            # polygon:spx:current.fetched_at with the
+                            # actual upstream time, NOT wall-clock-now.
+                            # Defensive priority chain: try the most
+                            # plausible field names; fall back to None
+                            # so consumers can detect "upstream did not
+                            # provide a timestamp" vs forge one. See
+                            # HANDOFF NOTE A.7 silent-failure-class
+                            # family convention.
+                            value_data = result0.get("value") or {}
+                            if not isinstance(value_data, dict):
+                                # `value` is sometimes a numeric scalar
+                                # in indices snapshots; only mine for a
+                                # timestamp when it is a dict.
+                                value_data = {}
+                            upstream_ts_raw = (
+                                session_data.get("last_updated")
+                                or value_data.get("last_updated")
+                                or result0.get("last_updated")
+                                or None
+                            )
+                            # Polygon ns-epoch → ISO 8601 UTC for
+                            # downstream consumers that parse via
+                            # datetime.fromisoformat (the freshness
+                            # guard at prediction_engine.run_cycle).
+                            self._last_spx_upstream_ts = (
+                                self._normalize_polygon_timestamp(
+                                    upstream_ts_raw
+                                )
+                            )
+                            # F2-c: one-time empirical-evidence log
+                            # of the actual indices snapshot field
+                            # set so production logs preserve the
+                            # signature for future-session refinement.
+                            if not self._spx_fields_logged:
+                                self._spx_fields_logged = True
+                                logger.warning(
+                                    "polygon_spx_snapshot_fields_observed",
+                                    result_keys=sorted(result0.keys()),
+                                    session_keys=sorted(
+                                        session_data.keys()
+                                    ),
+                                    value_keys=sorted(value_data.keys()),
+                                    upstream_ts_resolved=(
+                                        self._last_spx_upstream_ts
+                                        is not None
+                                    ),
+                                )
                             return price
         except Exception as e:
             logger.warning(
                 "polygon_spx_price_fetch_failed",
                 error=type(e).__name__,
             )
+        # F1-c: clear the side-channel on fetch failure so the next
+        # setex doesn't stamp a stale upstream timestamp from the
+        # previous successful fetch.
+        self._last_spx_upstream_ts = None
         return None
+
+    @staticmethod
+    def _normalize_polygon_timestamp(value) -> Optional[str]:
+        """Convert Polygon's various timestamp representations to ISO 8601.
+
+        Polygon's snapshot endpoints return timestamps as:
+          - integer ns-since-epoch (most common — `last_updated`)
+          - integer ms-since-epoch (some legacy fields)
+          - ISO 8601 string (rare, but possible)
+          - None (field absent from response)
+
+        Returns ISO 8601 UTC string for non-None inputs; None on anything
+        unparseable. The freshness guard at prediction_engine.run_cycle
+        consumes this via datetime.fromisoformat which accepts ISO 8601.
+        """
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        try:
+            ts = int(value)
+        except (TypeError, ValueError):
+            return None
+        # Heuristic: ns-since-epoch is ≥ ~1e18 for current timestamps;
+        # ms-since-epoch is ~1e12; s-since-epoch is ~1e9. Pick the
+        # divisor that yields a plausibly-current epoch.
+        if ts > 10**18:
+            seconds = ts / 1_000_000_000
+        elif ts > 10**14:
+            seconds = ts / 1_000_000  # microseconds
+        elif ts > 10**11:
+            seconds = ts / 1_000  # milliseconds
+        else:
+            seconds = float(ts)
+        try:
+            return datetime.fromtimestamp(
+                seconds, tz=timezone.utc
+            ).isoformat()
+        except (OSError, ValueError, OverflowError):
+            return None
 
     async def _fetch_spx_prev_close(self) -> Optional[float]:
         """T1-4: fetch the previous trading session's SPX close.

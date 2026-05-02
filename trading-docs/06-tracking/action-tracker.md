@@ -29,6 +29,54 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-054 — `charm_velocity` / `vanna_velocity` / `cv_stress_score` silent-zero pattern (stub — full description in TASK_REGISTER §14)
+
+- **id:** T-ACT-054
+- **date:** 2026-05-03 (registered; root cause locked; remediation pending separate PR)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (Hypothesis E confirmation, Choice A NULL-on-degenerate-input, downstream consumer audit, acceptance criteria). Cv_stress design memo (Cursor 2026-05-03) for Choice A/B/C analysis and recommendation reasoning.
+- **type:** code (planned — separate Cursor PR after Track B merges)
+- **phase:** post_phase_1_diagnostic
+- **impact:** MEDIUM (silent-failure-class; same family as A.5/A.6/T-ACT-046; ~29.2% of cycles silently neutralize 2 active downstream consumers — emergency no-trade gate at `prediction_engine.py:1008` and strategy_selector long-gamma override at `strategy_selector.py:176`)
+- **owner:** Cursor (separate follow-up PR after Track B merges)
+- **status:** INVESTIGATION-COMPLETE; ROOT-CAUSE-LOCKED; DESIGN-CHOSEN (Choice A); REMEDIATION-PENDING
+- **cross_refs:** HANDOFF NOTE Appendix A.5 (precedent — same silent-failure class) + HANDOFF NOTE Appendix A.7 (silent-failure-class family convention pointer ratified by Track B PR) + T-ACT-046 (sibling — same family, distinct surface — silent-staleness in feed timestamps).
+
+### T-ACT-051 — Consolidate duplicate I:SPX direct fetches (stub — full description in TASK_REGISTER §14)
+
+- **id:** T-ACT-051
+- **date:** 2026-05-03 (registered; deferred until next file-touch trigger)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description. Consolidate `backend/counterfactual_engine.py:61` + `backend/model_retraining.py:118` direct Polygon `/v2/aggs/ticker/I:SPX/range/1/minute` hits into a shared helper.
+- **type:** code (deferred)
+- **phase:** post_phase_1_diagnostic
+- **impact:** LOW (code hygiene; neither call site is in the live decision path)
+- **owner:** Cursor (when next file-touch trigger occurs)
+- **status:** DEFERRED — defer until next file-touch trigger
+- **cross_refs:** TASK_REGISTER §14 T-ACT-051; Cursor 2026-05-03 morning audit S-7.
+
+### T-ACT-050 — Polygon Stocks Advanced ($199/mo) underutilization audit (stub — full description in TASK_REGISTER §14)
+
+- **id:** T-ACT-050
+- **date:** 2026-05-03 (registered; operator-led)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (verify News-only-tier availability; Items 15A/15D 90-day status; downgrade/cancel decision).
+- **type:** verification (operator-led)
+- **phase:** post_phase_1_diagnostic
+- **impact:** LOW (cost optimization; not blocking other work)
+- **owner:** operator
+- **status:** PENDING — operator-led; can run any time; not blocking other work
+- **cross_refs:** TASK_REGISTER §14 T-ACT-050; SUBSCRIPTION_REGISTRY.md §1; AI_BUILD_ROADMAP.md §6 Items 15A/15D.
+
+### T-ACT-048 — SUBSCRIPTION_REGISTRY + `prediction_engine.py` docstring corrections (stub — full description in TASK_REGISTER §14)
+
+- **id:** T-ACT-048
+- **date:** 2026-05-03 (docstring fix DONE in Track B PR; SUBSCRIPTION_REGISTRY row addition pending)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description. Track B PR `docs/track-b-silent-staleness-and-governance` Edit Group B implements the docstring fix at `backend/prediction_engine.py:425-432` (replaces false "Polygon Stocks Advanced" claim with empirically-honest "recency-class TBD pending T-ACT-045 re-run; Indices Starter $49/mo per Polygon published policy is 15-min delayed for I:* but `/v3/snapshot` may serve real-time despite policy"). SUBSCRIPTION_REGISTRY.md row addition for Polygon Indices Starter $49/mo deferred to a separate doc-only PR or bundled with cv_stress remediation PR.
+- **type:** documentation (partial — docstring DONE in Track B PR; registry row PENDING)
+- **phase:** post_phase_1_diagnostic
+- **impact:** LOW (documentation discipline; subscription-vs-runtime audit per HANDOFF A.6 mitigation #2)
+- **owner:** Cursor — partially implemented in Track B PR (docstring fix); SUBSCRIPTION_REGISTRY row addition deferred
+- **status:** [x] Docstring fix DONE (Track B PR); [ ] SUBSCRIPTION_REGISTRY row addition PENDING
+- **cross_refs:** HANDOFF NOTE Appendix A.6 mitigation #2 (subscription-vs-runtime audit) + Cursor 2026-05-03 morning audit + Cursor 2026-05-03 verdict-reversal review N-3 finding.
+
 ### T-ACT-047 — Try/except discipline mitigation in `prediction_engine.run_cycle` (stub — full description in TASK_REGISTER §14)
 
 - **id:** T-ACT-047
@@ -39,31 +87,31 @@ Single register of every trading change action. Every change to trading code, sc
 - **impact:** MEDIUM
 - **owner:** Cursor (per operator authorization in next session)
 - **status:** PENDING — Cursor work in next session
-- **cross_refs:** HANDOFF NOTE Appendix A.5 mitigation #3 (original lesson) + HANDOFF NOTE Appendix A.6 (post-mortem context).
+- **cross_refs:** HANDOFF NOTE Appendix A.5 mitigation #3 (original lesson) + HANDOFF NOTE Appendix A.6 (post-mortem context) + HANDOFF NOTE Appendix A.7 (silent-failure-class family convention pointer ratified 2026-05-03).
 
-### T-ACT-046 — Fix `tradier_feed.py:282-283` silent-staleness vector (stub — full description in TASK_REGISTER §14)
+### T-ACT-046 — Fix silent-staleness pattern in `tradier_feed.py:282-283` AND `polygon_feed.py:174-184` (bundled — same root pattern; stub — full description in TASK_REGISTER §14)
 
 - **id:** T-ACT-046
-- **date:** 2026-05-01 (registered; pending implementation)
-- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (severity, scope, fix, acceptance criteria).
-- **type:** code (planned)
+- **date:** 2026-05-03 (DONE in Track B PR)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description. Implemented in Track B PR `docs/track-b-silent-staleness-and-governance` Edit Group A: F1-c side-channel attribute on PolygonFeed (`_last_spx_upstream_ts`); F2-c defensive field-name chains on both feed paths; one-time observability WARN logs per process startup capturing actual upstream field set; F6 freshness-guard observability amendment at `prediction_engine.py:1192-1230`. Subsumes the previously-proposed T-ACT-049 polygon-side fix per Cursor recommendation 2026-05-03.
+- **type:** code (DONE)
 - **phase:** post_phase_1_diagnostic
-- **impact:** MEDIUM (fallback-only concern post-PR-#90; was critical pre-PR-#90)
-- **owner:** Cursor (per operator authorization in next session)
-- **status:** PENDING — Cursor work in next session
-- **cross_refs:** HANDOFF NOTE Appendix A.6 (post-mortem context) + PR #90 risks register R-1.
+- **impact:** MEDIUM (fallback-only concern post-PR-#90 for Tradier; primary concern for Polygon SPX path until T-ACT-045 re-validates)
+- **owner:** Cursor — implemented in Track B PR 2026-05-03
+- **status:** DONE — Track B PR complete (Edit Group A)
+- **cross_refs:** HANDOFF NOTE Appendix A.6 (post-mortem context) + HANDOFF NOTE Appendix A.7 (silent-failure-class family convention pointer ratified by Track B PR) + PR #90 risks register R-1 + T-ACT-054 (sibling — same family, derived-feature surface).
 
 ### T-ACT-045 — Post-PR-#90 empirical SPX real-time validation (stub — full description in TASK_REGISTER §14)
 
 - **id:** T-ACT-045
-- **date:** 2026-05-01 (registered; pending operator action)
-- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (acceptance criteria, validation queries, verdict criteria).
+- **date:** 2026-05-01 (registered); 2026-05-03 (status updated to PENDING-RE-RUN per Cursor verdict-reversal review)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (acceptance criteria refined 2026-05-03 per N-1 finding; validation-artifact protocol added per N-2 finding; verdict criteria including SPY×10 proxy fallback).
 - **type:** verification
 - **phase:** post_phase_1_diagnostic
 - **impact:** HIGH (validation-blocking; pre-Action-6 prerequisite per MASTER_ROI_PLAN v2.0.6)
 - **owner:** operator
-- **status:** PENDING — operator action required (~10 min)
-- **cross_refs:** HANDOFF NOTE Appendix A.6 (post-mortem context) + MASTER_ROI_PLAN Action 6 prerequisites + PR #90 (the architectural fix being validated).
+- **status:** PENDING-RE-RUN — operator action required Monday 2026-05-04 ≥10 min post-deploy (the May 1 attempt operated on pre-deploy data and could not validate per Cursor verdict-reversal review 2026-05-03)
+- **cross_refs:** HANDOFF NOTE Appendix A.6 (post-mortem context; amended 2026-05-03) + MASTER_ROI_PLAN Action 6 prerequisites + PR #90 (the architectural fix being validated) + Cursor 2026-05-03 verdict-reversal review.
 
 ### T-ACT-044 — sklearn version pin + training-env capture + preflight script (post-T-ACT-043 deploy validation)
 

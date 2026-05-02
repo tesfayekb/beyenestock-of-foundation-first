@@ -1738,7 +1738,9 @@ No panel affects any trade decision — pure read-only observability.
 
 ## SECTION 14 — POST-2026-05-01 DIAGNOSTIC FIXES + FOLLOW-UPS
 
-Tasks surfaced during the 2026-05-01 trading session validation. See HANDOFF NOTE Appendix A.6 for the canonical post-mortem context.
+Tasks surfaced during the 2026-05-01 trading session validation. See HANDOFF NOTE Appendix A.6 for the canonical post-mortem context. Track B PR `docs/track-b-silent-staleness-and-governance` (2026-05-03) added the empirical-validation update to A.6 and ratified A.7 (silent-failure-class family convention pointer); see also the cv_stress design memo 2026-05-03 for T-ACT-054 design rationale.
+
+**Numbering note (2026-05-03):** T-ACT-049 was originally proposed as a separate entry for the `polygon_feed.py:174-184` silent-staleness fix, sibling to T-ACT-046 (`tradier_feed.py:282-283`). Per Cursor's recommendation 2026-05-03, both fixes are bundled into an expanded T-ACT-046 (same root pattern, single PR — Track B). T-ACT-049 is therefore subsumed and not assigned. The next available T-ACT number after the 2026-05-03 batch (T-ACT-048, T-ACT-050, T-ACT-051, T-ACT-054) is T-ACT-055.
 
 ### T-ACT-045 — Post-PR-#90 empirical SPX real-time validation
 
@@ -1748,51 +1750,67 @@ Tasks surfaced during the 2026-05-01 trading session validation. See HANDOFF NOT
 
 **Description:** PR #90 routed SPX through Polygon real-time and added a freshness guard. The pre-PR-#90 LightGBM v1 "empirical validation" (declared 2026-05-01 morning) was made on 15-min-stale Tradier sandbox SPX data. After PR #90 deploy and ~10 minutes of stable cycle execution, operator must re-run the validation comparing system-recorded `entry_spx_price` to Polygon's contemporaneous 1-minute SPX bar.
 
-**Acceptance criteria:**
+**2026-05-03 update — independent review verdict:** Operator's first attempt to run T-ACT-045 used data from 2026-05-01 13:35-19:55 UTC compared to Polygon real-time 1-min bars. Cursor's independent review (2026-05-03) determined the data is entirely pre-PR-#90-merge (PR #90 squash-merged 19:59:22 UTC; last cycle 19:55 UTC). The verdict was reversed from VALIDATED to NOT-YET-VALIDATED. T-ACT-045 must be re-run against post-deploy data — target Monday 2026-05-04 ≥10 min after Railway deploy is confirmed stable.
 
-1. Run this query (anytime within 1 hour of writing this section, post-PR-#90 deploy):
+**Acceptance criteria (refined 2026-05-03 per N-1 finding):**
+
+1. Run the SQL query — but with a hard floor: `predicted_at >= [PR #90 Railway deploy timestamp] + INTERVAL '10 minutes'`. Operator must look up the actual deploy timestamp from Railway's deployments dashboard before running the SQL. Rows with `predicted_at` BEFORE that floor MUST be excluded; the validation operates ONLY on post-deploy data.
    ```sql
    SELECT predicted_at, spx_price
    FROM trading_prediction_outputs
-   WHERE predicted_at >= NOW() - INTERVAL '20 minutes'
+   WHERE predicted_at >= '<PR-#90-deploy-ts>'::timestamptz + INTERVAL '10 minutes'
+     AND predicted_at <= NOW()
    ORDER BY predicted_at DESC;
    ```
 
-2. For each row, compare `spx_price` against Polygon's 1-min SPX bar containing the timestamp:
+2. Pull contemporaneous Polygon real-time SPX 1-min bars for the same window via `https://api.polygon.io/v2/aggs/ticker/I:SPX/range/1/minute/{date}/{date}` API:
    ```bash
    curl -s "https://api.polygon.io/v2/aggs/ticker/I:SPX/range/1/minute/$(date +%Y-%m-%d)/$(date +%Y-%m-%d)?apiKey=$POLYGON_API_KEY&adjusted=true&sort=asc"
    ```
 
-3. Verdict:
-   - All `spx_price` values within ±$5 of the contemporaneous Polygon bar [low, high] envelope → **VALIDATED.** PR #90 closed the architectural delay; LightGBM v1 empirical validation can be re-declared on real-time inputs. Mark this T-ACT done.
-   - Any `spx_price` deviates >$5 → **NOT VALIDATED.** Either Polygon poll is failing, freshness guard isn't firing correctly, or another stale path remains. Open follow-up investigation; do NOT mark done.
+3. For each row in the SQL output, the system's `spx_price` MUST fall within ±$5 of Polygon's 1-min bar [low, high] envelope containing that timestamp. Allow small drift up to ±$5 to account for poll cadence (TTL=600s, freshness threshold=330s per PR #90 design).
 
-**Status:** [ ] Pending — operator action required
+4. **Validation-artifact requirement (per N-2 finding):** Operator commits the SQL output + Polygon bars + gap analysis + verdict reasoning to a new file at `trading-docs/06-tracking/T-ACT-045-validation-artifact-2026-05-XX.md` (replace XX with the validation date). Action 6 prerequisite explicitly requires this file to exist.
+
+5. Verdict logic:
+   - All rows within ±$5 → **VALIDATED**. Action 6 unblocks. Mark this T-ACT done.
+   - 1+ rows deviate >$5 systematically aligned with Polygon's price 15 min earlier → **NOT-VALIDATED** — Polygon Indices Starter is empirically 15-min-delayed; operator must decide subscription upgrade ($249-299/mo Indices Advanced) or architectural rerouting (SPY×10 proxy via Stocks Advanced, real-time on equities tier).
+   - Mixed signal → INVESTIGATE further; do not declare verdict until clear.
+
+**Status:** [ ] PENDING-RE-RUN — operator action required Monday 2026-05-04 ≥10 min post-deploy
 
 ---
 
-### T-ACT-046 — Fix `tradier_feed.py:282-283` silent-staleness vector
+### T-ACT-046 — Fix silent-staleness pattern in `tradier_feed.py:282-283` AND `polygon_feed.py:174-184` (bundled — same root pattern)
 
-**Severity:** MEDIUM (now fallback-only concern post-PR-#90; was critical pre-PR-#90)
-**Owner:** Cursor (per operator authorization in next session)
-**Estimated time:** 10-15 min
+**Severity:** MEDIUM (now fallback-only concern post-PR-#90 for Tradier; primary concern for Polygon SPX path until T-ACT-045 re-validates)
+**Owner:** Cursor — implemented in Track B PR `docs/track-b-silent-staleness-and-governance` 2026-05-03 (Edit Group A)
+**Estimated time (actual):** ~75 min Cursor (DIAGNOSE-FIRST + bundled scope + observability instrumentation)
 
-**Description:** `backend/tradier_feed.py:282-283` writes the cache timestamp using a wall-clock fallback (`datetime.now(timezone.utc).isoformat()`) when the Tradier upstream response lacks one. This means downstream freshness checks based on the Redis-stored timestamp are blind to upstream staleness — the cache always looks "fresh" because the timestamp is stamped at write time, not at upstream-quote time.
+**Description:** Both `tradier_feed.py:282-283` and `polygon_feed.py:174-184` wrote the cache timestamp using `datetime.now(timezone.utc).isoformat()` as the fallback when the upstream API response lacked an explicit timestamp. This meant downstream freshness checks based on the Redis-stored timestamp were blind to upstream-side staleness — the cache always looked "fresh" because the timestamp was stamped at write time, not at upstream-quote time. Cursor's audit identified both vectors as the same root pattern; bundled per Cursor's recommendation 2026-05-03 (subsumes the previously-proposed T-ACT-049 polygon-side fix).
 
-**Why it matters now:** Post-PR-#90, Tradier is fallback-only for SPX. But this silent-staleness vector still affects `tradier:quotes:{SPXW…}` (option chain quotes) which remain Tradier-primary per the OPRA-exception. If Tradier sandbox ever returns a stale option quote without a `trade_date`, the system writes `now()` and consumers see a "fresh" key while the upstream is silently lagging.
+**Why it matters now:** Post-PR-#90, Tradier is fallback-only for SPX. But the silent-staleness vector still affects `tradier:quotes:{SPXW…}` (option chain quotes) which remain Tradier-primary per the OPRA-exception. The Polygon-side vector affects `polygon:spx:current.fetched_at`, which is consumed by the freshness guard at `prediction_engine.run_cycle` — wall-clock-now stamping made the guard blind to upstream-Polygon delays.
 
-**Fix:**
+**Implemented in Track B PR `docs/track-b-silent-staleness-and-governance` (2026-05-03):**
 
-1. In `backend/tradier_feed.py` `process_quote()` (~L282-283), do NOT fall back to `datetime.now()` for the timestamp. Use the upstream's `trade_date` / `bid_date` / `ask_date` epoch field directly. If absent in the upstream payload, write a sentinel (`null` or omit the field) and let downstream consumers detect the staleness.
-2. Update consumers of `tradier:quotes:{symbol}` to handle the null/missing-timestamp case explicitly (likely already handled gracefully; verify no consumer assumes timestamp-always-present).
+1. **`tradier_feed.py` `process_quote`:** Defensive field-name chain (F2-c): `trade_date → bid_date → ask_date → timestamp → None`. New `timestamp_source` payload field marks "upstream" vs "missing." One-time WARN log `tradier_quote_fields_observed` per process startup capturing actual field set in upstream quotes for empirical refinement of the priority chain. `__init__` adds `_quote_fields_logged: bool = False` marker.
+
+2. **`polygon_feed.py` `_fetch_spx_price` + setex at L173-184:** F1-c side-channel — `_fetch_spx_price` extracts upstream timestamp via defensive chain (`session.last_updated → value.last_updated → result.last_updated`), normalizes via new `_normalize_polygon_timestamp` helper (handles ns/ms/s epoch + ISO 8601), stores in `self._last_spx_upstream_ts`. The setex at L173-184 reads the side-channel attribute. New `fetched_at_source` payload field marks "polygon_upstream" vs "missing." One-time WARN log `polygon_spx_snapshot_fields_observed` per process startup capturing actual field set in indices snapshot for empirical refinement. `__init__` adds `_last_spx_upstream_ts: Optional[str]` and `_spx_fields_logged: bool` markers. Side-channel cleared on fetch failure to prevent stale-ts re-use.
+
+3. **`prediction_engine.run_cycle` freshness guard (L1192-1230, observability amendment per F6):** Existing guard already gracefully degraded on null `fetched_at` (TypeError caught by outer try/except, cycle skipped). Amendment makes the new contract explicit: distinct `spx_price_upstream_timestamp_missing` WARN log when upstream-stamped null, separate from generic `spx_freshness_check_failed`. `spx_fresh = False` semantics unchanged — conservative skip preserved.
+
+4. **Consumer audit (DIAGNOSE 4.1, 4.2):** No Tradier-quote consumer reads `timestamp` from `tradier:quotes:*` (verified across `mark_to_market.py`, `strike_selector.py`, `strategy_selector.py`, `shadow_engine.py`, `gex_engine.py`, `prediction_engine.py`, `databento_feed.py`); blast radius is zero. Polygon-`fetched_at` has exactly one consumer (the freshness guard); blast radius is one.
 
 **Acceptance criteria:**
 
-- `tradier_feed.py` no longer writes wall-clock-now as a fallback timestamp
-- `mark_to_market.py`, `strike_selector.py`, etc. handle null-timestamp option quotes without crashing
-- New test verifies that a Tradier response with missing trade_date results in a null/missing timestamp in Redis, NOT a wall-clock-now stamp
+- ✅ `tradier_feed.py` no longer writes wall-clock-now as a fallback timestamp.
+- ✅ `polygon_feed.py` no longer writes wall-clock-now in the SPX setex.
+- ✅ Freshness guard handles null `fetched_at` with conservative skip and explicit observability log.
+- ✅ Defensive field-name chains + one-time observability logs land in production for empirical refinement.
 
-**Status:** [ ] Pending — Cursor work in next session
+**Status:** [x] DONE — implemented in Track B PR (Edit Group A complete)
+
+**Cross-references:** HANDOFF A.5 (silent-failure family precedent — `model_source` schema/code drift), HANDOFF A.6 (Tradier sandbox SPX delay — same family, distinct surface), HANDOFF A.7 (silent-failure-class family convention pointer ratified by this PR), T-ACT-054 (sibling — same family, derived-feature surface; cv_stress NULL-on-degenerate-input remediation pending separate PR), T-ACT-047 (sibling — same family, try/except discipline mitigation)
 
 ---
 
@@ -1829,14 +1847,115 @@ Schema errors are fundamentally different from transient DB connectivity errors 
 
 ---
 
+### T-ACT-048 — SUBSCRIPTION_REGISTRY.md + `prediction_engine.py` docstring corrections (doc-only)
+
+**Severity:** LOW (documentation discipline)
+**Owner:** Cursor — partially implemented in Track B PR (docstring fix per Edit Group B); SUBSCRIPTION_REGISTRY row addition deferred to a separate doc-only PR
+**Estimated time:** 30 min total; ~10 min remaining
+
+**Description:** Two related doc-discipline issues surfaced in Cursor's audit on 2026-05-03 morning:
+
+- `SUBSCRIPTION_REGISTRY.md` is missing a row for Polygon Indices Starter ($49/mo) — registry-vs-runtime drift surfaced by HANDOFF A.6 mitigation #2 (subscription-vs-runtime audit).
+- `backend/prediction_engine.py:425-432` docstring incorrectly cited "Polygon Stocks Advanced" subscription for I:SPX recency. The `/v3/snapshot?ticker.any_of=I:SPX` endpoint is served by Polygon Indices product line, not Stocks Advanced (different products).
+
+**Status this PR:** Docstring fix implemented as Track B Edit Group B. SUBSCRIPTION_REGISTRY row addition deferred — when added, must reflect Cursor's recommendation that recency-class is empirically TBD pending T-ACT-045 re-run, NOT the false claim of "real-time confirmed."
+
+**Acceptance criteria:**
+
+- ✅ `prediction_engine.py:425-432` docstring updated (Track B PR, 2026-05-03)
+- [ ] `SUBSCRIPTION_REGISTRY.md` gains row for Polygon Indices Starter $49/mo with recency note "TBD pending T-ACT-045 re-run; per Polygon published policy 15-min delayed for I:* indices, but `/v3/snapshot` may serve real-time despite policy"
+- [ ] No false "verified real-time" claims committed to the registry
+
+**Status:** [x] Docstring fix DONE (Track B PR); [ ] SUBSCRIPTION_REGISTRY row addition PENDING (separate doc-only PR or bundled with cv_stress remediation PR)
+
+---
+
+### T-ACT-050 — Polygon Stocks Advanced ($199/mo) underutilization audit
+
+**Severity:** LOW (cost optimization)
+**Owner:** Operator
+**Estimated time:** ~20 min
+
+**Description:** Cursor's morning audit (S-7) identified that Polygon Stocks Advanced ($199/mo) is consumed primarily by the Polygon News bundle in production code; no equity quotes (SPY/HYG/TLT/DXY) appear to be consumed in the live decision path. If Items 15A/15D from `AI_BUILD_ROADMAP.md` §6 are confirmed not activating in the next 90 days, the subscription may be downgrade-able to a News-only tier (if such a tier exists at lower cost) or cancellable.
+
+**Acceptance criteria:**
+
+1. Operator verifies via Polygon dashboard whether Polygon News is the SOLE consumer of the $199/mo Stocks Advanced tier.
+2. Operator identifies whether Polygon offers a News-only tier at lower cost.
+3. Operator confirms Items 15A/15D status (not activating in 90 days = downgrade safe; if either activating = keep Stocks Advanced as substrate).
+4. Operator decision documented in `SUBSCRIPTION_REGISTRY.md` §1 (keep / downgrade / cancel).
+
+**Status:** [ ] PENDING — operator-led; can run any time; not blocking other work
+
+---
+
+### T-ACT-051 — Consolidate duplicate I:SPX direct fetches (DEFERRED)
+
+**Severity:** LOW (code hygiene)
+**Owner:** Cursor (when next file-touch trigger occurs)
+**Estimated time:** ~30 min
+
+**Description:** `backend/counterfactual_engine.py:61` and `backend/model_retraining.py:118` both directly hit Polygon `/v2/aggs/ticker/I:SPX/range/1/minute` aggregates. Neither is in the live decision path (counterfactual is post-trade analysis; retraining is offline). Consolidation into a shared helper would reduce the redundant API call surface and make future endpoint changes single-touch.
+
+**Acceptance criteria:** Single shared helper used by both call sites; behavior identical for both consumers.
+
+**Status:** [ ] DEFERRED — not blocking. Defer until next file-touch on either site.
+
+---
+
+### T-ACT-054 — Investigate and fix `charm_velocity` / `vanna_velocity` / `cv_stress_score` silent-zero pattern (Choice A: NULL-on-degenerate-input)
+
+**Severity:** MEDIUM (silent-failure-class; same family as A.5, A.6, T-ACT-046)
+**Owner:** Cursor (separate follow-up PR after Track B merges)
+**Estimated time:** 2-3 hours including DIAGNOSE-FIRST + ~3 consumer patches + tests
+
+**Description:** Empirical confirmation 2026-05-03 (per disambiguating SQL run after Cursor's first-pass review): 103 of 353 cycles (~29.2%) in the last 7 days persisted exact-zero `cv_stress_score`, `charm_velocity`, `vanna_velocity` due to degenerate inputs (`vvix_z=0` AND `gex_conf=1.0`). The formula at `prediction_engine.py:691-694` correctly translates these inputs to zero, but downstream consumers cannot distinguish "real no-stress signal" from "missing/saturated input artifact."
+
+**Active downstream consumers (verified 2026-05-03):**
+
+1. `prediction_engine.py:1008` — `if cv_stress > 85: no_trade("cv_stress_critical")` — emergency no-trade gate (active in all paths).
+2. `strategy_selector.py:176` — `if cv_stress > 70: long_gamma_only` — defensive strategy override (active in all paths).
+3. `prediction_engine.py:938/949` — rule-based direction tilt (DORMANT when LightGBM v1 is loaded; active only if model unavailable).
+
+When `cv_stress` is silently 0, the system loses (a) emergency stop, (b) defensive strategy override; the rule-based tilt is also silenced but is dormant in normal operation. **Live ROI clamp footprint is the 2 active consumers, not 4** (per Cursor design memo §6.1 correction).
+
+**Root cause (Hypothesis E, locked 2026-05-03):**
+
+- `gex:confidence` saturates at exactly `1.0` via `min(1.0, len(trades)/1000)` at `gex_engine.py:175` whenever OPRA flow exceeds 1000 trades/5min — normal RTH steady-state for SPX options.
+- `polygon:vvix:z_score` resolves to `0.0` in `_compute_cv_stress` whenever (a) the key is absent and the default `"0.0"` cast fires, OR (b) `polygon_feed._compute_vvix_baseline` writes literal `"0.0"` because `pstdev(self.history) == 0` (warmup or flat VVIX). VVIX history is in-memory only with no daily-aggregate seed (asymmetric with VIX); cold-start warmup is **20 polls × 300s = 100 min** per Polygon feed restart (per Cursor design memo §6.2 correction; earlier "~25 min" framing was wrong).
+
+**Remediation: Choice A — NULL-on-degenerate-input** (selected per Cursor design memo 2026-05-03):
+
+1. Modify `_compute_cv_stress` at `prediction_engine.py:674-700` to detect degenerate inputs (`baseline_ready=False` OR `vvix_z_raw is None` OR `gex_conf == 1.0`) and return `{"cv_stress_score": None, "charm_velocity": None, "vanna_velocity": None}` instead of computing arithmetic on degenerate inputs.
+2. Patch the 2 active downstream consumers (`prediction_engine.py:1008` and `strategy_selector.py:176`) AND the dormant rule-based tilt at `prediction_engine.py:938/949` to handle `None` cv_stress conservatively: `if cv_stress is not None and cv_stress > 70:` (or 85). NULL semantics: skip the cycle's branch with a structured log entry.
+3. Add tests verifying NULL semantics across the 3 consumer paths.
+4. Verify any audit/monitoring SQL queries do not break under NULL semantics (none identified in 2026-05-03 audit; verify before ship).
+
+**Choice rationale:** Choice A fully restores all 3 downstream cv_stress safety gates across the 103-row population. Choice B (warmup gate) only handles warmup-and-missing-key subset; zero-variance subset remains broken. Choice C (formula redesign) is correct as Phase-4 follow-up after operator+analyst design call but does not on its own address missing-VVIX cases. See cv_stress design memo (Cursor 2026-05-03) §3 for full reasoning.
+
+**Acceptance criteria:**
+
+1. `_compute_cv_stress` returns NULL triple under degenerate inputs (verified by unit test).
+2. All 3 active+dormant consumers handle NULL gracefully with structured log + skip-branch behavior.
+3. After merge + 7 days of cycles: re-run the disambiguating SQL; the `both_at_extremes ≈ triple_zeros` pattern should disappear (replaced by NULL rows where degenerate inputs occurred).
+4. Action 6 not affected by this T-ACT (cv_stress is independent of T-ACT-045 SPX delay question).
+
+**Status:** [ ] INVESTIGATION-COMPLETE; ROOT-CAUSE-LOCKED; DESIGN-CHOSEN (Choice A); REMEDIATION-PENDING (separate Cursor PR after Track B merges)
+
+**Cross-references:** HANDOFF A.5 (precedent — same silent-failure class), HANDOFF A.7 (silent-failure-class family convention pointer ratified by Track B PR), T-ACT-046 (sibling — same family, distinct surface — silent-staleness in feed timestamps; bundled tradier+polygon fixes), T-ACT-047 (sibling — same family, try/except discipline)
+
+---
+
 ### Section 14 cross-references
 
-- HANDOFF NOTE Appendix A.6 — full post-mortem context for the 2026-05-01 phantom-alpha incident
+- HANDOFF NOTE Appendix A.6 — full post-mortem context for the 2026-05-01 phantom-alpha incident (amended 2026-05-03 via Track B PR with T-ACT-045 PENDING-RE-RUN status + validation-artifact protocol)
+- HANDOFF NOTE Appendix A.7 — silent-failure-class family convention pointer (ratified 2026-05-03 via Track B PR; bundles A.5/A.6/T-ACT-046/T-ACT-054 under a single discipline lens)
 - PR #90 risks R-1 (T-ACT-046) and R-2 (T-ACT-047) — original risk identification
 - HANDOFF NOTE Appendix A.5 mitigation #3 — original lesson surfacing the try/except discipline issue
 - SUBSCRIPTION_REGISTRY.md — canonical reference for subscription-vs-runtime audit (mitigation #2 in A.6)
+- T-ACT-054 cv_stress design memo (Cursor 2026-05-03) — Choice A NULL-on-degenerate-input selected; remediation pending separate PR
 
-*Section 14 opened: 2026-05-01 | Owner: tesfayekb*
+*Section 14 opened: 2026-05-01 | Owner: tesfayekb. Amended 2026-05-03 via Track B PR (T-ACT-045 status update; T-ACT-046 scope expansion; T-ACT-048/050/051/054 added; T-ACT-049 subsumed per numbering note above).*
 
 ---
 

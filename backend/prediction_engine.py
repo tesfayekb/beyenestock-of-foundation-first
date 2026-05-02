@@ -422,16 +422,28 @@ class PredictionEngine:
     def _get_spx_price(self) -> float:
         """Read current SPX price from Redis.
 
-        PRIMARY:   polygon:spx:current  (real-time per Polygon Stocks
-                   Advanced subscription; populated by polygon_feed.py).
+        PRIMARY:   polygon:spx:current  (recency-class TBD; populated by
+                   polygon_feed.py from `/v3/snapshot?ticker.any_of=I:SPX`
+                   at the operator's Polygon Indices subscription tier —
+                   currently Indices Starter ($49/mo). Polygon's published
+                   policy says Indices Starter is 15-min delayed for I:*
+                   symbols, but the snapshot endpoint may serve real-time
+                   despite policy. Empirical determination is tracked via
+                   T-ACT-045; see TASK_REGISTER §14 for status. As of
+                   2026-05-03 T-ACT-045 = PENDING-RE-RUN against post-
+                   PR-#90-deploy data; the May 1 empirical attempt was
+                   structurally pre-deploy and could not validate.
+                   NOTE: Polygon Stocks Advanced ($199/mo) does NOT cover
+                   I:* indices — different product line.
+
         FALLBACK:  tradier:quotes:SPX  (15-min delayed in Tradier sandbox
                    per empirical verification 2026-05-01 — kept ONLY as
                    fallback when Polygon write is missing or stale).
         SENTINEL:  5200.0  (legacy hardcoded last resort).
 
         Logs WARN when Tradier fallback triggers — operator alert that
-        Polygon feed is unhealthy and the system is operating on stale
-        data. Logs ERROR when both sources fail.
+        Polygon feed is unhealthy and the system is operating on
+        plausibly-stale data. Logs ERROR when both sources fail.
         """
         import json
         # Primary: Polygon real-time
@@ -1193,21 +1205,41 @@ class PredictionEngine:
                 spx_raw = self._read_redis("polygon:spx:current", None)
                 if spx_raw:
                     spx_meta = _json.loads(spx_raw)
-                    fetched_at = datetime.fromisoformat(
-                        spx_meta["fetched_at"]
+                    # 2026-05-03 silent-staleness fix (T-ACT-046,
+                    # observability amendment per F6): explicitly handle
+                    # the new contract that polygon_feed.py may write
+                    # `fetched_at: null` when the upstream Polygon
+                    # response lacked a quote-time field. The prior
+                    # behaviour (relying on the outer try/except to
+                    # convert None into a generic spx_freshness_check_
+                    # failed log) was correct-but-noisy. Surfacing the
+                    # missing-upstream-timestamp case with a distinct
+                    # log makes the silent-failure-class family
+                    # convention (HANDOFF A.7) explicit at the consumer.
+                    fetched_at_raw = spx_meta.get("fetched_at")
+                    fetched_at_source = spx_meta.get(
+                        "fetched_at_source", "unknown"
                     )
-                    age_seconds = (
-                        datetime.now(timezone.utc) - fetched_at
-                    ).total_seconds()
-                    if age_seconds <= 330:
-                        spx_fresh = True
-                    else:
+                    if fetched_at_raw is None:
                         logger.warning(
-                            "spx_price_stale",
-                            age_seconds=round(age_seconds, 1),
-                            source="polygon",
-                            threshold_seconds=330,
+                            "spx_price_upstream_timestamp_missing",
+                            source=fetched_at_source,
                         )
+                        # spx_fresh remains False — conservative skip.
+                    else:
+                        fetched_at = datetime.fromisoformat(fetched_at_raw)
+                        age_seconds = (
+                            datetime.now(timezone.utc) - fetched_at
+                        ).total_seconds()
+                        if age_seconds <= 330:
+                            spx_fresh = True
+                        else:
+                            logger.warning(
+                                "spx_price_stale",
+                                age_seconds=round(age_seconds, 1),
+                                source="polygon",
+                                threshold_seconds=330,
+                            )
             except Exception as fresh_err:
                 logger.warning(
                     "spx_freshness_check_failed",
