@@ -29,6 +29,12 @@ class TradierFeed:
         self.last_data_at: Optional[float] = None
         self.disconnect_started_at: Optional[float] = None
         self._stop_event = asyncio.Event()
+        # 2026-05-03 silent-staleness fix (T-ACT-046): one-time observability
+        # marker. Logged once per process startup at the first observed quote
+        # so future sessions can verify which Tradier upstream timestamp
+        # fields are actually populated by sandbox/production responses.
+        # See HANDOFF NOTE A.7 silent-failure-class family convention.
+        self._quote_fields_logged: bool = False
 
     async def start(self) -> None:
         backoff = 1
@@ -273,18 +279,55 @@ class TradierFeed:
     def process_quote(self, quote: dict) -> None:
         try:
             symbol = quote["symbol"]
+            # 2026-05-03 silent-staleness fix (T-ACT-046): do NOT fall back
+            # to wall-clock-now when upstream lacks a timestamp. Wall-clock
+            # fallback masks upstream staleness from any future freshness
+            # check based on the Redis-stored timestamp (the cache always
+            # looks "fresh" because the timestamp is stamped at write time,
+            # not at upstream-quote time). Prefer Tradier's own quote-time
+            # fields in priority order; null sentinel if all absent.
+            #
+            # F2-c defensive chain — field names are empirically unverified
+            # against the operator's actual Tradier sandbox responses; the
+            # one-time WARN log below surfaces the actual field set so
+            # future sessions can refine this priority.
+            upstream_ts = (
+                quote.get("trade_date")
+                or quote.get("bid_date")
+                or quote.get("ask_date")
+                or quote.get("timestamp")
+                or None
+            )
             payload = {
                 "symbol": symbol,
                 "bid": quote.get("bid"),
                 "ask": quote.get("ask"),
                 "last": quote.get("last"),
                 "volume": quote.get("volume"),
-                "timestamp": quote.get("timestamp")
-                or datetime.now(timezone.utc).isoformat(),
+                "timestamp": upstream_ts,
+                "timestamp_source": (
+                    "upstream" if upstream_ts is not None else "missing"
+                ),
             }
             key = f"tradier:quotes:{symbol}"
             self.redis_client.setex(key, 60, json.dumps(payload))
             self.last_data_at = time.time()
+            # F2-c: one-time empirical-evidence log of actual field set
+            # observed in upstream quote dicts. Logged once per process at
+            # the first quote so production logs preserve the empirical
+            # signature of which Tradier upstream timestamp fields are
+            # present in the operator's sandbox/production stream.
+            if not self._quote_fields_logged:
+                self._quote_fields_logged = True
+                logger.warning(
+                    "tradier_quote_fields_observed",
+                    fields=sorted(quote.keys()),
+                    has_trade_date=("trade_date" in quote),
+                    has_bid_date=("bid_date" in quote),
+                    has_ask_date=("ask_date" in quote),
+                    has_timestamp=("timestamp" in quote),
+                    upstream_ts_resolved=upstream_ts is not None,
+                )
         except Exception as exc:
             logger.error("tradier_quote_process_failed", quote=quote, error=str(exc))
 
