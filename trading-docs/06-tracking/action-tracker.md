@@ -29,6 +29,20 @@ Single register of every trading change action. Every change to trading code, sc
 
 ## Register
 
+### T-ACT-057 — `ALERT_GMAIL_APP_PASSWORD` whitespace silent-rejection at SMTP layer (HARD-B alerting blackout; stub — full description in TASK_REGISTER §14)
+
+- **id:** T-ACT-057
+- **date:** 2026-05-02 (env-var fix + smoke test); CODE-CHANGE-DEFERRED (Option B PR; not blocking T-ACT-057 closure)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description. Operator stripped display-format spaces from Railway env var (2026-05-02 21:28 ET); redeployed; new container healthy 2026-05-03 01:28:28 UTC. Smoke test PASSED 2026-05-03 01:52:33 UTC (`alert_email_sent` log fired + email arrived). Option B code-change PR DEFERRED to separate PR (1-line `.replace(" ", "")` defensive strip at `config.py:103`).
+- **severity:** HIGH (14-day production-alerting blackout 2026-04-19 → 2026-05-03 01:28 UTC; ALL 8 send_alert callsites silently rejected including 4 CRITICAL)
+- **vintage:** Long-standing — `alerting.py` introduced 2026-04-19 commit `082bdc0`. Env-var first wired with display-format spaces at unspecified date in the 2026-04-19 to 2026-05-02 window.
+- **adds:** A.7 7th member, new subclass "infrastructure-config silent-failure surface."
+- **remediated_by:** Env-var fix (DONE 2026-05-02 21:28 ET) + end-to-end smoke test (PASSED 2026-05-02 21:52 ET) + Option B code-change PR (DEFERRED).
+- **post-deploy verification:** Smoke test already PASSED 2026-05-02 21:52 ET. No further verification required for T-ACT-057 closure. Option B code-change PR (when filed) will require its own verification.
+- **status:** DONE-VALIDATED (env-var fix applied; smoke test PASSED; Option B PR deferred but not blocking closure)
+- **owner:** tesfayekb (env-var fix + smoke test); Cursor (governance closure PR — this PR; Option B code-change PR if authorized).
+- **t_rules_checked:** Constitution Rule 8 (no scope expansion — direct env-var fix + governance closure), Rule 10 (governance documentation — A.7 amendment + T-ACT-047 footnote), HANDOFF A.7 discipline-meta-lesson (convention pointer ≠ exhaustive audit — direct instance; sharpened to 3-question exhaustive verification).
+
 ### T-ACT-055 — `paper_phase_criteria` upsert NOT NULL violation regression (Choice B revert + rename + WARN; stub — full description in TASK_REGISTER §14)
 
 - **id:** T-ACT-055
