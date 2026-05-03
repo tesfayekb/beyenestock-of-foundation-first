@@ -1991,24 +1991,87 @@ Wrap ONLY the supabase insert site at `prediction_engine.py:1495-1500` (post-Tra
 
 **Status:** [x] Docstring fix DONE (Track B PR); [ ] SUBSCRIPTION_REGISTRY row addition PENDING (separate doc-only PR or bundled with cv_stress remediation PR)
 
+**Status amendment (2026-05-02 night via T-ACT-050 PR closure):** Acceptance criterion #2 (`SUBSCRIPTION_REGISTRY.md` gains row for Polygon Indices Starter $49/mo) NOW CLOSED via T-ACT-050 PR Edit Group C.2 — row added at `SUBSCRIPTION_REGISTRY.md` §1 row 8 with recency note pending T-ACT-045 Monday re-run. T-ACT-048 fully closed.
+
 ---
 
 ### T-ACT-050 — Polygon Stocks Advanced ($199/mo) underutilization audit
 
-**Severity:** LOW (cost optimization)
-**Owner:** Operator
-**Estimated time:** ~20 min
+**Severity:** LOW (cost optimization; -$149/mo savings identified)
+**Owner:** Operator (audit DONE 2026-05-02 night; downgrade execution DEFERRED Monday 2026-05-04 post-T-ACT-045)
+**Estimated time:** ~20 min audit (DONE); ~15 min Polygon dashboard subscription change Monday post-T-ACT-045 closure
 
-**Description:** Cursor's morning audit (S-7) identified that Polygon Stocks Advanced ($199/mo) is consumed primarily by the Polygon News bundle in production code; no equity quotes (SPY/HYG/TLT/DXY) appear to be consumed in the live decision path. If Items 15A/15D from `AI_BUILD_ROADMAP.md` §6 are confirmed not activating in the next 90 days, the subscription may be downgrade-able to a News-only tier (if such a tier exists at lower cost) or cancellable.
+**Description:** Cursor's morning audit (S-7) initially identified that Polygon Stocks Advanced ($199/mo) is consumed primarily by the Polygon News bundle in production code; no equity quotes (SPY/HYG/TLT/DXY) appear to be consumed in the live decision path. **2026-05-02 night operator audit + Cursor's 10-callsite codebase analysis sharpened the finding:** ZERO Polygon News API calls anywhere in `backend/`; ZERO equity/ETF/options API calls; the codebase consumes ONLY CBOE indices (`I:SPX`, `I:VIX`, `I:VVIX`, `I:VIX9D`) via `/v3/snapshot` + `/v2/aggs/ticker/I:.../range/...` endpoints. These index endpoints are served by Polygon's Indices product line, not Stocks Advanced (different products). Stocks Advanced was overprovisioned for actual usage.
+
+**Audit findings (2026-05-02 night):**
+
+- **Current Polygon subscriptions on operator's account (verified via Polygon dashboard):**
+  - Polygon Stocks Advanced: $199/mo (real-time indices included; current path for live decision)
+  - Polygon Options Developer: $79/mo (15-min delayed quotes; historical/reference layer; NOT in live decision path)
+  - Polygon Indices Starter: $49/mo (15-min delayed)
+  - Subtotal Polygon: $327/mo
+
+- **Polygon Indices product line tiers (verified via Polygon dashboard):**
+  - Basic: $0/mo — 15-min delayed
+  - Starter: $49/mo — 15-min delayed (current operator subscription)
+  - **Advanced: $99/mo — REAL-TIME** ← target replacement tier
+
+- **Codebase consumer analysis (Cursor 2026-05-02 verification report Task C):**
+  - 10 Polygon API consumer sites in `backend/`; ALL use `I:` prefix (CBOE indices) ONLY
+  - Tickers consumed: `I:SPX`, `I:VIX`, `I:VVIX`, `I:VIX9D`
+  - Endpoints: `/v3/snapshot` (real-time index reads) + `/v2/aggs/ticker/I:.../range/...` (historical aggregates)
+  - ZERO stocks, ZERO ETFs, ZERO options API, ZERO Polygon News API calls
+
+- **Critical finding — hidden double-pay:** Operator is currently paying for BOTH Stocks Advanced ($199/mo, includes real-time indices) AND Indices Starter ($49/mo, 15-min delayed). The Indices Starter subscription provides nothing the Stocks Advanced doesn't already cover (and at lower fidelity). The two subscriptions overlap on indices coverage with no incremental value from Indices Starter.
+
+- **Optimal restructure (Scenario Z):**
+  - CANCEL: Stocks Advanced ($199/mo) + Indices Starter ($49/mo) = -$248/mo
+  - ADD: Indices Advanced ($99/mo) = +$99/mo
+  - **Net savings: $149/mo = $1,788/yr**
+
+- **Why this is safe:**
+  1. Indices Advanced covers 100% of actual codebase usage (all I:* tickers, both endpoints)
+  2. Real-time preserved (Indices Advanced serves real-time same as Stocks Advanced for indices)
+  3. No code changes required (same endpoint URLs, same API key flow)
+  4. Eliminates the redundant Indices Starter line item
+
+- **Forward-coverage trade-offs (acceptable):**
+  - LOSE Polygon News bundle (Item 15A) → NewsAPI.org free tier provides redundant coverage; Item 15A activation 90+ days out per `AI_BUILD_ROADMAP.md` §6
+  - LOSE cross-asset HYG/TLT/DXY (Item 15D) → un-defer eligibility 120+ days out per `AI_BUILD_ROADMAP.md` §6; re-upgrade-when-needed pattern
+  - LOSE Stocks endpoints (`/v2/aggs/ticker/AAPL`, etc.) → not consumed in codebase; no functional impact
+
+**Why downgrade execution is DEFERRED to Monday (per discipline recommendation):**
+
+Per Cursor's earlier T-ACT-050 verification round: operator delays the actual subscription change until after T-ACT-045 Monday closure to avoid compounding capability changes with active validation work. T-ACT-045 (Monday RTH actual re-run, post-PR-#90 deploy) validates whether Polygon real-time data is reaching the system. If subscription change happens BEFORE T-ACT-045, two capability changes compound (subscription/account-level + already-deployed PR #90 architectural fix). If T-ACT-045 fails Monday, bug attribution is murky — was it PR #90 not working OR was it the new subscription serving stale data? Better: complete T-ACT-045 first, then change subscription with clean attribution if anything goes wrong post-change.
+
+**Sequence:**
+
+1. **Tonight (this PR):** Document audit findings; update SUBSCRIPTION_REGISTRY; status = CONDITIONALLY-CLOSED-DOWNGRADE-DEFERRED-MONDAY
+2. **Monday RTH:** Execute T-ACT-045 actual re-run
+3. **After T-ACT-045 = VALIDATED:** Operator pulls trigger on Polygon subscription restructure; brief HANDOFF amendment captures the actual change date + verifies real-time still works post-change
+4. **If T-ACT-045 fails:** Subscription restructure stays parked until T-ACT-045 closes (one capability change at a time)
 
 **Acceptance criteria:**
 
-1. Operator verifies via Polygon dashboard whether Polygon News is the SOLE consumer of the $199/mo Stocks Advanced tier.
-2. Operator identifies whether Polygon offers a News-only tier at lower cost.
-3. Operator confirms Items 15A/15D status (not activating in 90 days = downgrade safe; if either activating = keep Stocks Advanced as substrate).
-4. Operator decision documented in `SUBSCRIPTION_REGISTRY.md` §1 (keep / downgrade / cancel).
+- [x] Operator verified Polygon News is NOT the SOLE consumer (correction to original AC #1 — News not consumed at all per codebase audit; News-only-tier framing was irrelevant; revised finding: Indices Advanced is the optimal target)
+- [x] Operator identified Polygon Indices product tier table (Basic $0 / Starter $49 / Advanced $99 with real-time)
+- [x] Operator confirmed Items 15A/15D 90-120+ day activation timeline; re-upgrade-when-needed pattern acceptable
+- [/] Operator decision documented in `SUBSCRIPTION_REGISTRY.md` §1 (this PR Edit Groups C.1/C.2/C.3 + §3 Items 15A/15D forward-coverage notes via D.1/D.2) — pending downgrade execution Monday
+- [ ] DEFERRED to Monday: actual subscription change on Polygon dashboard (operator action; not in this PR scope per §1.4 sequencing)
 
-**Status:** [ ] PENDING — operator-led; can run any time; not blocking other work
+**Post-Monday operator action items:**
+
+After T-ACT-045 = VALIDATED Monday:
+
+1. Cancel Polygon Stocks Advanced ($199/mo)
+2. Cancel Polygon Indices Starter ($49/mo)
+3. Subscribe to Polygon Indices Advanced ($99/mo)
+4. Verify real-time `/v3/snapshot` still works post-change (one-shot test query — `python3 -c "from polygon_feed import _fetch_index_snapshot; print(_fetch_index_snapshot('I:SPX'))"` or equivalent; confirm `last_updated` timestamp is recent, NOT 15-min stale)
+5. Brief HANDOFF amendment capturing actual change date + verification result + post-restructure state in SUBSCRIPTION_REGISTRY (§1 Stocks Advanced row strikethrough + Indices Advanced row promoted from "TARGET" to active + §1 Total math reconciliation + §10 Summary list update)
+
+**Status:** [/] CONDITIONALLY-CLOSED-DOWNGRADE-DEFERRED-MONDAY (audit complete 2026-05-02 night; downgrade execution gated on T-ACT-045 Monday closure)
+
+**Cross-references:** T-ACT-045 (Monday gating dependency — actual re-run validates Polygon real-time reaches system before subscription change). T-ACT-048 (partial-PARTIAL closure — `SUBSCRIPTION_REGISTRY.md` Indices Starter $49/mo row added in this PR via Edit Group C.2, closing T-ACT-048 acceptance criterion #2 opportunistically). HANDOFF A.6 mitigation #2 (subscription-vs-runtime audit precedent — same discipline class as T-ACT-050 Polygon-line-items audit). Cursor 2026-05-02 verification report Task C (10-callsite codebase analysis confirming I:* indices only; zero Polygon News API consumption).
 
 ---
 

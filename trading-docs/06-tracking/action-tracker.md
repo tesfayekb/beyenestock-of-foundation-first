@@ -88,14 +88,14 @@ Single register of every trading change action. Every change to trading code, sc
 ### T-ACT-050 — Polygon Stocks Advanced ($199/mo) underutilization audit (stub — full description in TASK_REGISTER §14)
 
 - **id:** T-ACT-050
-- **date:** 2026-05-03 (registered; operator-led)
-- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description (verify News-only-tier availability; Items 15A/15D 90-day status; downgrade/cancel decision).
+- **date:** 2026-05-03 (registered); 2026-05-02 night (audit complete); 2026-05-04 Monday (downgrade execution gated on T-ACT-045 closure)
+- **action:** See `trading-docs/08-planning/TASK_REGISTER.md` §14 for full description. **Audit complete 2026-05-02 night:** operator verified codebase consumes ONLY I:* indices (zero stocks/options/news API per Cursor's 10-callsite analysis); Polygon Indices Advanced ($99/mo) covers 100% of actual usage at real-time fidelity. Hidden double-pay identified: Stocks Advanced ($199) + Indices Starter ($49) overlap on indices coverage with no incremental value from Indices Starter. **Optimal restructure: cancel Stocks Advanced + Indices Starter ($248/mo) → subscribe Indices Advanced ($99/mo) = -$149/mo savings = -$1,788/yr.** Downgrade execution DEFERRED to Monday 2026-05-04 AFTER T-ACT-045 closes (don't compound capability changes with active validation work).
 - **type:** verification (operator-led)
 - **phase:** post_phase_1_diagnostic
-- **impact:** LOW (cost optimization; not blocking other work)
+- **impact:** LOW (cost optimization; -$149/mo savings identified; not blocking other work)
 - **owner:** operator
-- **status:** PENDING — operator-led; can run any time; not blocking other work
-- **cross_refs:** TASK_REGISTER §14 T-ACT-050; SUBSCRIPTION_REGISTRY.md §1; AI_BUILD_ROADMAP.md §6 Items 15A/15D.
+- **status:** CONDITIONALLY-CLOSED-DOWNGRADE-DEFERRED-MONDAY (audit complete 2026-05-02 night; -$149/mo savings identified; downgrade execution gated on T-ACT-045 Monday closure)
+- **cross_refs:** TASK_REGISTER §14 T-ACT-050 (full audit findings); TASK_REGISTER §14 T-ACT-048 (partial-PARTIAL closure via Edit Group C.2 — Indices Starter row added); SUBSCRIPTION_REGISTRY.md §1 (3-row coordinated update — Stocks Advanced note, Indices Starter row added, Indices Advanced target row added) + §3 Items 15A/15D (forward-coverage notes); AI_BUILD_ROADMAP.md §6 Items 15A/15D; HANDOFF A.6 mitigation #2 (subscription-vs-runtime audit precedent); T-ACT-045 (Monday gating dependency).
 
 ### T-ACT-048 — SUBSCRIPTION_REGISTRY + `prediction_engine.py` docstring corrections (stub — full description in TASK_REGISTER §14)
 
