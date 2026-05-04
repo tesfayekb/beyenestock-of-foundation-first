@@ -1742,6 +1742,8 @@ Tasks surfaced during the 2026-05-01 trading session validation. See HANDOFF NOT
 
 **Numbering note (2026-05-03):** T-ACT-049 was originally proposed as a separate entry for the `polygon_feed.py:174-184` silent-staleness fix, sibling to T-ACT-046 (`tradier_feed.py:282-283`). Per Cursor's recommendation 2026-05-03, both fixes are bundled into an expanded T-ACT-046 (same root pattern, single PR — Track B). T-ACT-049 is therefore subsumed and not assigned. The next available T-ACT number after the 2026-05-03 batch (T-ACT-048, T-ACT-050, T-ACT-051, T-ACT-054) is T-ACT-055.
 
+**Numbering note (2026-05-04 evening):** Numbers T-ACT-056, T-ACT-058, T-ACT-059 are RESERVED placeholders, not yet assigned to delivered work. T-ACT-056 is reserved for the exhaustive persist-site audit (gate for A.7 family re-closure on database-persistence subclass) per T-ACT-055 entry. T-ACT-058 is reserved for the Option B `.replace(" ", "")` defensive whitespace strip code-change PR per T-ACT-057 entry. T-ACT-059 is reserved for the exhaustive infrastructure-config audit (gate for A.7 family re-closure on infrastructure-config subclass) per T-ACT-057 entry. T-ACT-060 was assigned to the stale `_upsert_criterion` test references fix (Option Bravo per T-ACT-060 plan-review) executed 2026-05-04. **Next available T-ACT after the 2026-05-04 evening batch (T-ACT-061, T-ACT-062, T-ACT-063, T-ACT-064 added in this PR `docs/post-incident-indices-advanced-2026-05-04`) is T-ACT-065.**
+
 ### T-ACT-045 — Post-PR-#90 empirical SPX real-time validation
 
 **Severity:** HIGH (validation-blocking)
@@ -2165,16 +2167,185 @@ When `cv_stress` is silently 0, the system loses (a) emergency stop, (b) defensi
 
 ---
 
+### T-ACT-061 — Polygon Indices subscription upgrade Starter→Advanced (post-incident closure of 2026-05-01 → 2026-05-04 prediction outage)
+
+**Severity:** HIGH (operationally critical — 76-hour zero-prediction outage; loss of training data; lessons-learned ratified in HANDOFF A.8)
+**Owner:** Operator (subscription change executed 2026-05-04 evening); Cursor (governance closure this PR)
+**Estimated time:** 0 (operator action complete); pending §7.1 probe verification
+
+**Description:** Operator upgraded Polygon Indices subscription from **Starter $49/m** (15-min delayed indices) → **Indices Advanced $99/m** (real-time indices) on 2026-05-04 evening. The upgrade resolves the structural cause of the 2026-05-01 15:55 ET → 2026-05-04 PM prediction outage diagnosed in `trading-docs/06-tracking/HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md`: Indices Starter's 15-min delay was correctly rejected by the codebase's 330s freshness guard at `prediction_engine.py:1366/1373`, producing `spx_price_stale_or_unavailable` early-return on every RTH cron cycle. Outage trigger was PR #92 (T-ACT-046, 2026-05-02 12:00 ET) flipping `polygon:spx:current.fetched_at` from `datetime.now(utc)` (wall-clock-now) to upstream Polygon timestamp via `_normalize_polygon_timestamp` — the change made the structural 15-min delay visible to the guard, where pre-PR-#92 the wall-clock-now stamp had silently masked it.
+
+**Operator action taken (DONE 2026-05-04 evening):**
+1. Polygon billing dashboard: cancel Indices Starter subscription.
+2. Polygon billing dashboard: subscribe Indices Advanced ($99/mo).
+3. Confirm dashboard "Subscribed" state for Indices Advanced (operator confirmed).
+
+**Verification gate (pending operator action — RTH window, ideally Tuesday 2026-05-05 ~10:00 ET if not Monday evening):**
+
+§7.1 manual API probe from `HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md`:
+
+```bash
+curl -sH "Authorization: Bearer ${POLYGON_API_KEY}" \
+  "https://api.polygon.io/v3/snapshot?ticker.any_of=I:SPX" \
+  | python3 -c '
+import json, sys, time
+data = json.load(sys.stdin)
+r = data["results"][0]
+session = r.get("session", {})
+last_upd = session.get("last_updated")
+now_ns   = time.time_ns()
+if last_upd:
+    age_s = (now_ns - last_upd) / 1e9
+    print(f"session.last_updated = {last_upd} (age: {age_s:.1f}s = {age_s/60:.1f} min)")
+print(f"session keys: {sorted(session.keys())}")
+print(f"result keys:  {sorted(r.keys())}")
+print(f"close:        {session.get(\"close\")}")'
+```
+
+**Expected outcome (CONFIRMS upgrade efficacy + closes T-ACT-061):** `age_seconds < 60s` during RTH.
+**Refutation outcome (BLOCKS T-ACT-061 closure):** `age_seconds > 800s` — would indicate (a) dashboard upgrade has not propagated to API entitlement, (b) different code-path bug, or (c) tier description mismatch; requires additional diagnosis before closure.
+
+**Acceptance criteria:**
+1. §7.1 probe shows `age_seconds < 60s` during RTH (operator-executed).
+2. First successful post-upgrade RTH prediction cycle writes a row to `trading_prediction_outputs` (verifiable via Supabase SQL: `SELECT MAX(created_at) FROM trading_prediction_outputs WHERE created_at > '2026-05-04 12:00:00'::timestamptz;` returning a timestamp post-Monday-RTH-open; current state shows max rows from 2026-05-01 15:55 ET).
+3. SUBSCRIPTION_REGISTRY.md §1 reflects Indices Starter cancelled + Indices Advanced active (DONE in this PR).
+4. HANDOFF NOTE A.8 lessons-learned entry ratified (DONE in this PR).
+5. `HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md` relocated to `trading-docs/06-tracking/` (DONE in this PR).
+
+**Status:** [~] PENDING-VERIFICATION — operator subscription change DONE 2026-05-04 evening; awaiting §7.1 probe + first post-upgrade prediction cycle write. Will close to [x] DONE on operator confirmation (next session) of probe `age_seconds < 60s` AND first successful prediction write post-2026-05-04 evening.
+
+**Files modified (governance-only; this PR `docs/post-incident-indices-advanced-2026-05-04`):**
+- `trading-docs/08-planning/SUBSCRIPTION_REGISTRY.md` — §1 row 8 marked CANCELLED, row 9 flipped to ACTIVE with Non-pros only restriction; new §1A tier comparison matrix; §1 monthly burn updated; §5 forward-looking entry expanded; §10 summary updated.
+- `trading-docs/08-planning/TASK_REGISTER.md` — this entry T-ACT-061 + sibling entries T-ACT-062/063/064.
+- `trading-docs/06-tracking/HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md` — Appendix A.8 added (lessons-learned for the outage).
+- `trading-docs/06-tracking/HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md` — relocated from repo root + post-script appended (operator action + closure cross-references).
+
+**Cross-references:** HANDOFF A.8 (canonical lessons-learned for the 2026-05-04 outage; subscription tier mismatch outage). T-ACT-046 (PR #92 — outage trigger, fixed silent-staleness in `polygon_feed.py` `fetched_at`; correct fix that exposed the underlying tier mismatch). T-ACT-045 (operator-pending Monday re-run; original diagnostic context). T-ACT-050 (sibling — Polygon Stocks Advanced underutilization audit; full restructure to cancel Stocks Advanced still pending separate operator decision after T-ACT-061 verification). T-ACT-062 (sibling — VVIX/VIX/VIX9D freshness guard + 330s constant extraction; queued post-T-ACT-061-verification). T-ACT-063 (sibling — email egress investigation). T-ACT-064 (sibling — post-upgrade retraining decision tracking). HANDOFF NOTE 2026-05-04 §7.1 (the manual API probe defining the verification gate).
+
+---
+
+### T-ACT-062 — VVIX / VIX / VIX9D freshness guard + extract 330s constant to module-level (post-T-ACT-061-verification follow-up)
+
+**Severity:** MEDIUM (silent-staleness-class; same A.7 family, derived-feature/feed surface; was a contributor to the 2026-05-04 outage diagnosis surface area but not the trigger)
+**Owner:** Cursor (separate PR after operator confirms T-ACT-061 §7.1 probe + first post-upgrade prediction cycle)
+**Estimated time:** medium — ~150-250 lines, 3-5 files; DIAGNOSE-FIRST + plan-review + EXECUTE
+
+**Description:** Mirror the SPX freshness pattern (introduced in PR #90 / T-ACT-045 + made truthful in PR #92 / T-ACT-046) for the remaining three Polygon index feeds: VVIX, VIX, VIX9D. Currently `polygon_feed.py` writes these as raw float strings to Redis (`polygon:vvix:current` / `polygon:vix:current` / `polygon:vix9d:current` per L130-132 / L152-156 — actual line numbers must be re-verified at DIAGNOSE-time as the file evolves) with no JSON envelope, no `fetched_at`, no `fetched_at_source`, no `source` field. Consumer-side derived features (`vvix_z_score`, `vvix_close`, `vix_term_ratio` and the cv_stress family at `prediction_engine.py:691-694`) compute on these raw floats with NO freshness guard.
+
+Pre-T-ACT-061 (Indices Starter era): all three feeds were silently 15-min stale every cycle (same structural cause as the SPX outage). Post-T-ACT-061 (Indices Advanced era): all three feeds should be real-time, but absence of a guard means no defensive coverage against future Polygon hiccups, parsing regressions, or accidental subscription downgrade. Likely contributor to the Sunday 2026-05-03 accuracy investigation findings (`vvix_z_score`, `vvix_close`, `vix_term_ratio` features derived from 15-min-delayed data during much of the LightGBM training window — see T-ACT-064 for retraining decision tracking).
+
+**Scope (refined at DIAGNOSE-time before EXECUTE):**
+
+1. **Producer side (`backend/polygon_feed.py`):** Convert VVIX / VIX / VIX9D Redis writes from raw float strings to JSON payloads matching the SPX pattern post-PR-#92: `{"price": <float>, "fetched_at": <ISO8601>, "fetched_at_source": "polygon_session_last_updated" | "wall_clock_fallback", "source": "polygon_v3_snapshot"}`. Use the `_normalize_polygon_timestamp` helper introduced in PR #92 to derive `fetched_at` from the upstream Polygon `session.last_updated` field (with defensive null-sentinel fallback per HANDOFF A.7 contract).
+
+2. **Consumer side (`backend/prediction_engine.py` and any other VVIX/VIX/VIX9D readers — re-grep at DIAGNOSE-time):** Add freshness checks mirroring SPX guard at L1366/1373. Skip cycle (or branch with conservative semantics) on stale-or-missing data with structured WARN log naming the field.
+
+3. **Constant extraction:** Replace inline `330` literal at `prediction_engine.py:1366` and `:1373` (line numbers as of HANDOFF A.8 timestamp; re-verify at DIAGNOSE-time) with module-level constant `POLYGON_FRESHNESS_THRESHOLD_SECONDS = 330`. Reuse for SPX + VIX + VVIX + VIX9D guards introduced in this T-ACT. Eliminates the drift-between-comparison-and-log-message future-bug-class noted in `HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md` §8.3.
+
+4. **Tests:** Unit tests for new VVIX/VIX/VIX9D guards (one happy-path, one stale-input-skip, one missing-input-skip per feed). Per-feed verification that `_normalize_polygon_timestamp` is correctly invoked.
+
+**Pre-conditions / gating (HARD GATE — do NOT start before these are met):**
+1. T-ACT-061 §7.1 probe confirms `age_seconds < 60s` for `I:SPX` post-upgrade (operator action).
+2. First successful post-upgrade RTH prediction cycle writes a row to `trading_prediction_outputs` (Supabase SQL verification).
+3. Operator approval to proceed (since this is the FIRST code change touching `polygon_feed.py` after the 2026-05-04 outage; defensive operator-confirmation step prevents compounding capability changes per the same discipline as T-ACT-050's Monday-after-T-ACT-045 gating).
+
+**Acceptance criteria:**
+1. All four index feeds (SPX, VIX, VVIX, VIX9D) write JSON envelopes with consistent `fetched_at`/`fetched_at_source`/`source` fields.
+2. Consumer-side freshness guards in place at all derived-feature compute sites.
+3. `POLYGON_FRESHNESS_THRESHOLD_SECONDS = 330` extracted to module-level; all four guards reference it (no inline literals).
+4. Test surface: ≥6 unit tests (1 happy + 2 skip per feed × 3 feeds).
+5. After 7 days post-merge: re-run accuracy investigation SQL; no `*_stale_or_unavailable` patterns observed during RTH on any index feed.
+
+**Status:** [ ] OPEN — queued, gated on T-ACT-061 verification.
+
+**Cross-references:** HANDOFF A.7 (silent-failure-class family convention pointer; T-ACT-062 will be the 8th member if it surfaces a regression, or the closing exhaustive-coverage milestone for the derived-feature surface if not). HANDOFF A.8 (this T-ACT was identified as the natural follow-up in `HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md` §8.3). T-ACT-046 (sibling — same family, established the SPX pattern; T-ACT-062 mirrors it to VVIX/VIX/VIX9D). T-ACT-061 (gating dependency — must verify SPX upgrade first to avoid compounding capability changes). T-ACT-064 (downstream — VVIX freshness contributes to the retraining decision tracking).
+
+---
+
+### T-ACT-063 — Email alert egress failure on Railway (`alert_email_failed [Errno 101] Network is unreachable`)
+
+**Severity:** MEDIUM-HIGH (operator detection-without-notification — watchdog correctly fires, but no alert reaches operator; same blast-radius class as T-ACT-057 14-day alerting blackout but with a different proximate cause)
+**Owner:** Cursor (DIAGNOSE-FIRST + recommendation; operator decides remediation path)
+**Estimated time:** small-medium — ~30 min DIAGNOSE; 1-2 hours EXECUTE depending on chosen path
+
+**Description:** During the 2026-05-04 RTH window of the prediction outage, the watchdog at `backend/main.py` (or wherever the watchdog lives — confirm at DIAGNOSE-time) correctly detected `prediction_engine_silent` and attempted to fire an alert via the SMTP path established post-T-ACT-057 (env-var fix DONE 2026-05-02). However, every `send_alert(...)` call during the RTH window logged `alert_email_failed [Errno 101] Network is unreachable` — a Linux errno code indicating no IPv4 route to the SMTP host. The operator received NO alert during the 76-hour outage despite the watchdog correctly classifying the silent-state.
+
+**Hypothesis (DIAGNOSE-pending):** Railway's container egress to public SMTP (smtp.gmail.com:587) is structurally flaky or actively blocked. SMTP egress from cloud containers is well-known to be unreliable due to (a) ISP-style abuse-prevention egress filtering (Railway may block port 25/587 by default), (b) IPv6-vs-IPv4 routing surprises, (c) cloud-provider DNS resolution differences, (d) ephemeral container network re-initialization on cold-start vs. warm-cycle.
+
+**Investigation needed (DIAGNOSE-FIRST scope):**
+1. Confirm error class — is `[Errno 101]` consistent across all watchdog fires during the outage window? Search Railway logs for the date range 2026-05-04 09:30-15:55 ET.
+2. Confirm Railway egress policy on SMTP ports — check Railway docs / support; some plans/regions block SMTP outbound by default.
+3. Test connectivity from Railway shell during a non-incident window: `python3 -c "import socket; s = socket.create_connection(('smtp.gmail.com', 587), 5); print('ok')"`.
+4. Inventory candidate replacements:
+   - **Slack webhook** (HTTP POST to `hooks.slack.com`; outbound HTTP/443 reliably egressed from Railway).
+   - **Telegram bot API** (HTTP POST; same).
+   - **HTTP transactional email API** (Resend, Postmark, SendGrid — HTTP/443 egress; transactional reliability; ~$0-15/mo for low-volume MarketMuse cadence).
+   - **PagerDuty / Opsgenie** (heavier; not warranted at current scale).
+
+**Recommendation pending DIAGNOSE (anticipated):** switch from SMTP transport to webhook-based or HTTP-API-based alerting. SMTP from cloud containers is structurally fragile; an HTTP-based path eliminates the egress class of failure entirely. Slack webhook is likely the lowest-friction option (operator already uses Slack for personal/team comms; one-time webhook URL setup; <50 lines of code change in `backend/alerting.py`).
+
+**Acceptance criteria (TBD post-DIAGNOSE):**
+1. Watchdog firing during a smoke-test outage window successfully reaches the operator within 60 seconds.
+2. Failure mode for the new transport is observable (e.g., HTTP 4xx/5xx response logged at WARN, not silently swallowed) — same A.7 discipline applied to alerting transport.
+3. No regression in alert latency vs. the post-T-ACT-057 SMTP baseline (smoke test 2026-05-02 21:52 ET arrived in operator's inbox within ~30 sec).
+
+**Status:** [ ] OPEN — queued, lower urgency than T-ACT-062. Operator can prioritize among T-ACT-062 vs T-ACT-063 based on which provides higher governance value first.
+
+**Cross-references:** T-ACT-057 (ALERT_GMAIL_APP_PASSWORD whitespace silent-rejection; T-ACT-063 is the SECOND distinct alerting blackout root-cause discovered after T-ACT-057's whitespace fix; reinforces the discipline-meta-lesson "infrastructure-config silent-failure surfaces require 3-question exhaustive verification: SET / CORRECT FORMAT / END-TO-END VALIDATED" — T-ACT-063 demonstrates that even with all three questions answered correctly, a fourth-class issue (transport-layer egress reliability) can still produce detection-without-notification). HANDOFF A.7 (silent-failure-class family — T-ACT-063 may surface a 4th subclass: alerting-transport reliability surface). HANDOFF A.8 (this T-ACT was identified during the 2026-05-04 outage diagnosis when operator noted no email arrived during the 76-hour silent window despite watchdog firing correctly).
+
+---
+
+### T-ACT-064 — Post-upgrade LightGBM retraining decision tracking (informational; no immediate action)
+
+**Severity:** INFORMATIONAL (decision-deferred; tracked only)
+**Owner:** Operator (decision); Cursor (data-availability monitoring + decision-support analysis when threshold reached)
+**Estimated time:** 0 (no work now); 4-8 hours when triggered (training run + accuracy investigation re-run + decision memo)
+
+**Description:** The Sunday 2026-05-03 accuracy investigation (per session HANDOFF) identified critically degraded directional accuracy in the production LightGBM v1 model. The investigation surfaced a metric mismatch (2-class binary training vs. 3-class labeling at evaluation with `±0.1%` neutral threshold) as the dominant explanatory factor, but the investigation also flagged that input-data quality may have been silently compromised during the training window:
+
+- **VVIX features (`vvix_z_score`, `vvix_close`, `vix_term_ratio`):** silently 15-min stale every cycle pre-T-ACT-061 (Indices Starter era — entire training window through 2026-05-04). Will become real-time post-T-ACT-061 verification + T-ACT-062 freshness-guard rollout.
+- **SPX features:** real-time with PR #82-#86 chain (LightGBM v1 activation 2026-04-30) until PR #90/T-ACT-045 introduced Polygon-first chain on 2026-04-30; then in the brief Saturday-only window 2026-05-02 12:00 ET → 2026-05-04 evening, post-PR-#92 SPX features were "correctly stale" (guard rejected) which is the OPPOSITE of stale-and-used. So SPX features in training are mostly OK pending T-ACT-045 actual re-run analysis.
+- **Cv_stress family (T-ACT-054 fixed 2026-05-02):** ~29.2% of cycles in pre-fix window persisted silent-zero artifacts. Now NULL-on-degenerate-input.
+- **Model_source schema-code drift (A.5, fixed 2026-05-01):** ~16+ hours of zero-row persistence pre-fix. Resolved.
+
+**Decision deferred until threshold:**
+- **Threshold:** ~50-100 closed paper trades on confirmed-fresh data (post-T-ACT-061 verification + post-T-ACT-062 freshness guards rolled out).
+- **At threshold:** re-run accuracy investigation (Sunday 2026-05-03 SQL pack + holdout backtest). Compare to current model's performance on confirmed-fresh data.
+- **Decision points:**
+  - **(a) Retrain on known-fresh window:** if confirmed-fresh-data accuracy is materially better than current model's confirmed-fresh-data performance — retrain LightGBM on the post-T-ACT-061+T-ACT-062 window only; update `model_metadata.json` with new training-window range.
+  - **(b) Accept current model:** if confirmed-fresh-data accuracy is statistically indistinguishable from current model's confirmed-fresh-data performance — keep current model; update governance docs to record that the metric mismatch was the dominant explanation for low-accuracy framing.
+  - **(c) Investigate further:** if neither path is clearly indicated.
+
+**No action now. Tracked only.** Future Cursor sessions reasoning about model performance, retraining urgency, or activation-gate sufficiency must:
+1. Check this T-ACT's status before recommending retraining.
+2. Verify the closed-trade-count threshold has been reached (Supabase SQL: `SELECT COUNT(*) FROM trading_positions WHERE status='closed' AND closed_at > '<post-T-ACT-061-verification timestamp>';`).
+3. Check `data freshness audit` per T-ACT-062 acceptance criterion #5 has run cleanly for ≥7 days.
+4. Surface this T-ACT in the recommendation chain rather than re-deriving the question from first principles.
+
+**Acceptance criteria (when triggered):**
+1. ≥50 closed paper trades on confirmed-fresh data (data-availability gate).
+2. Re-run accuracy investigation produces a recommendation ((a), (b), or (c)).
+3. Decision memo logged in TASK_REGISTER §14 with reasoning.
+
+**Status:** [ ] OPEN — informational, no immediate action. Will reactivate at threshold.
+
+**Cross-references:** HANDOFF A.6 (paper-trading-P&L-meaningless-if-inputs-stale lesson; T-ACT-064 is the same discipline applied to ML training-data freshness). HANDOFF A.8 (post-upgrade retraining as a tracked decision was identified during the 2026-05-04 outage diagnosis; included in that file's "Open question" closing section). T-ACT-061 (gating dependency — must verify SPX real-time entitlement first). T-ACT-062 (gating dependency — must roll out VVIX/VIX/VIX9D freshness guards before "confirmed-fresh data" is well-defined). Sunday 2026-05-03 accuracy investigation HANDOFF (referenced in session continuity; if not yet committed to repo, it should be committed in a separate governance PR — flag to operator).
+
+---
+
 ### Section 14 cross-references
 
 - HANDOFF NOTE Appendix A.6 — full post-mortem context for the 2026-05-01 phantom-alpha incident (amended 2026-05-03 via Track B PR with T-ACT-045 PENDING-RE-RUN status + validation-artifact protocol)
-- HANDOFF NOTE Appendix A.7 — silent-failure-class family convention pointer (ratified 2026-05-03 via Track B PR; bundles A.5/A.6/T-ACT-046/T-ACT-054 under a single discipline lens)
+- HANDOFF NOTE Appendix A.7 — silent-failure-class family convention pointer (ratified 2026-05-03 via Track B PR; bundles A.5/A.6/T-ACT-046/T-ACT-054 under a single discipline lens; reopened/expanded 2026-05-02 via T-ACT-055/057)
+- HANDOFF NOTE Appendix A.8 — Subscription tier mismatch outage (76 hours; 2026-05-04 lessons-learned; ratified via this PR `docs/post-incident-indices-advanced-2026-05-04`)
+- HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md (`trading-docs/06-tracking/`) — full diagnostic record for the 2026-05-01 → 2026-05-04 prediction outage; §7.1 manual API probe defines the verification gate for T-ACT-061 closure
 - PR #90 risks R-1 (T-ACT-046) and R-2 (T-ACT-047) — original risk identification
+- PR #92 (T-ACT-046, 2026-05-02) — outage trigger via `polygon:spx:current.fetched_at` semantics flip (correct fix that exposed underlying tier mismatch)
 - HANDOFF NOTE Appendix A.5 mitigation #3 — original lesson surfacing the try/except discipline issue
-- SUBSCRIPTION_REGISTRY.md — canonical reference for subscription-vs-runtime audit (mitigation #2 in A.6)
-- T-ACT-054 cv_stress design memo (Cursor 2026-05-03) — Choice A NULL-on-degenerate-input selected; remediation pending separate PR
+- SUBSCRIPTION_REGISTRY.md — canonical reference for subscription-vs-runtime audit (mitigation #2 in A.6); §1A tier comparison matrix for Polygon Indices added 2026-05-04 evening
+- T-ACT-054 cv_stress design memo (Cursor 2026-05-03) — Choice A NULL-on-degenerate-input selected; remediation DONE 2026-05-02
 
-*Section 14 opened: 2026-05-01 | Owner: tesfayekb. Amended 2026-05-03 via Track B PR (T-ACT-045 status update; T-ACT-046 scope expansion; T-ACT-048/050/051/054 added; T-ACT-049 subsumed per numbering note above).*
+*Section 14 opened: 2026-05-01 | Owner: tesfayekb. Amended 2026-05-03 via Track B PR (T-ACT-045 status update; T-ACT-046 scope expansion; T-ACT-048/050/051/054 added; T-ACT-049 subsumed per numbering note above). Amended 2026-05-04 evening via PR `docs/post-incident-indices-advanced-2026-05-04` (T-ACT-061 closed-resolved subscription upgrade; T-ACT-062 queued VVIX/VIX/VIX9D freshness; T-ACT-063 queued email egress; T-ACT-064 informational retraining decision tracking; HANDOFF NOTE Appendix A.8 added; HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md relocated from repo root).*
 
 ---
 
