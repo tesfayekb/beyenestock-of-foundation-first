@@ -1,8 +1,8 @@
 # MarketMuse — Active Subscription Registry
 
 **Owner:** tesfayekb
-**Last verified:** 2026-04-30
-**Verification source:** BeyeneQuant trading console Subscriptions UI (`beyene.io/trading/subscriptions`) + operator confirmation of paid-tier statuses + external provider dashboards (massive.com, databento.com, unusualwhales.com)
+**Last verified:** 2026-05-04 evening (Polygon Indices Starter→Advanced upgrade post-incident closure; per `trading-docs/06-tracking/HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md`)
+**Verification source:** BeyeneQuant trading console Subscriptions UI (`beyene.io/trading/subscriptions`) + operator confirmation of paid-tier statuses + external provider dashboards (massive.com, databento.com, unusualwhales.com) + Polygon dashboard tier-comparison view (screenshots dated 2026-05-04 evening, captured during Indices subscription upgrade)
 **Supersedes:** Master Forward Plan v1.2 Part 4 "Subscription decisions" framing (which treated Polygon Stocks Advanced + Databento Historical OPRA as forward-looking; both now confirmed active).
 
 ---
@@ -18,10 +18,38 @@
 | 5 | **Finnhub** | annual | $125/yr (~$10.42/mo) | annually | Economic calendar (FOMC / CPI / NFP) with consensus data. |
 | 6 | **NewsAPI** | Free tier | $0 | — | Financial headlines for sentiment scoring (100 req/day limit). Item 15A historical news backfill (in addition to Polygon News bundled in Stocks Advanced). |
 | 7 | **Tradier sandbox** | brokerage paper account | $0 | — | Order execution + paper trading. Real-time SPX index-options quotes (per Tradier's index-options exception). General equities/options 15-min delayed in sandbox. Commission-only billing (~$0.35/contract). |
-| 8 | **Polygon.io — Indices Starter** | Starter | $49 | monthly | 15-min delayed indices (`I:SPX`, `I:VIX`, `I:VVIX`, `I:VIX9D`). **(2026-05-02 night audit — T-ACT-050)** Redundant with Stocks Advanced row 2 real-time coverage. Original purpose was Item 15A historical news backfill (per T-ACT-048 partial closure); empirically not consumed; row added now closes T-ACT-048 acceptance criterion #2. Recency note: TBD pending T-ACT-045 Monday re-run; per Polygon published policy 15-min delayed for I:* indices, but `/v3/snapshot` may serve real-time despite policy. **Cancel Monday after T-ACT-045 closes** as part of T-ACT-050 restructure. |
-| 9 | **Polygon.io — Indices Advanced (TARGET REPLACEMENT — pending Monday execution; NOT yet active)** | Advanced | $99 (target) | monthly (target) | **(T-ACT-050 target replacement; not yet subscribed)** Real-time per Polygon dashboard tier table. Covers all 10 codebase consumer sites (`I:SPX`, `I:VIX`, `I:VVIX`, `I:VIX9D` via `/v3/snapshot` + `/v2/aggs/ticker/I:.../range/...`). Net effect post-restructure: cancel Stocks Advanced + Indices Starter ($248/mo total) → subscribe Indices Advanced ($99/mo) = -$149/mo savings = -$1,788/yr. **Operator action Monday after T-ACT-045 closes.** |
+| 8 | **Polygon.io — Indices Starter (CANCELLED 2026-05-04 evening)** | Starter | $49 (was monthly) | — (cancelled) | 15-min delayed indices (`I:SPX`, `I:VIX`, `I:VVIX`, `I:VIX9D`). **(CANCELLED 2026-05-04 evening — incident closure T-ACT-061; replaced by row 9 Indices Advanced.)** The 15-min delay was the structural cause of the 2026-05-01 → 2026-05-04 prediction outage (76 hours zero predictions). Outage trigger was PR #92 (T-ACT-046, 2026-05-02) flipping `polygon:spx:current.fetched_at` from wall-clock-now to upstream Polygon timestamp, exposing the tier-mandated 15-min delay to the 330s freshness guard at `prediction_engine.py:1366/1373`. Row preserved as historical record per registry §9 maintenance protocol. See `HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md` for full diagnosis and `HANDOFF_NOTE_2026-04-28_POST_P1-3-7.md` Appendix A.8 for the lessons-learned entry. |
+| 9 | **Polygon.io — Indices Advanced** | Advanced | $99 | monthly | **ACTIVE 2026-05-04 evening** (subscribed by operator post-incident; replaced row 8 Indices Starter). **Real-time entitlement** per Polygon dashboard tier-comparison view ("Real-time Data" vs Starter's "15-min Delayed Data"). Covers all 10 codebase consumer sites (`I:SPX`, `I:VIX`, `I:VVIX`, `I:VIX9D` via `/v3/snapshot` + `/v2/aggs/ticker/I:.../range/...`). **Usage restriction: "Non-pros only"** — Polygon professional/non-professional exchange-licensing distinction. Operator currently qualifies as non-professional. **THIS CONSTRAINT MUST BE REVISITED IF THE SYSTEM:** (a) registers as a professional trader anywhere, (b) takes external capital, (c) runs on behalf of any entity beyond the individual operator, (d) is commercialized in any form (including paid SaaS, signal redistribution, etc.). In any of those cases, exchange fees apply and a different tier/agreement is required. Cross-reference §5 row "MarketMuse goes commercial / takes outside capital" — Indices Advanced now joins Stocks Advanced as a "Non-pros only" subscription requiring re-licensing review under that trigger. **Verification gate:** §7.1 manual API probe in `HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md` (expected `age_seconds < 60s` during RTH); operator action pending — see TASK_REGISTER T-ACT-061 closure criteria. **Net cost change (this row only):** +$50/mo (Starter $49 cancelled → Advanced $99 subscribed). **Net cost change vs. T-ACT-050 full restructure target:** the full T-ACT-050 -$149/mo restructure ALSO required cancelling Stocks Advanced ($199/mo, row 2) — that step is **NOT yet executed**; Stocks Advanced remains active per operator's current state. Pending separate operator decision. |
 
-**Total recurring data-subscription cost (pre-restructure 2026-05-02):** **~$662 / month** ($79 + $199 + $199 + $126 + $10.42 amortized + $0 + $0 + $49 + $0). **(2026-05-02 night T-ACT-050 audit — corrected from earlier ~$613/mo figure which omitted Polygon Indices Starter $49/mo line item; row 9 Indices Advanced is target replacement, NOT current charge.)** **Polygon line items pre-restructure:** $199 Stocks Advanced + $79 Options Developer + $49 Indices Starter = $327/mo on Polygon. **Post-restructure (Monday execution): cancel Stocks Advanced + Indices Starter, subscribe Indices Advanced = $79 Options Developer + $99 Indices Advanced = $178/mo on Polygon (net -$149/mo); total recurring data-subscription cost drops from ~$662/mo to ~$513/mo.**
+**Total recurring data-subscription cost (current state 2026-05-04 evening, post-Indices-upgrade):** **~$712.42 / month** ($79 Options Developer + $199 Stocks Advanced + $199 Databento + $126 Unusual Whales + $10.42 Finnhub amortized + $0 NewsAPI + $0 Tradier sandbox + ~$0 Indices Starter cancelled + $99 Indices Advanced active). **Net change vs. pre-2026-05-04-evening state:** **+$50/mo** (Indices Starter $49 cancelled → Indices Advanced $99 subscribed; Stocks Advanced $199 unchanged). **Polygon line items current:** $79 Options Developer + $199 Stocks Advanced + $99 Indices Advanced = $377/mo on Polygon.
+
+**Pending T-ACT-050 full-restructure target (NOT yet executed; separate operator decision):** Cancel row 2 Stocks Advanced ($199/mo) when Indices Advanced sufficiency is confirmed. Result: $79 Options Developer + $99 Indices Advanced = $178/mo on Polygon; total recurring data-subscription drops to ~$513.42/mo (net -$149/mo from 2026-05-04-evening current state, or net -$199/mo from pre-2026-05-04 state). **Gating:** operator's current state still consumes Stocks Advanced for Polygon News (15A) and cross-asset HYG/TLT/DXY (15D); cancellation requires re-confirming codebase usage post the 2026-05-02 night T-ACT-050 audit (10-callsite analysis showed I:* indices only, no News/cross-asset consumption — those features are deferred per AI_BUILD_ROADMAP §6 V0.2/V0.2 timing).
+
+---
+
+## 1A. Polygon Indices tier comparison matrix (added 2026-05-04 evening)
+
+Source: operator's Polygon dashboard tier-comparison view, screenshots dated 2026-05-04 evening. This matrix is preserved here so that the entitlement question is answerable from this file alone, without re-loading Polygon's pricing page. Future Cursor/Claude sessions reasoning about Indices subscription sufficiency must verify against this matrix (or the live tier-description text on Polygon's pricing page if newer than this snapshot) — **NOT from memory or prior-session assumption** (per Appendix A.8 lessons-learned: subscription/entitlement claims about external services are present-day factual questions that require checking current tier-description language).
+
+| Feature              | Basic ($0/m)      | Starter ($49/m)         | Advanced ($99/m)         |
+|----------------------|-------------------|-------------------------|--------------------------|
+| Tickers              | Limited           | All Index Tickers       | All Index Tickers        |
+| API Calls            | 5/min             | Unlimited               | Unlimited                |
+| Historical Data      | 1+ Year           | 1+ Year                 | 1+ Year                  |
+| Timeframe            | End of Day        | 15-min Delayed          | **Real-time**            |
+| Reference Data       | Yes               | Yes                     | Yes                      |
+| Technical Indicators | Yes               | Yes                     | Yes                      |
+| Minute Aggregates    | Yes               | Yes                     | Yes                      |
+| Flat Files           | No                | Yes                     | Yes                      |
+| WebSockets           | No                | Yes                     | Yes                      |
+| — Min Aggregates     | No                | Yes                     | Yes                      |
+| — Values             | No                | No                      | Yes                      |
+| Snapshot             | No                | Yes                     | Yes                      |
+| Usage Restrictions   | Individual Use    | Individual Use          | Individual Use, **Non-pros only** |
+
+**Note:** Polygon Indices does not currently offer a "Developer" middle tier between Starter and Advanced; only the three paid options shown above (Basic / Starter / Advanced) appear in the dashboard comparison view as of 2026-05-04 evening. Earlier `HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md` §7.3 Path A description ("Indices Developer / Advanced — ~$150-199/m incremental") referenced a Developer tier that does not exist; superseded by this matrix.
+
+**Active selection (post-2026-05-04 evening):** Advanced — provides real-time entitlement required by the codebase's 330s freshness guard at `prediction_engine.py:1366/1373`. Starter cancellation removes the 15-min-delay structural mismatch that caused the 2026-05-01 → 2026-05-04 prediction outage (see Appendix A.8).
 
 ---
 
@@ -84,7 +112,7 @@ Per `AI_BUILD_ROADMAP.md` §6 + §7 + Master ROI Plan §0 pointer table.
 | **Live-money cutover** (post Path Y activation + operator capital deployment decision) | **Tradier funded brokerage account** OR alternative broker (IBKR / TastyTrade) | Funded brokerage gets real-time on non-SPX symbols. Independent of data-subscription decisions. |
 | **If MarketMuse expands beyond 0DTE SPX** | Re-evaluate execution broker + data-feed coverage | Future strategy decision; not imminent. |
 | **If equity API call volumes outgrow Stocks Advanced limits** | Polygon Stocks Currencies (~$2,000/mo) | Plan flags as OVERKILL for current scale. Stay on Advanced unless concrete throttling surfaces. |
-| **MarketMuse goes commercial / takes outside capital** | All "Non-pros only" subscriptions (Stocks Advanced) need re-licensing | Triggers entity-level review. Not imminent. |
+| **MarketMuse goes commercial / takes outside capital** | All "Non-pros only" subscriptions (Stocks Advanced row 2 **AND Indices Advanced row 9**) need re-licensing | Triggers entity-level review. Not imminent. **(2026-05-04 evening: Indices Advanced added to this trigger list — operator currently qualifies as non-professional; status change events in §1 row 9 description must surface this row.)** |
 
 ---
 
@@ -136,14 +164,18 @@ When this registry changes, the UI must be updated in lockstep. When the UI chan
 
 ## 10. Summary — what's done, what's deferred, what's forward-looking
 
-**ACTIVE (recurring):**
+**ACTIVE (recurring) — current state 2026-05-04 evening:**
 - Polygon Options Developer ($79)
-- Polygon Stocks Advanced ($199)
+- Polygon Stocks Advanced ($199) — **(pending T-ACT-050 cancellation gate; see §1 total-row commentary)**
+- **Polygon Indices Advanced ($99)** — **NEW 2026-05-04 evening**, replaced Indices Starter $49 row 8; "Non-pros only" usage restriction
 - Databento OPRA Standard ($199, includes historical from 2013-04-01)
 - Unusual Whales ($126)
 - Finnhub ($125/yr)
 - NewsAPI (free tier, $0)
 - Tradier sandbox (commission-only, $0)
+
+**CANCELLED (preserved as historical record per §9 maintenance protocol):**
+- Polygon Indices Starter ($49) — cancelled 2026-05-04 evening; row 8 retained for incident reconstruction (76-hour outage 2026-05-01 → 2026-05-04 traceable to this tier's 15-min delay structurally mismatched with codebase real-time assumption)
 
 **DEFERRED (decision made, not pursuing):**
 - Item 15E retail sentiment (V2+)
@@ -152,9 +184,11 @@ When this registry changes, the UI must be updated in lockstep. When the UI chan
 **FORWARD-LOOKING (trigger-based):**
 - Tradier funded brokerage account (live-money cutover)
 - Re-evaluation of execution broker (if scope expands beyond 0DTE SPX)
-- Re-licensing review (if MarketMuse goes commercial)
+- Re-licensing review (if MarketMuse goes commercial — now applies to **both** Stocks Advanced AND Indices Advanced "Non-pros only" tiers)
+- T-ACT-050 full restructure (cancel Stocks Advanced once Indices Advanced sufficiency is confirmed; net -$149/mo from current state) — pending operator decision after §7.1 probe + first post-upgrade prediction cycle confirm Indices Advanced is delivering real-time
 
-**No remaining "decisions pending" on the data-subscription side as of 2026-04-30.**
+**Open decision pending on the data-subscription side as of 2026-05-04 evening:**
+1. Whether to execute the T-ACT-050 full restructure (cancel Stocks Advanced) once Indices Advanced sufficiency is empirically confirmed. Gating: §7.1 probe + first successful post-upgrade RTH prediction cycle write to `trading_prediction_outputs`.
 
 ---
 
