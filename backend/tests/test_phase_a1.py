@@ -164,7 +164,7 @@ def test_glc002_uses_outcome_correct_not_winrate():
 def test_glc001_passes_when_accuracy_above_58pct():
     """GLC-001 reports passed when outcome_correct rate >= 58%."""
     with patch("criteria_evaluator.get_client") as mock_db, \
-         patch("criteria_evaluator._upsert_criterion") as mock_upsert:
+         patch("criteria_evaluator._update_criterion") as mock_upsert:
 
         call_count = [0]
         def count_side_effect(*args, **kwargs):
