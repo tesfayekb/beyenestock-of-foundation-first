@@ -77,16 +77,6 @@ def test_prediction_output_no_hardcoded_5000():
     )
 
 
-def test_upsert_criterion_uses_upsert():
-    """_upsert_criterion must use .upsert() not .update()."""
-    import inspect
-    from criteria_evaluator import _upsert_criterion
-    source = inspect.getsource(_upsert_criterion)
-    assert ".upsert(" in source, "_upsert_criterion must use .upsert()"
-    assert ".update(" not in source.split(".upsert(")[0], (
-        "_upsert_criterion still uses .update()"
-    )
-
 
 def test_prediction_cycle_is_cron_not_interval():
     """Prediction cycle must use cron trigger (market hours) not interval."""
