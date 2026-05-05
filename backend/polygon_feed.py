@@ -94,6 +94,35 @@ class PolygonFeed:
         # which Polygon /v3/snapshot indices upstream timestamp fields
         # are actually populated (session.last_updated vs other names).
         self._spx_fields_logged: bool = False
+        # T-ACT-062 (2026-05-04): mirror the SPX `_last_spx_upstream_ts`
+        # side-channel pattern for VIX, VVIX, and VIX9D so the poll-loop
+        # setex calls can stamp `polygon:vix:current` /
+        # `polygon:vvix:current` / `polygon:vix9d:current` JSON envelopes
+        # with the upstream Polygon quote-time, not wall-clock-now.
+        # Same A.7 silent-failure-class family contract as SPX: stamping
+        # wall-clock-now would re-introduce the staleness-blindness that
+        # motivated PR #92 / T-ACT-046 for SPX. None on fetch failure or
+        # when the upstream response lacked a timestamp field; consumers
+        # (the T-ACT-062 freshness guard at prediction_engine.run_cycle)
+        # treat None-fetched_at as a missing-upstream-timestamp WARN
+        # event distinct from generic-stale-data.
+        self._last_vix_upstream_ts: Optional[str] = None
+        self._last_vvix_upstream_ts: Optional[str] = None
+        self._last_vix9d_upstream_ts: Optional[str] = None
+        # T-ACT-062 belt-and-suspenders detector (2026-05-04 evening
+        # operator note from VIX/VVIX/VIX9D probe): Polygon's
+        # /v3/snapshot indices payload carries an explicit `timeframe`
+        # field per result. On Indices Advanced (active 2026-05-04)
+        # all four feeds return ``timeframe: "REAL-TIME"``; if a future
+        # accidental subscription downgrade flips any feed to
+        # ``"DELAYED"`` the freshness guard would still catch it via
+        # age_seconds > threshold once the ~15-min delay accumulates,
+        # but tier_mismatch fires immediately on the FIRST stale
+        # response — same A.8 L8.1 discipline (verify subscription
+        # claims as present-day factual questions) applied to runtime
+        # detection. One log per feed per process so log volume is
+        # bounded; values cleared on process restart.
+        self._polygon_tier_mismatch_logged: dict[str, bool] = {}
 
     async def start(self) -> None:
         # A-startup: seed vix_history from Polygon daily aggregates so
@@ -127,9 +156,40 @@ class PolygonFeed:
                     # Fetch VIX and SPX close for IV/RV filter
                     try:
                         vix = await self._fetch_vix()
-                        self.redis_client.setex(
-                            "polygon:vix:current", 3600, str(vix)
-                        )
+                        # T-ACT-062 (2026-05-04): JSON envelope mirrors
+                        # the SPX pattern at L204-217 below. Pre-T-ACT-
+                        # 062 this write was ``str(vix)`` — a raw float
+                        # with no upstream-timestamp metadata, blind to
+                        # silent staleness in the same way the SPX
+                        # write was pre-PR-#92. Operator selected
+                        # Option β (SD-1, 2026-05-04 evening): the
+                        # consumer-side guard at
+                        # prediction_engine.run_cycle SOFT-WARNS rather
+                        # than skipping the cycle on stale VIX/VVIX/
+                        # VIX9D — see TASK_REGISTER T-ACT-062 and
+                        # T-ACT-065 for the 7-day evaluation window
+                        # that decides whether to flip to hard-gate.
+                        try:
+                            vix_upstream_ts = self._last_vix_upstream_ts
+                            self.redis_client.setex(
+                                "polygon:vix:current",
+                                3600,
+                                json.dumps({
+                                    "price": float(vix),
+                                    "fetched_at": vix_upstream_ts,
+                                    "fetched_at_source": (
+                                        "polygon_upstream"
+                                        if vix_upstream_ts is not None
+                                        else "missing"
+                                    ),
+                                    "source": "polygon_v3_snapshot",
+                                }),
+                            )
+                        except Exception as vix_write_err:
+                            logger.warning(
+                                "polygon_vix_current_write_failed",
+                                error=str(vix_write_err),
+                            )
 
                         # B-1: 20-day rolling VIX z-score for Signals D + F.
                         # Writes polygon:vix:z_score (and 20d_mean / 20d_std).
@@ -149,10 +209,24 @@ class PolygonFeed:
                         try:
                             vix9d = await self._fetch_vix9d()
                             if vix9d is not None and vix9d > 0:
+                                # T-ACT-062: see VIX setex above.
+                                vix9d_upstream_ts = (
+                                    self._last_vix9d_upstream_ts
+                                )
                                 self.redis_client.setex(
                                     "polygon:vix9d:current",
                                     3600,
-                                    str(vix9d),
+                                    json.dumps({
+                                        "price": float(vix9d),
+                                        "fetched_at": vix9d_upstream_ts,
+                                        "fetched_at_source": (
+                                            "polygon_upstream"
+                                            if vix9d_upstream_ts
+                                            is not None
+                                            else "missing"
+                                        ),
+                                        "source": "polygon_v3_snapshot",
+                                    }),
                                 )
                         except Exception as v9_exc:
                             logger.warning(
@@ -284,7 +358,35 @@ class PolygonFeed:
         # before expiry; under an outage the keys vanish and downstream
         # readers (regime, prediction) cleanly fall back to defaults
         # instead of trading on yesterday's vol.
-        self.redis_client.setex("polygon:vvix:current", 3600, str(current))
+        #
+        # T-ACT-062 (2026-05-04): polygon:vvix:current is now a JSON
+        # envelope mirroring the SPX pattern (and the VIX/VIX9D writes
+        # in the poll-loop above). The other polygon:vvix:* derived
+        # keys (z_score, 20d_mean, 20d_std, baseline_ready) remain raw
+        # values — only the live-price key carries upstream-timestamp
+        # metadata, since freshness is a property of the upstream
+        # quote, not the rolling-window math we run on it.
+        try:
+            vvix_upstream_ts = self._last_vvix_upstream_ts
+            self.redis_client.setex(
+                "polygon:vvix:current",
+                3600,
+                json.dumps({
+                    "price": float(current),
+                    "fetched_at": vvix_upstream_ts,
+                    "fetched_at_source": (
+                        "polygon_upstream"
+                        if vvix_upstream_ts is not None
+                        else "missing"
+                    ),
+                    "source": "polygon_v3_snapshot",
+                }),
+            )
+        except Exception as vvix_write_err:
+            logger.warning(
+                "polygon_vvix_current_write_failed",
+                error=str(vvix_write_err),
+            )
         if len(self.history) < 20:
             self.redis_client.setex(
                 "polygon:vvix:baseline_ready", 3600, "False"
@@ -599,12 +701,21 @@ class PolygonFeed:
                     data = resp.json()
                     results = data.get("results", [])
                     if results:
-                        # Extract last value from snapshot
-                        session = results[0].get("session", {})
+                        result0 = results[0]
+                        session = result0.get("session", {})
                         vvix = float(
                             session.get("close")
                             or session.get("prev_close")
                             or 120.0
+                        )
+                        # T-ACT-062: route upstream Polygon quote-time
+                        # to the side-channel so the poll-loop setex
+                        # can stamp polygon:vvix:current.fetched_at
+                        # with Polygon's time, NOT wall-clock-now.
+                        self._last_vvix_upstream_ts = (
+                            self._extract_index_upstream_ts(
+                                result0, "vvix"
+                            )
                         )
                         self.last_vvix = vvix
                         logger.info("polygon_vvix_fetched", vvix=vvix)
@@ -620,12 +731,20 @@ class PolygonFeed:
                         results2 = data2.get("results", [])
                         if results2:
                             vvix = float(results2[0].get("c", 120.0))
+                            # T-ACT-062: /v2/aggs/.../prev does not
+                            # carry an upstream `last_updated` field,
+                            # so fetched_at_source will be "missing".
+                            self._last_vvix_upstream_ts = None
                             self.last_vvix = vvix
                             return vvix
         except Exception as e:
             # Scrub exception message to avoid leaking API key
             logger.warning("polygon_vvix_fetch_failed", error=type(e).__name__)
 
+        # T-ACT-062: clear side-channel on fetch failure so the next
+        # setex doesn't stamp a stale upstream timestamp from the
+        # previous successful fetch (mirrors SPX F1-c discipline).
+        self._last_vvix_upstream_ts = None
         return self.last_vvix if self.last_vvix is not None else 120.0
 
     async def _fetch_vix(self) -> float:
@@ -652,11 +771,18 @@ class PolygonFeed:
                 if resp.status_code == 200:
                     results = resp.json().get("results", [])
                     if results:
-                        session_data = results[0].get("session", {})
+                        result0 = results[0]
+                        session_data = result0.get("session", {})
                         vix = float(
                             session_data.get("close")
                             or session_data.get("prev_close")
                             or 18.0
+                        )
+                        # T-ACT-062: see _fetch_vvix docstring.
+                        self._last_vix_upstream_ts = (
+                            self._extract_index_upstream_ts(
+                                result0, "vix"
+                            )
                         )
                         self.last_vix = vix
                         return vix
@@ -670,11 +796,16 @@ class PolygonFeed:
                     results2 = resp2.json().get("results", [])
                     if results2:
                         vix = float(results2[0].get("c", 18.0))
+                        # T-ACT-062: /prev has no upstream timestamp.
+                        self._last_vix_upstream_ts = None
                         self.last_vix = vix
                         return vix
         except Exception as e:
             logger.warning("polygon_vix_fetch_failed", error=type(e).__name__)
 
+        # T-ACT-062: clear on failure so the next setex doesn't carry
+        # over a stale upstream timestamp from a prior successful fetch.
+        self._last_vix_upstream_ts = None
         return self.last_vix if self.last_vix is not None else 18.0
 
     async def _fetch_vix9d(self) -> Optional[float]:
@@ -707,13 +838,20 @@ class PolygonFeed:
                 if resp.status_code == 200:
                     results = resp.json().get("results", [])
                     if results:
-                        session_data = results[0].get("session", {})
+                        result0 = results[0]
+                        session_data = result0.get("session", {})
                         vix9d = float(
                             session_data.get("close")
                             or session_data.get("prev_close")
                             or 0
                         )
                         if vix9d > 0:
+                            # T-ACT-062: see _fetch_vvix docstring.
+                            self._last_vix9d_upstream_ts = (
+                                self._extract_index_upstream_ts(
+                                    result0, "vix9d"
+                                )
+                            )
                             self.last_vix9d = vix9d
                             return vix9d
 
@@ -727,6 +865,9 @@ class PolygonFeed:
                     if results2:
                         vix9d = float(results2[0].get("c", 0.0))
                         if vix9d > 0:
+                            # T-ACT-062: /prev has no upstream
+                            # timestamp.
+                            self._last_vix9d_upstream_ts = None
                             self.last_vix9d = vix9d
                             return vix9d
         except Exception as e:
@@ -734,6 +875,14 @@ class PolygonFeed:
                 "polygon_vix9d_fetch_failed",
                 error=type(e).__name__,
             )
+        # T-ACT-062: clear on every non-success path. The original
+        # control flow returned None outright on failure; we preserve
+        # that semantics but explicitly null the side-channel so a
+        # later poll-loop check doesn't see a stale ts left from a
+        # prior cycle (the poll loop gates the setex on
+        # ``vix9d is not None and vix9d > 0`` so this is defence-in-
+        # depth, but cheap).
+        self._last_vix9d_upstream_ts = None
         return None
 
     async def _backfill_vix_history(self) -> None:
@@ -925,6 +1074,57 @@ class PolygonFeed:
         # previous successful fetch.
         self._last_spx_upstream_ts = None
         return None
+
+    def _extract_index_upstream_ts(
+        self, result0: dict, feed_label: str
+    ) -> Optional[str]:
+        """T-ACT-062: shared upstream-timestamp extraction for VIX,
+        VVIX, and VIX9D Polygon /v3/snapshot fetchers.
+
+        Mirrors the SPX inline priority chain at L884-889 (intentionally
+        kept inline for SPX so the F2-c one-time observability marker
+        sits with the chain). Operator-confirmed 2026-05-04 evening
+        probe: result.last_updated is the populated field on Indices
+        Advanced for all four index feeds (SPX, VIX, VVIX, VIX9D).
+        The first two priority slots (session.last_updated,
+        value.last_updated) are dead-letter on the current Advanced-
+        tier response shape but serve as defensive code in case the
+        upstream shape changes — DO NOT reorder.
+
+        Also performs once-per-process tier-mismatch detection: if
+        ``result.timeframe`` is present and != ``"REAL-TIME"``, logs a
+        single ``polygon_tier_mismatch`` WARN per feed per process.
+        Catches a future accidental subscription downgrade BEFORE the
+        freshness guard at prediction_engine.run_cycle does (the guard
+        only fires once age accumulates past the 330s threshold; tier
+        mismatch fires on the first stale response).
+
+        Returns ISO 8601 UTC string on success, None when the upstream
+        response lacked a timestamp at every priority slot.
+        """
+        session_data = result0.get("session", {}) or {}
+        value_data = result0.get("value") or {}
+        if not isinstance(value_data, dict):
+            value_data = {}
+        upstream_ts_raw = (
+            session_data.get("last_updated")
+            or value_data.get("last_updated")
+            or result0.get("last_updated")
+            or None
+        )
+        timeframe = result0.get("timeframe")
+        if (
+            timeframe
+            and timeframe != "REAL-TIME"
+            and not self._polygon_tier_mismatch_logged.get(feed_label)
+        ):
+            self._polygon_tier_mismatch_logged[feed_label] = True
+            logger.warning(
+                "polygon_tier_mismatch",
+                feed=feed_label,
+                timeframe=timeframe,
+            )
+        return self._normalize_polygon_timestamp(upstream_ts_raw)
 
     @staticmethod
     def _normalize_polygon_timestamp(value) -> Optional[str]:

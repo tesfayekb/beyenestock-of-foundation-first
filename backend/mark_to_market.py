@@ -13,6 +13,7 @@ from typing import Optional
 
 from db import get_client, write_health_status
 from logger import get_logger
+from polygon_index_helpers import parse_polygon_index_value
 
 logger = get_logger("mark_to_market")
 
@@ -326,17 +327,32 @@ def _price_position(
         far_expiry = pos.get("far_expiry_date")
         near_expiry = expiry  # raw ISO string already extracted above
 
+        # T-ACT-062: parse via the shared backward-compatible helper
+        # so legacy raw-float values AND the new JSON envelope (post
+        # PR `feat/t-act-062-vix-vvix-freshness-guard`) both yield the
+        # correct numeric price. Keeps the divide-by-100 scaling and
+        # the original 0.18 fallback so MTM's Black-Scholes pricing
+        # behaviour is unchanged.
         try:
             vix_raw = redis_client.get("polygon:vix:current") \
                 if redis_client else None
-            spot_vix = float(vix_raw) / 100.0 if vix_raw else 0.18
+            spot_vix = (
+                parse_polygon_index_value(vix_raw, 18.0) / 100.0
+                if vix_raw
+                else 0.18
+            )
         except Exception:
             spot_vix = 0.18
 
         try:
             vix9d_raw = redis_client.get("polygon:vix9d:current") \
                 if redis_client else None
-            vix9d = float(vix9d_raw) / 100.0 if vix9d_raw else spot_vix
+            vix9d = (
+                parse_polygon_index_value(vix9d_raw, spot_vix * 100.0)
+                / 100.0
+                if vix9d_raw
+                else spot_vix
+            )
         except Exception:
             vix9d = spot_vix
 
