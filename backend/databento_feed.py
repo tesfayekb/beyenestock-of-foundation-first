@@ -37,6 +37,7 @@ from config import REDIS_URL
 from db import write_health_status
 from logger import get_logger
 from market_calendar import is_market_open
+from polygon_index_helpers import parse_polygon_index_value
 
 logger = get_logger("databento_feed")
 
@@ -277,14 +278,21 @@ class DatabentoFeed:
         # different from 20% — i.e., on every interesting trading day.
         # Sanity clamp [0.05, 2.0] guards against a malformed
         # polygon:vix:current write or a freak VIX spike.
+        # T-ACT-062: parse via the shared backward-compatible helper
+        # so the new JSON envelope (post PR `feat/t-act-062-vix-vvix-
+        # freshness-guard`) deserialises alongside legacy raw float
+        # strings. Sanity clamp [0.05, 2.0] preserved.
         try:
             vix_raw = (
                 self.redis_client.get("polygon:vix:current")
                 if self.redis_client else None
             )
-            implied_vol = (
-                float(vix_raw) / 100.0 if vix_raw else 0.20
-            )
+            if vix_raw:
+                implied_vol = (
+                    parse_polygon_index_value(vix_raw, 20.0) / 100.0
+                )
+            else:
+                implied_vol = 0.20
             implied_vol = max(0.05, min(implied_vol, 2.0))
         except Exception:
             implied_vol = 0.20

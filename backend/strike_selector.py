@@ -14,6 +14,7 @@ from typing import Optional
 import httpx
 
 from logger import get_logger
+from polygon_index_helpers import parse_polygon_index_value
 
 logger = get_logger("strike_selector")
 
@@ -393,13 +394,17 @@ def get_strikes(
     spx_price = _get_spx_price_from_redis(redis_client)
     expiry = _get_0dte_expiry()
 
-    # Read current VIX for dynamic spread width
+    # Read current VIX for dynamic spread width.
+    # T-ACT-062: parse via the shared backward-compatible helper so
+    # the new JSON envelope (post PR `feat/t-act-062-vix-vvix-
+    # freshness-guard`) deserialises alongside legacy raw float
+    # strings still in cache during the 1-hour rollover window.
     vix_level = 18.0
     try:
         if redis_client:
             vix_raw = redis_client.get("polygon:vix:current")
             if vix_raw:
-                vix_level = float(vix_raw)
+                vix_level = parse_polygon_index_value(vix_raw, 18.0)
     except Exception:
         pass  # Use default VIX if Redis unavailable
 

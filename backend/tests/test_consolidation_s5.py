@@ -689,7 +689,19 @@ def test_war_room_includes_polygon_feed_and_morning_agents():
 
 def test_vvix_writes_use_setex_not_bare_set():
     """No bare .set("polygon:vvix:...") may remain in polygon_feed.py —
-    every VVIX write must carry a TTL via setex."""
+    every VVIX write must carry a TTL via setex.
+
+    T-ACT-062 (2026-05-04) format-tolerance: the prior assertion did a
+    literal substring match for ``.setex("polygon:vvix:current"`` which
+    only worked when the call was a single-line statement. The
+    T-ACT-062 producer rewrite wraps the call across multiple lines to
+    fit a multi-line ``json.dumps({...})`` payload — the substring
+    match no longer fires, but the contract (TTL via setex) is
+    preserved. Use a regex that tolerates whitespace/newlines between
+    the method name and the key argument.
+    """
+    import re
+
     path = os.path.join(os.path.dirname(__file__), "..", "polygon_feed.py")
     with open(path, "r", encoding="utf-8") as f:
         src = f.read()
@@ -697,7 +709,15 @@ def test_vvix_writes_use_setex_not_bare_set():
     assert '.set("polygon:vvix:' not in src, (
         "Found bare .set(\"polygon:vvix:...\") — must use setex with TTL"
     )
-    # And confirm setex IS used for vvix
-    assert '.setex("polygon:vvix:current"' in src, (
-        "polygon:vvix:current must be written with setex"
+    # And confirm setex IS used for vvix:current. Tolerates either
+    # single-line ``.setex("polygon:vvix:current"`` or multi-line
+    # ``.setex(\n    "polygon:vvix:current"`` form (T-ACT-062
+    # JSON-envelope rewrite uses the multi-line form).
+    pattern = re.compile(
+        r'\.setex\(\s*["\']polygon:vvix:current["\']',
+        re.MULTILINE,
+    )
+    assert pattern.search(src), (
+        "polygon:vvix:current must be written with setex (single-line "
+        "or multi-line form acceptable post-T-ACT-062)"
     )

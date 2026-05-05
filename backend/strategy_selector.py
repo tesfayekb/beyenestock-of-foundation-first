@@ -8,6 +8,7 @@ from typing import Optional, Tuple, Union
 
 from db import write_health_status
 from logger import get_logger
+from polygon_index_helpers import parse_polygon_index_value
 from risk_engine import compute_position_size, check_trade_frequency
 from model_retraining import get_kelly_multiplier_from_db
 from strike_selector import get_strikes
@@ -272,6 +273,10 @@ class StrategySelector:
             if ratio_raw is None:
                 # Fallback: compute from Redis (prediction_engine writes
                 # VIX9D and VIX, but doesn't always emit the ratio).
+                # T-ACT-062: parse via the backward-compatible helper
+                # so the new JSON envelope shape (post PR `feat/t-act-
+                # 062-vix-vvix-freshness-guard`) deserializes correctly
+                # alongside legacy raw float strings.
                 try:
                     v9 = (
                         self.redis_client.get("polygon:vix9d:current")
@@ -282,7 +287,9 @@ class StrategySelector:
                         if self.redis_client else None
                     )
                     if v9 is not None and v is not None:
-                        ratio = float(v9) / max(float(v), 1.0)
+                        v9_f = parse_polygon_index_value(v9, 0.0)
+                        v_f = parse_polygon_index_value(v, 0.0)
+                        ratio = v9_f / max(v_f, 1.0) if v_f > 0 else 1.0
                     else:
                         ratio = 1.0
                 except Exception:

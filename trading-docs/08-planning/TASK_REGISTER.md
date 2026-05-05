@@ -1742,7 +1742,7 @@ Tasks surfaced during the 2026-05-01 trading session validation. See HANDOFF NOT
 
 **Numbering note (2026-05-03):** T-ACT-049 was originally proposed as a separate entry for the `polygon_feed.py:174-184` silent-staleness fix, sibling to T-ACT-046 (`tradier_feed.py:282-283`). Per Cursor's recommendation 2026-05-03, both fixes are bundled into an expanded T-ACT-046 (same root pattern, single PR — Track B). T-ACT-049 is therefore subsumed and not assigned. The next available T-ACT number after the 2026-05-03 batch (T-ACT-048, T-ACT-050, T-ACT-051, T-ACT-054) is T-ACT-055.
 
-**Numbering note (2026-05-04 evening):** Numbers T-ACT-056, T-ACT-058, T-ACT-059 are RESERVED placeholders, not yet assigned to delivered work. T-ACT-056 is reserved for the exhaustive persist-site audit (gate for A.7 family re-closure on database-persistence subclass) per T-ACT-055 entry. T-ACT-058 is reserved for the Option B `.replace(" ", "")` defensive whitespace strip code-change PR per T-ACT-057 entry. T-ACT-059 is reserved for the exhaustive infrastructure-config audit (gate for A.7 family re-closure on infrastructure-config subclass) per T-ACT-057 entry. T-ACT-060 was assigned to the stale `_upsert_criterion` test references fix (Option Bravo per T-ACT-060 plan-review) executed 2026-05-04. **Next available T-ACT after the 2026-05-04 evening batch (T-ACT-061, T-ACT-062, T-ACT-063, T-ACT-064 added in this PR `docs/post-incident-indices-advanced-2026-05-04`) is T-ACT-065.**
+**Numbering note (2026-05-04 evening, amended late evening):** Numbers T-ACT-056, T-ACT-058, T-ACT-059 are RESERVED placeholders, not yet assigned to delivered work. T-ACT-056 is reserved for the exhaustive persist-site audit (gate for A.7 family re-closure on database-persistence subclass) per T-ACT-055 entry. T-ACT-058 is reserved for the Option B `.replace(" ", "")` defensive whitespace strip code-change PR per T-ACT-057 entry. T-ACT-059 is reserved for the exhaustive infrastructure-config audit (gate for A.7 family re-closure on infrastructure-config subclass) per T-ACT-057 entry. T-ACT-060 was assigned to the stale `_upsert_criterion` test references fix (Option Bravo per T-ACT-060 plan-review) executed 2026-05-04. T-ACT-061..T-ACT-064 were added in PR #100 `docs/post-incident-indices-advanced-2026-05-04` (governance closure for the 2026-05-01 → 2026-05-04 prediction outage). T-ACT-065 was added 2026-05-04 evening alongside the T-ACT-062 EXECUTE PR `feat/t-act-062-vix-vvix-freshness-guard` to formalize the 7-day post-T-ACT-062-merge evaluation (decision matrix for hard-gate-flip on VIX/VVIX/VIX9D per SD-1 Option β). **T-ACT-062 closed 2026-05-04 late evening via the EXECUTE PR (Option β shipped per SD-1; T-ACT-061 §7.1 gate waived per SD-5).** **Next available T-ACT is T-ACT-066.**
 
 ### T-ACT-045 — Post-PR-#90 empirical SPX real-time validation
 
@@ -2256,9 +2256,31 @@ Pre-T-ACT-061 (Indices Starter era): all three feeds were silently 15-min stale 
 4. Test surface: ≥6 unit tests (1 happy + 2 skip per feed × 3 feeds).
 5. After 7 days post-merge: re-run accuracy investigation SQL; no `*_stale_or_unavailable` patterns observed during RTH on any index feed.
 
-**Status:** [ ] OPEN — queued, gated on T-ACT-061 verification.
+**Status:** [x] DONE — shipped 2026-05-04 evening via PR `feat/t-act-062-vix-vvix-freshness-guard` (commit hash recorded post-merge).
 
-**Cross-references:** HANDOFF A.7 (silent-failure-class family convention pointer; T-ACT-062 will be the 8th member if it surfaces a regression, or the closing exhaustive-coverage milestone for the derived-feature surface if not). HANDOFF A.8 (this T-ACT was identified as the natural follow-up in `HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md` §8.3). T-ACT-046 (sibling — same family, established the SPX pattern; T-ACT-062 mirrors it to VVIX/VIX/VIX9D). T-ACT-061 (gating dependency — must verify SPX upgrade first to avoid compounding capability changes). T-ACT-064 (downstream — VVIX freshness contributes to the retraining decision tracking).
+**Design decisions resolved at DIAGNOSE-time (2026-05-04 evening):**
+
+- **SD-1 (BLOCKING — gating semantic, operator decision):** Hard-gating VIX/VVIX/VIX9D would have been a behavioural regression — all three feeds today have graceful default semantics at every consumer site (e.g. ``float(_read_redis(...) or "18.0")``). Hard-gate would have starved cycles where they previously proceeded with a slightly stale value. Operator selected **Option β `beta_hard_spx_only_soft_others`**: hard-gate SPX only (preserves existing T-ACT-046 contract); soft-warn VIX/VVIX/VIX9D when stale. WARN log keys (``vix_price_stale`` / ``vvix_price_stale`` / ``vix9d_price_stale``) are the telemetry consumed by **T-ACT-065** for a 7-day evaluation window (due 2026-05-12) deciding whether to flip to hard-gate.
+
+- **SD-2 (Empirical risk — operator probe):** Real-time delivery for VIX/VVIX/VIX9D on Indices Advanced was unverified at DIAGNOSE-time. Operator selected **probe before merge**: ran §7.1-style curl probes for I:VIX, I:VVIX, I:VIX9D and confirmed all three are real-time post-2026-05-04 evening upgrade — `last_updated` ages of ~5-7 minutes (post-close), explicit `timeframe: "REAL-TIME"` field present at every result level, response shape matches SPX. Decision matrix output: **Pattern A (all feeds real-time)** — proceed with Option β as planned. No follow-up tier-mismatch investigation T-ACT needed.
+
+- **SD-3 (informational — constants location):** ``backend/constants.py`` does not exist in the repo. Default selected: place the new ``POLYGON_FRESHNESS_THRESHOLD_SECONDS = 330`` constant at module level inside ``backend/prediction_engine.py`` adjacent to the existing ``_safe_float`` and ``_is_market_hours`` helpers — same convention as the surrounding code.
+
+- **SD-4 (informational — scope refinement):** initial estimate (60-90 min / 150-250 lines, 3-5 files) was revised at DIAGNOSE-time after surfacing 13 production consumer sites + 13 test files. Actual delivered scope: ~370 lines net additions across **13 files** (1 new module ``backend/polygon_index_helpers.py`` (89 lines); 8 production files modified; 1 new test file ``backend/tests/test_t_act_062_freshness_guard.py`` (19 tests, ~330 lines); 1 brittle existing test ``test_consolidation_s5.py::test_vvix_writes_use_setex_not_bare_set`` updated to a regex-tolerant assertion to accept the multi-line setex form post-rewrite; 2 docs files: this TASK_REGISTER amendment + footer).
+
+- **SD-5 (self-amendment of T-ACT-062 entry):** the T-ACT-062 entry shipped in PR #100 explicitly gated this work on the T-ACT-061 §7.1 probe + first post-upgrade prediction cycle. The 2026-05-04 evening operator instruction explicitly waived that gate ("Independent of: the SPX subscription verification probe") on the basis that the SPX probe results were already in hand and the §1A tier comparison matrix in SUBSCRIPTION_REGISTRY.md confirmed the upgrade had landed. Recorded here so the audit trail is complete: **gate waived per operator instruction 2026-05-04 evening; new semantic = "ship after empirical VIX/VVIX/VIX9D probe confirms Pattern A"** (which it did, per SD-2).
+
+- **Optional enhancement (operator's belt-and-suspenders note):** included `polygon_tier_mismatch` once-per-process detector in ``polygon_feed._extract_index_upstream_ts``. Fires a single WARN per feed per process if `result.timeframe` is present but != ``"REAL-TIME"`` — catches a future accidental subscription downgrade BEFORE the freshness guard does (the guard only fires once age accumulates past 330s; tier_mismatch fires on the FIRST stale response). Same A.8 L8.1 discipline (verify subscription claims as present-day factual questions) applied to runtime detection.
+
+**Acceptance criteria — verification status:**
+
+1. ✅ All four index feeds (SPX, VIX, VVIX, VIX9D) write JSON envelopes with consistent `fetched_at`/`fetched_at_source`/`source` fields. SPX path unchanged from PR #92; VIX/VVIX/VIX9D producer rewrite mirrors it via the new shared `_extract_index_upstream_ts` helper at `polygon_feed.py:_extract_index_upstream_ts`.
+2. ✅ Consumer-side freshness guards in place. SPX = hard-gate (existing T-ACT-046 behaviour preserved via the new `_check_index_freshness` helper). VIX/VVIX/VIX9D = soft-warn (Option β). All consumer sites that read these keys use the shared `parse_polygon_index_value` helper (`polygon_index_helpers.py`) which is backward-compatible with legacy raw float values still in cache during the 1-hour rollover window.
+3. ✅ `POLYGON_FRESHNESS_THRESHOLD_SECONDS = 330` extracted to module-level in `prediction_engine.py`; the SPX guard at `prediction_engine.run_cycle` and the new `_check_index_freshness` helper both reference it. No inline literal `330` remains for any of the four index-feed freshness checks.
+4. ✅ Test surface: 19 new unit tests in `backend/tests/test_t_act_062_freshness_guard.py` covering parser backward compatibility (7 tests), envelope shape (2 tests), freshness threshold semantics (5 tests including pinned WARN log key names for T-ACT-065 telemetry), and threshold arithmetic (3 tests). Plus the regex-tolerance fix at `test_consolidation_s5.py::test_vvix_writes_use_setex_not_bare_set`.
+5. ⏳ 7-day post-merge stale-event audit: tracked under **T-ACT-065** with due date 2026-05-12. Decision matrix already drafted in T-ACT-065's entry below.
+
+**Cross-references:** HANDOFF A.7 (silent-failure-class family convention pointer — T-ACT-062 closes the exhaustive-coverage milestone for the derived-feature surface). HANDOFF A.8 (this T-ACT was identified as the natural follow-up in `HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md` §8.3). T-ACT-046 (sibling — same family, established the SPX pattern; T-ACT-062 mirrors it to VVIX/VIX/VIX9D). T-ACT-061 (predecessor — gate originally specified, waived per SD-5 operator instruction). T-ACT-064 (downstream — VVIX freshness now contributes to the retraining decision tracking; "confirmed-fresh data" is now well-defined at all four index feeds). T-ACT-065 (immediate successor — 7-day post-merge soft-warn evaluation window deciding whether to flip to hard-gate).
 
 ---
 
@@ -2333,6 +2355,36 @@ Pre-T-ACT-061 (Indices Starter era): all three feeds were silently 15-min stale 
 
 ---
 
+### T-ACT-065 — Evaluate flip to hard-gate on VIX / VVIX / VIX9D (7-day post-T-ACT-062 evaluation)
+
+**Severity:** INFORMATIONAL (decision-only; no code change required at trigger; closes regardless of which path chosen)
+**Owner:** Operator (pulls log + SQL evidence); Cursor (decision-matrix analysis + decision memo)
+**Estimated time:** ~30 min at trigger
+**Status:** [ ] SCHEDULED
+**Due date:** 2026-05-12 (7 days post-T-ACT-062 merge)
+**Predecessor:** T-ACT-062 (VVIX/VIX/VIX9D freshness guard with Option β soft-warn — see SD-1 below)
+**Trigger:** scheduled date OR T-ACT-062 merged + 7 calendar days elapsed (whichever later)
+
+**Why this T-ACT exists (governance discipline):** T-ACT-062 ships SD-1 Option β (hard-gate SPX only; soft-warn VIX/VVIX/VIX9D when stale) per the operator's design choice 2026-05-04 evening. The 7-day evaluation window is a first-class tracked item with a due date and a decision matrix — NOT buried in T-ACT-062's success criteria — so that "everything looks fine, flip it" cannot ship without checking the actual data. Cursor or future-Claude can execute T-ACT-065 mechanically when the date arrives.
+
+**Action:**
+
+1. Pull `vix_price_stale`, `vvix_price_stale`, `vix9d_price_stale` event counts from Railway logs over the 7-day window since T-ACT-062 merge.
+2. SQL: count cycles where any VIX-family stale event fired vs. total RTH cycles in the window.
+3. Decision matrix:
+   - **Zero stale events across all three feeds:** flip to hard-gate (Option α). Open follow-up PR.
+   - **Rare-and-transient (< 1% of cycles, no clusters > 3 consecutive):** flip to hard-gate. Open follow-up PR.
+   - **Common (> 1% of cycles) OR clustered (> 3 consecutive in any window):** investigate root cause before flipping. Do NOT flip yet. Open diagnostic task.
+   - **VIX9D-only stale events:** consider Option γ (hard-gate VIX + VVIX, soft-warn VIX9D) as intermediate.
+
+**Success criterion:** decision documented in TASK_REGISTER §14 with evidence (event counts + cycle counts + decision rationale). T-ACT-065 closes regardless of which path chosen.
+
+**Reference:** SD-1 from T-ACT-062 PR review, 2026-05-04 evening (operator selected Option β `beta_hard_spx_only_soft_others`; this T-ACT formalizes the 7-day evaluation that informs whether to flip).
+
+**Cross-references:** T-ACT-062 (predecessor — establishes the soft-warn telemetry that this T-ACT consumes). T-ACT-061 §7.1 probe (independent verification — confirms SPX real-time entitlement; T-ACT-065 measures the analogous post-deploy reality for VIX/VVIX/VIX9D via produced log signal rather than a one-shot probe). HANDOFF NOTE Appendix A.8 L8.1 ("subscription/entitlement claims as present-day factual questions" — T-ACT-065 generalizes the discipline from "verify tier description" to "verify production log evidence over a window before flipping a behavioral guard").
+
+---
+
 ### Section 14 cross-references
 
 - HANDOFF NOTE Appendix A.6 — full post-mortem context for the 2026-05-01 phantom-alpha incident (amended 2026-05-03 via Track B PR with T-ACT-045 PENDING-RE-RUN status + validation-artifact protocol)
@@ -2341,11 +2393,12 @@ Pre-T-ACT-061 (Indices Starter era): all three feeds were silently 15-min stale 
 - HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md (`trading-docs/06-tracking/`) — full diagnostic record for the 2026-05-01 → 2026-05-04 prediction outage; §7.1 manual API probe defines the verification gate for T-ACT-061 closure
 - PR #90 risks R-1 (T-ACT-046) and R-2 (T-ACT-047) — original risk identification
 - PR #92 (T-ACT-046, 2026-05-02) — outage trigger via `polygon:spx:current.fetched_at` semantics flip (correct fix that exposed underlying tier mismatch)
+- PR `feat/t-act-062-vix-vvix-freshness-guard` (T-ACT-062, 2026-05-04 late evening) — VVIX/VIX/VIX9D freshness guard + 330s constant extraction; closes the derived-feature freshness coverage gap identified in HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md §8.3
 - HANDOFF NOTE Appendix A.5 mitigation #3 — original lesson surfacing the try/except discipline issue
 - SUBSCRIPTION_REGISTRY.md — canonical reference for subscription-vs-runtime audit (mitigation #2 in A.6); §1A tier comparison matrix for Polygon Indices added 2026-05-04 evening
 - T-ACT-054 cv_stress design memo (Cursor 2026-05-03) — Choice A NULL-on-degenerate-input selected; remediation DONE 2026-05-02
 
-*Section 14 opened: 2026-05-01 | Owner: tesfayekb. Amended 2026-05-03 via Track B PR (T-ACT-045 status update; T-ACT-046 scope expansion; T-ACT-048/050/051/054 added; T-ACT-049 subsumed per numbering note above). Amended 2026-05-04 evening via PR `docs/post-incident-indices-advanced-2026-05-04` (T-ACT-061 closed-resolved subscription upgrade; T-ACT-062 queued VVIX/VIX/VIX9D freshness; T-ACT-063 queued email egress; T-ACT-064 informational retraining decision tracking; HANDOFF NOTE Appendix A.8 added; HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md relocated from repo root).*
+*Section 14 opened: 2026-05-01 | Owner: tesfayekb. Amended 2026-05-03 via Track B PR (T-ACT-045 status update; T-ACT-046 scope expansion; T-ACT-048/050/051/054 added; T-ACT-049 subsumed per numbering note above). Amended 2026-05-04 evening via PR `docs/post-incident-indices-advanced-2026-05-04` (T-ACT-061 closed-resolved subscription upgrade; T-ACT-062 queued VVIX/VIX/VIX9D freshness; T-ACT-063 queued email egress; T-ACT-064 informational retraining decision tracking; HANDOFF NOTE Appendix A.8 added; HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md relocated from repo root). Amended 2026-05-04 late evening via PR `feat/t-act-062-vix-vvix-freshness-guard` (T-ACT-062 EXECUTE shipped — VVIX/VIX/VIX9D freshness guard via Option β soft-warn per SD-1, 330s constant extracted to `POLYGON_FRESHNESS_THRESHOLD_SECONDS`, new `polygon_index_helpers.py` shared parser module, 19 new unit tests, T-ACT-061 §7.1 gate waived per SD-5 operator instruction; T-ACT-065 evaluation window opened with due date 2026-05-12).*
 
 ---
 

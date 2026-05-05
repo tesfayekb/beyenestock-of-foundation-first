@@ -16,6 +16,7 @@ from db import get_client, write_health_status
 from gex_engine import GexEngine
 from logger import get_logger
 from polygon_feed import PolygonFeed
+from polygon_index_helpers import parse_polygon_index_value
 from prediction_engine import PredictionEngine
 from session_manager import (
     get_or_create_session, open_today_session, close_today_session,
@@ -2057,7 +2058,17 @@ async def get_learning_stats(
         from datetime import date as _date
         today = _date.today().isoformat()
 
-        vix_current = _safe_float_key("polygon:vix:current")
+        # T-ACT-062: polygon:vix:current is a JSON envelope post-PR
+        # `feat/t-act-062-vix-vvix-freshness-guard`. The generic
+        # `_safe_float_key` helper above cannot parse JSON, so read
+        # raw and route through the shared backward-compatible parser.
+        # Returns None on missing key (preserving the existing
+        # downstream null-check semantics for `iv_rv_ratio` math).
+        _vix_raw = _safe_get("polygon:vix:current")
+        vix_current = (
+            parse_polygon_index_value(_vix_raw, 0.0)
+            if _vix_raw is not None else None
+        )
         realized_vol_20d = _safe_float_key("polygon:spx:realized_vol_20d")
         if vix_current is not None and realized_vol_20d:
             iv_rv_ratio = round(vix_current / realized_vol_20d, 3)

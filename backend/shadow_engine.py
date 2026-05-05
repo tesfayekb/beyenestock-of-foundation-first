@@ -27,6 +27,7 @@ from typing import Optional
 
 from db import get_client
 from logger import get_logger
+from polygon_index_helpers import parse_polygon_index_value
 
 logger = get_logger("shadow_engine")
 
@@ -110,7 +111,13 @@ def _compute_rule_based_prediction(redis_client) -> Optional[dict]:
     try:
         # Read market data from Redis (same keys as prediction_engine).
         # Strategy/agent keys are intentionally absent from this list.
-        raw_vix       = _read(redis_client, "polygon:vix:current", "18.0")
+        # T-ACT-062: polygon:vix:current is now a JSON envelope post-
+        # PR `feat/t-act-062-vix-vvix-freshness-guard`. Read with the
+        # default sentinel ``None`` (instead of "18.0") and parse via
+        # the shared backward-compatible helper below; legacy raw-
+        # float values still in cache during the rollover window
+        # deserialize correctly via the same path.
+        raw_vix       = _read(redis_client, "polygon:vix:current", None)
         raw_vvix_z    = _read(redis_client, "polygon:vvix:z_score", "0.0")
         raw_gex_net   = _read(redis_client, "gex:net", "0")
         raw_gex_conf  = _read(redis_client, "gex:confidence", "0.5")
@@ -123,7 +130,7 @@ def _compute_rule_based_prediction(redis_client) -> Optional[dict]:
         raw_flip_zone = _read(redis_client, "gex:flip_zone", "0")
         raw_wall      = _read(redis_client, "gex:nearest_wall", "0")
 
-        vix          = float(raw_vix)
+        vix          = parse_polygon_index_value(raw_vix, 18.0)
         vvix_z       = float(raw_vvix_z)
         gex_net      = float(raw_gex_net)
         gex_conf     = float(raw_gex_conf)

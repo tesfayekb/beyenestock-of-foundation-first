@@ -21,9 +21,25 @@ from postgrest.exceptions import APIError as PostgrestAPIError
 from config import REDIS_URL
 from db import get_client, write_health_status, write_audit_log
 from logger import get_logger
+from polygon_index_helpers import parse_polygon_index_value
 from session_manager import get_today_session
 
 logger = get_logger("prediction_engine")
+
+
+# T-ACT-062: shared freshness threshold for all four Polygon /v3/snapshot
+# index feeds (SPX, VIX, VVIX, VIX9D). 330s = 1 polygon_feed poll cadence
+# (300s) + 30s slack. polygon_feed writes each feed every 5 min; if the
+# upstream `fetched_at` is older than this, the data is either stale at
+# the upstream side, the poll-loop has fallen behind, or Redis is
+# returning a value from a process that was killed mid-cycle.
+#
+# Pre-T-ACT-062 the literal 330 was duplicated at two call sites for
+# the SPX guard (L1366 / L1373 prior to extraction). Extracting it to
+# a module-level constant prevents drift between the comparison and
+# the log message — see HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md
+# §8.3 for the future-bug-class rationale.
+POLYGON_FRESHNESS_THRESHOLD_SECONDS = 330
 
 
 def _safe_float(value, default: float) -> float:
@@ -436,6 +452,84 @@ class PredictionEngine:
             return raw, True
         except Exception:
             return raw, True
+
+    def _check_index_freshness(
+        self, redis_key: str, label: str
+    ) -> tuple[bool, Optional[float]]:
+        """T-ACT-062: shared freshness check for Polygon /v3/snapshot
+        index feeds (SPX, VIX, VVIX, VIX9D).
+
+        Reads the JSON envelope at ``redis_key`` and returns
+        ``(is_fresh, age_seconds)``. The caller decides what to do
+        with a stale or missing result:
+
+          * SPX (hard-gate) — caller skips the prediction cycle.
+          * VIX / VVIX / VIX9D (soft-warn — Option β per SD-1
+            2026-05-04) — caller proceeds; the WARN log alone is the
+            telemetry consumed by T-ACT-065 to decide whether to flip
+            to hard-gate after a 7-day evaluation window.
+
+        Structured WARN events emitted (one of):
+          ``{label}_price_upstream_timestamp_missing`` — JSON envelope
+              present but ``fetched_at`` is None (upstream Polygon
+              response lacked a quote-time field; per HANDOFF A.7
+              silent-failure-class family contract, surfaces the
+              missing-upstream-timestamp case explicitly rather than
+              relying on a generic catch-all).
+          ``{label}_price_stale`` — ``age_seconds`` exceeded
+              :data:`POLYGON_FRESHNESS_THRESHOLD_SECONDS`.
+          ``{label}_freshness_check_failed`` — exception during
+              parse / arithmetic; returns ``(False, None)``.
+
+        Backward compatibility: if the Redis value is a bare float
+        (legacy pre-T-ACT-062 producer format), treat as fresh-with-
+        unknown-age. This avoids spurious WARN noise during the
+        rollover window when the producer is still writing legacy
+        values to a key the consumer is now reading via this helper.
+        """
+        import json as _json
+
+        try:
+            raw = self._read_redis(redis_key, None)
+            if not raw:
+                return False, None
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8", errors="ignore")
+            s = str(raw).strip()
+            if not s.startswith("{"):
+                # Legacy raw-float producer value — no fetched_at to
+                # check. Cannot WARN here without spamming during
+                # rollover; cannot return False without falsely
+                # skipping cycles. Treat as fresh-with-unknown-age.
+                return True, None
+            meta = _json.loads(s)
+            fetched_at_raw = meta.get("fetched_at")
+            fetched_at_source = meta.get("fetched_at_source", "unknown")
+            if fetched_at_raw is None:
+                logger.warning(
+                    f"{label}_price_upstream_timestamp_missing",
+                    source=fetched_at_source,
+                )
+                return False, None
+            fetched_at = datetime.fromisoformat(fetched_at_raw)
+            age_seconds = (
+                datetime.now(timezone.utc) - fetched_at
+            ).total_seconds()
+            if age_seconds <= POLYGON_FRESHNESS_THRESHOLD_SECONDS:
+                return True, age_seconds
+            logger.warning(
+                f"{label}_price_stale",
+                age_seconds=round(age_seconds, 1),
+                source="polygon",
+                threshold_seconds=POLYGON_FRESHNESS_THRESHOLD_SECONDS,
+            )
+            return False, age_seconds
+        except Exception as fresh_err:
+            logger.warning(
+                f"{label}_freshness_check_failed",
+                error=str(fresh_err),
+            )
+            return False, None
 
     def _get_spx_price(self) -> float:
         """Read current SPX price from Redis.
@@ -963,14 +1057,23 @@ class PredictionEngine:
 
                 now_et = datetime.now(zoneinfo.ZoneInfo("America/New_York"))
 
-                # Build feature vector matching training features
-                vix_raw  = self._read_redis("polygon:vix:current", "18.0")
-                vvix_raw = self._read_redis("polygon:vvix:current", "120.0")
+                # Build feature vector matching training features.
+                # T-ACT-062 (2026-05-04): polygon:vix:current and
+                # polygon:vvix:current are now JSON envelopes (post-
+                # producer rollover). Read via the backward-compatible
+                # parser so legacy raw-float values (still in cache for
+                # up to 1 hour after deploy per the 3600s setex TTL)
+                # continue to parse cleanly. The float() defaults below
+                # become unreachable for the JSON-envelope case
+                # (parser returns the default itself), but are kept as
+                # belt-and-suspenders.
+                vix_raw  = self._read_redis("polygon:vix:current", None)
+                vvix_raw = self._read_redis("polygon:vvix:current", None)
                 vvix_z   = float(self._read_redis("polygon:vvix:z_score", "0.0"))
                 rv_20d   = float(self._read_redis("polygon:spx:realized_vol_20d", "15.0") or 15.0)
 
-                vix_val  = float(vix_raw or 18.0)
-                vvix_val = float(vvix_raw or 120.0)
+                vix_val  = parse_polygon_index_value(vix_raw, 18.0)
+                vvix_val = parse_polygon_index_value(vvix_raw, 120.0)
                 iv_rv    = vix_val / rv_20d if rv_20d > 0 else 1.0
 
                 minutes_from_open = (
@@ -999,7 +1102,7 @@ class PredictionEngine:
                     "vvix_z_score":       vvix_z,
                     "rv_20d":             rv_20d,
                     "iv_rv_ratio":        iv_rv,
-                    "vix_term_ratio":     float(self._read_redis("polygon:vix9d:current", "18.0") or 18.0) / max(vix_val, 1.0),
+                    "vix_term_ratio":     parse_polygon_index_value(self._read_redis("polygon:vix9d:current", None), 18.0) / max(vix_val, 1.0),
                     "hour_sin":           math.sin(2 * math.pi * minutes_from_open / 390),
                     "hour_cos":           math.cos(2 * math.pi * minutes_from_open / 390),
                     "dow_sin":            math.sin(2 * math.pi * now_et.weekday() / 5),
@@ -1169,12 +1272,19 @@ class PredictionEngine:
         #   RV builder warms up. Skipping the filter when rv < 5 prevents
         #   false positives against obviously-wrong data.
         try:
+            # T-ACT-062: parse polygon:vix:current via the backward-
+            # compatible helper so legacy raw-float values AND the new
+            # JSON envelope shape both deserialize correctly.
             vix_raw = self._read_redis("polygon:vix:current", None)
             rv_raw = self._read_redis("polygon:spx:realized_vol_20d", None)
             if vix_raw is not None and rv_raw is not None:
-                vix_val = float(vix_raw)
+                vix_val = parse_polygon_index_value(vix_raw, 0.0)
                 rv_val = float(rv_raw)
-                if rv_val >= 5.0 and vix_val < rv_val * 1.10:
+                if (
+                    vix_val > 0
+                    and rv_val >= 5.0
+                    and vix_val < rv_val * 1.10
+                ):
                     return True, f"iv_rv_cheap_premium_vix{vix_val:.1f}_rv{rv_val:.1f}"
         except (ValueError, TypeError):
             pass  # malformed Redis value — skip filter, don't block trading
@@ -1218,9 +1328,14 @@ class PredictionEngine:
         vix_term_ratio: Optional[float] = None
         if vix_raw is not None and vix9d_raw is not None:
             try:
-                v_cur = float(vix_raw)
-                v_9d = float(vix9d_raw)
-                if v_cur > 0:
+                # T-ACT-062: backward-compatible parse handles both
+                # legacy raw float strings and the new JSON envelope.
+                # Sentinel 0.0 maps to "not enough data" so the
+                # vix_term_ratio remains NULL — preserves the fail-
+                # open convention documented in the docstring above.
+                v_cur = parse_polygon_index_value(vix_raw, 0.0)
+                v_9d = parse_polygon_index_value(vix9d_raw, 0.0)
+                if v_cur > 0 and v_9d > 0:
                     vix_term_ratio = round(v_9d / v_cur, 4)
             except (ValueError, TypeError):
                 vix_term_ratio = None
@@ -1323,60 +1438,29 @@ class PredictionEngine:
             # 2026-05-01 SPX-real-time-feed freshness guard: refuse to
             # make trade decisions on stale SPX data. polygon_feed.py
             # writes polygon:spx:current every 5 min (poll cadence); the
-            # threshold of 330s = 1 poll period + 30s slack. If the key
-            # is missing or older than 330s, the system has fallen back
-            # to Tradier sandbox (15-min delayed per 2026-05-01 empirical
-            # verification) and the better default is to skip the cycle
-            # rather than enter a position on stale data. MTM (separate
-            # 1-min cadence) does NOT apply this guard — open positions
-            # still need repricing even when the feed degrades; the
-            # _get_spx_price() Tradier fallback handles that case.
-            import json as _json
-            spx_fresh = False
-            try:
-                spx_raw = self._read_redis("polygon:spx:current", None)
-                if spx_raw:
-                    spx_meta = _json.loads(spx_raw)
-                    # 2026-05-03 silent-staleness fix (T-ACT-046,
-                    # observability amendment per F6): explicitly handle
-                    # the new contract that polygon_feed.py may write
-                    # `fetched_at: null` when the upstream Polygon
-                    # response lacked a quote-time field. The prior
-                    # behaviour (relying on the outer try/except to
-                    # convert None into a generic spx_freshness_check_
-                    # failed log) was correct-but-noisy. Surfacing the
-                    # missing-upstream-timestamp case with a distinct
-                    # log makes the silent-failure-class family
-                    # convention (HANDOFF A.7) explicit at the consumer.
-                    fetched_at_raw = spx_meta.get("fetched_at")
-                    fetched_at_source = spx_meta.get(
-                        "fetched_at_source", "unknown"
-                    )
-                    if fetched_at_raw is None:
-                        logger.warning(
-                            "spx_price_upstream_timestamp_missing",
-                            source=fetched_at_source,
-                        )
-                        # spx_fresh remains False — conservative skip.
-                    else:
-                        fetched_at = datetime.fromisoformat(fetched_at_raw)
-                        age_seconds = (
-                            datetime.now(timezone.utc) - fetched_at
-                        ).total_seconds()
-                        if age_seconds <= 330:
-                            spx_fresh = True
-                        else:
-                            logger.warning(
-                                "spx_price_stale",
-                                age_seconds=round(age_seconds, 1),
-                                source="polygon",
-                                threshold_seconds=330,
-                            )
-            except Exception as fresh_err:
-                logger.warning(
-                    "spx_freshness_check_failed",
-                    error=str(fresh_err),
-                )
+            # threshold of POLYGON_FRESHNESS_THRESHOLD_SECONDS (= 330s,
+            # 1 poll period + 30s slack) is shared with the VIX / VVIX /
+            # VIX9D guards added in T-ACT-062 below. If the SPX key is
+            # missing or older than the threshold, the system has
+            # fallen back to Tradier sandbox (15-min delayed per
+            # 2026-05-01 empirical verification) and the better default
+            # is to skip the cycle rather than enter a position on
+            # stale data.
+            #
+            # MTM (separate 1-min cadence) does NOT apply this guard —
+            # open positions still need repricing even when the feed
+            # degrades; the _get_spx_price() Tradier fallback handles
+            # that case.
+            #
+            # T-ACT-046 contract preserved: ``fetched_at: null`` from
+            # polygon_feed when the upstream Polygon response lacked a
+            # quote-time field is surfaced as a distinct
+            # ``spx_price_upstream_timestamp_missing`` WARN by the
+            # shared helper, instead of folded into a generic
+            # ``spx_freshness_check_failed`` catch-all.
+            spx_fresh, _spx_age_unused = self._check_index_freshness(
+                "polygon:spx:current", "spx"
+            )
 
             if not spx_fresh:
                 logger.info(
@@ -1393,8 +1477,39 @@ class PredictionEngine:
                     "spx_price": self._get_spx_price(),
                 }
 
+            # T-ACT-062 (2026-05-04 — Option β SD-1): SOFT-WARN on
+            # VIX / VVIX / VIX9D staleness. Unlike the SPX hard-gate
+            # above, the cycle proceeds even when these are stale —
+            # all three feeds today have graceful default semantics at
+            # every consumer site (e.g. ``float(_read_redis(...) or
+            # "18.0")``), so hard-gating would be a behavioral
+            # regression. The WARN log is the telemetry consumed by
+            # T-ACT-065 over a 7-day window to decide whether to flip
+            # to hard-gate; if `*_price_stale` events are rare-and-
+            # transient on Indices Advanced (the operator-confirmed
+            # 2026-05-04 evening probe established Pattern A: all
+            # three feeds real-time), the flip is safe; if common or
+            # clustered, the soft-warn keeps trading on slightly
+            # stale data rather than starving the cycle entirely.
+            #
+            # Each helper call returns a (fresh, age) tuple that we
+            # intentionally discard here — the helper itself emits the
+            # structured WARN. Soft-warn cadence ≤ 1 per cycle per feed.
+            self._check_index_freshness("polygon:vix:current", "vix")
+            self._check_index_freshness(
+                "polygon:vvix:current", "vvix"
+            )
+            self._check_index_freshness(
+                "polygon:vix9d:current", "vix9d"
+            )
+
             try:
-                vvix = float(self._read_redis("polygon:vvix:current", "0.0"))
+                # T-ACT-062: backward-compatible parse handles both
+                # legacy raw float strings and the new JSON envelope.
+                vvix = parse_polygon_index_value(
+                    self._read_redis("polygon:vvix:current", None),
+                    0.0,
+                )
                 vvix_z = float(vvix_z_raw) if vvix_z_raw is not None else 0.0
             except (ValueError, TypeError):
                 vvix, vvix_z = 0.0, 0.0
@@ -1458,7 +1573,16 @@ class PredictionEngine:
             # Section 13 Batch 2 renamed it from `_safe_float` to stop
             # shadowing the module-level `_safe_float(value, default)`.
             spx_price = self._get_spx_price()
-            vix_live = _read_float_key("polygon:vix:current", 18.0)
+            # T-ACT-062: polygon:vix:current is a JSON envelope post-
+            # rollover. The local _read_float_key helper above only
+            # understands raw float strings; route through the
+            # backward-compatible parser instead so persisted
+            # prediction rows record the live VIX correctly under both
+            # the legacy and new producer formats.
+            vix_live = parse_polygon_index_value(
+                self._read_redis("polygon:vix:current", None),
+                18.0,
+            )
             phase_a_features = self._compute_phase_a_features(
                 spx_price=spx_price,
                 gex_flip_zone=gex_flip_zone,
