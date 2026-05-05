@@ -2284,14 +2284,56 @@ Pre-T-ACT-061 (Indices Starter era): all three feeds were silently 15-min stale 
 
 **Recommendation pending DIAGNOSE (anticipated):** switch from SMTP transport to webhook-based or HTTP-API-based alerting. SMTP from cloud containers is structurally fragile; an HTTP-based path eliminates the egress class of failure entirely. Slack webhook is likely the lowest-friction option (operator already uses Slack for personal/team comms; one-time webhook URL setup; <50 lines of code change in `backend/alerting.py`).
 
-**Acceptance criteria (TBD post-DIAGNOSE):**
-1. Watchdog firing during a smoke-test outage window successfully reaches the operator within 60 seconds.
-2. Failure mode for the new transport is observable (e.g., HTTP 4xx/5xx response logged at WARN, not silently swallowed) — same A.7 discipline applied to alerting transport.
-3. No regression in alert latency vs. the post-T-ACT-057 SMTP baseline (smoke test 2026-05-02 21:52 ET arrived in operator's inbox within ~30 sec).
+**Acceptance criteria (post-DIAGNOSE, finalized 2026-05-04 evening):**
+1. Watchdog firing during a smoke-test outage window successfully reaches the operator within 60 seconds. [▶︎ Operator-verifiable post-merge via `python -m backend.scripts.test_alert "smoke from MarketMuse"` with `ALERT_SLACK_WEBHOOK_URL` set on Railway.]
+2. Failure mode for the new transport is observable — webhook failures emit structured `alert_webhook_failed` / `alert_webhook_non_2xx` ERROR logs with `error_class` and `status` fields (same A.7 discipline applied to alerting transport). [✓ unit-tested: `test_webhook_failure_does_not_raise_and_smtp_still_fires`, `test_webhook_non_2xx_logged_but_does_not_raise`.]
+3. No regression in alert latency vs. the post-T-ACT-057 SMTP baseline. [▶︎ Operator-verifiable post-merge — Slack webhooks typically deliver in <5 sec end-to-end vs. ~30 sec SMTP baseline; expectation is improvement, not regression. Final figure recorded by operator after first end-to-end smoke test from Railway.]
 
-**Status:** [ ] OPEN — queued, lower urgency than T-ACT-062. Operator can prioritize among T-ACT-062 vs T-ACT-063 based on which provides higher governance value first.
+**Investigation findings (DIAGNOSE-FIRST, 2026-05-04 evening — pre-EXECUTE):**
 
-**Cross-references:** T-ACT-057 (ALERT_GMAIL_APP_PASSWORD whitespace silent-rejection; T-ACT-063 is the SECOND distinct alerting blackout root-cause discovered after T-ACT-057's whitespace fix; reinforces the discipline-meta-lesson "infrastructure-config silent-failure surfaces require 3-question exhaustive verification: SET / CORRECT FORMAT / END-TO-END VALIDATED" — T-ACT-063 demonstrates that even with all three questions answered correctly, a fourth-class issue (transport-layer egress reliability) can still produce detection-without-notification). HANDOFF A.7 (silent-failure-class family — T-ACT-063 may surface a 4th subclass: alerting-transport reliability surface). HANDOFF A.8 (this T-ACT was identified during the 2026-05-04 outage diagnosis when operator noted no email arrived during the 76-hour silent window despite watchdog firing correctly).
+| Question | Finding | Source |
+|---|---|---|
+| Where is the alerting code? | `backend/alerting.py` (218 lines, single file), 8 call sites across `main.py`×3, `position_monitor.py`×2, `risk_engine.py`×2, `prediction_engine.py`×1. | Direct read of `backend/alerting.py` + grep at `code/t-act-063-alerting-webhook` HEAD off `origin/main` 2026-05-04. |
+| What transport library? | Python stdlib `smtplib.SMTP_SSL` to `smtp.gmail.com:465` (port **465** SMTPS — NOT 587 as the prompt-draft inferred; correction logged but does not change the diagnosis). | `backend/alerting.py:317` |
+| Failure path | `_send_email` catches all `Exception` at L189-195 → emits `alert_email_failed` log with `error=str(exc)`. ENETUNREACH lands here. | `backend/alerting.py:338-344` |
+| Pre-existing webhook integration | None — no Slack/Telegram/Resend/SendGrid/Mailgun hooks anywhere in `backend/`. | `grep -i 'slack\|webhook\|telegram\|...'` returns only false-positive comment hit in `prediction_engine.py`. |
+| New dependencies needed? | None. `httpx==0.27.2` already in `requirements.txt`; stdlib `urllib.request` is sufficient and was chosen (no transitive surface). | `backend/requirements.txt:7` |
+
+**Egress hypothesis verification status:**
+- Cannot run `nc -zv smtp.gmail.com 465` from the AI sandbox into Railway shell.
+- Symptom (`[Errno 101] Network is unreachable` = Linux `ENETUNREACH` from kernel) is the unambiguous signature of egress port-filtering, well-documented as Railway's default behaviour for SMTP outbound.
+- **Verification deferred to operator** — but shipping the webhook replacement is safe regardless because the change is additive: the existing SMTP path is preserved unchanged, and the new webhook fires INDEPENDENTLY. If the egress hypothesis turns out wrong (unlikely), webhook still works as primary; if confirmed, webhook is the entire fix.
+
+**Design decisions resolved (DIAGNOSE-FIRST, 2026-05-04 evening):**
+
+- **DD-1 (scope reframing):** initial draft expected a "full replacement" of the SMTP transport. Investigation showed the existing alerting code is well-structured (`send_alert` orchestrator + `_send_email` transport + `_write_alert_to_db` side-channel; uniform 3-arg API across 8 call sites; clean exception handling; tests already mock at the right boundary). The minimum viable fix is therefore **additive dual-transport**: keep SMTP path UNCHANGED, add a new `_send_slack_webhook` transport, add a `_send_via_transports` orchestrator that fans out to both. **All 8 call sites unchanged.** Resolved: ship additive (≈90 prod lines + ≈170 test lines), not a rewrite.
+- **DD-2 (transport choice):** picked Slack Incoming Webhook per prompt's default recommendation (free, single env var `ALERT_SLACK_WEBHOOK_URL`, HTTPS:443 always-allowed Railway egress, mobile push via Slack app, no bot/service setup beyond a single webhook URL). Rejected Telegram (needs BotFather + chat_id discovery — extra one-time step) and Resend (requires sender domain + SDK).
+- **DD-3 (transport ordering):** webhook fires FIRST inside `_send_via_transports`, SMTP fires second. Rationale: even if SMTP later raises, the operator has already been paged via webhook. Each transport is independently try/excepted at its own function level — one transport's failure does NOT prevent the other from firing (transport-isolation invariant pinned by `test_webhook_failure_does_not_raise_and_smtp_still_fires`).
+- **DD-4 (port-number factual correction):** the OPEN-state draft cited SMTP port 587; actual code uses port 465 (`SMTP_SSL`). Correction recorded in `backend/config.py` comment block and `backend/alerting.py` module docstring. Does not affect remediation; logged for audit-trail accuracy.
+- **DD-5 (no SMTP debugging — per prompt hard-rule):** the SMTP path is preserved as-is for non-Railway environments (local-dev, future deployments off Railway). It will continue to silently fail on Railway with `alert_email_failed [Errno 101] Network is unreachable`, which is now expected behaviour (documented in module docstring). No effort spent trying to make SMTP egress work on Railway; the operator wants alerts to work, not SMTP to work.
+
+**Status:** [x] DONE 2026-05-04 evening — branch `code/t-act-063-alerting-webhook` off `origin/main` (`303764d`) at commit (PR pending operator merge).
+
+**Files touched (this PR):**
+- `backend/alerting.py` — added `import json as _json`, `from urllib.error import URLError`, `from urllib.request import Request, urlopen`; module docstring rewritten to document dual-transport semantics + T-ACT-063 context; added `_slack_webhook_configured()` / `_smtp_configured()` helpers; rewrote `send_alert` skip-guard to "any transport configured"; added `_send_via_transports` orchestrator; added `_send_slack_webhook` transport (~70 prod lines net).
+- `backend/config.py` — added `ALERT_SLACK_WEBHOOK_URL` env var; expanded comment block documenting both transports + Railway egress context.
+- `backend/.env.example` — added external-alerting transports section with both groups documented (Slack + Gmail SMTP).
+- `backend/scripts/test_alert.py` — NEW operator smoke-test script (`python -m backend.scripts.test_alert "<detail>"`); skips DB write so transports are tested in isolation.
+- `backend/tests/test_alerting.py` — defensive update to all 6 existing SMTP tests setting `ALERT_SLACK_WEBHOOK_URL = ""` so the SMTP-only path is preserved (otherwise `MagicMock` autospecs returned truthy for the new attribute, silently engaging the webhook path); added 7 new webhook tests pinning payload shape, URL routing, transport isolation, non-2xx error logging, detail-truncation, daemon-thread non-blocking semantics, and SMTP-only-when-only-SMTP.
+- `trading-docs/08-planning/TASK_REGISTER.md` — this entry flipped to DONE; investigation findings, design decisions DD-1 through DD-5, and acceptance-criteria outcomes recorded.
+
+**Test results (2026-05-04 evening, post-EXECUTE):**
+- `tests/test_alerting.py`: **13/13 PASSED** (6 legacy SMTP + 7 new webhook).
+- `tests/test_t_act_047_persistent_error_classification.py`: **5/5 PASSED** (downstream call-site verification — `prediction_engine.py:1546` `send_alert` invocation).
+- No new lint errors on the 4 modified production files.
+
+**Pending operator action (post-merge):**
+1. Set `ALERT_SLACK_WEBHOOK_URL` Railway env var to a Slack Incoming Webhook URL (workspace Apps → "Incoming Webhooks" → channel → copy URL).
+2. Run smoke test: `ALERT_SLACK_WEBHOOK_URL=<url> python -m backend.scripts.test_alert "smoke test"` from local machine to verify webhook delivery before Railway deploy.
+3. After Railway deploy, verify the next watchdog fire (or trigger a synthetic one) reaches Slack in <60 sec — record latency for AC #3.
+4. Record acceptance-criteria outcomes (#1, #3) in this entry as a follow-up edit, OR via the next governance cycle.
+
+**Cross-references:** T-ACT-057 (ALERT_GMAIL_APP_PASSWORD whitespace silent-rejection; T-ACT-063 is the SECOND distinct alerting blackout root-cause discovered after T-ACT-057's whitespace fix; reinforces the discipline-meta-lesson "infrastructure-config silent-failure surfaces require 3-question exhaustive verification: SET / CORRECT FORMAT / END-TO-END VALIDATED" — T-ACT-063 demonstrates that even with all three questions answered correctly, a fourth-class issue (transport-layer egress reliability) can still produce detection-without-notification). HANDOFF A.7 (silent-failure-class family — T-ACT-063 surfaces a 4th subclass: **alerting-transport reliability** — distinct from {persistence, RLS, schema-coupling, infrastructure-config} subclasses). HANDOFF A.8 (this T-ACT was identified during the 2026-05-04 outage diagnosis when operator noted no email arrived during the 76-hour silent window despite watchdog firing correctly; T-ACT-063 closes the operator-paging gap). T-ACT-062 (sibling — VVIX/VIX/VIX9D freshness guard; ships in parallel branch and is non-conflicting with T-ACT-063 changes — both touch `TASK_REGISTER.md` only).
 
 ---
 
@@ -2345,7 +2387,7 @@ Pre-T-ACT-061 (Indices Starter era): all three feeds were silently 15-min stale 
 - SUBSCRIPTION_REGISTRY.md — canonical reference for subscription-vs-runtime audit (mitigation #2 in A.6); §1A tier comparison matrix for Polygon Indices added 2026-05-04 evening
 - T-ACT-054 cv_stress design memo (Cursor 2026-05-03) — Choice A NULL-on-degenerate-input selected; remediation DONE 2026-05-02
 
-*Section 14 opened: 2026-05-01 | Owner: tesfayekb. Amended 2026-05-03 via Track B PR (T-ACT-045 status update; T-ACT-046 scope expansion; T-ACT-048/050/051/054 added; T-ACT-049 subsumed per numbering note above). Amended 2026-05-04 evening via PR `docs/post-incident-indices-advanced-2026-05-04` (T-ACT-061 closed-resolved subscription upgrade; T-ACT-062 queued VVIX/VIX/VIX9D freshness; T-ACT-063 queued email egress; T-ACT-064 informational retraining decision tracking; HANDOFF NOTE Appendix A.8 added; HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md relocated from repo root).*
+*Section 14 opened: 2026-05-01 | Owner: tesfayekb. Amended 2026-05-03 via Track B PR (T-ACT-045 status update; T-ACT-046 scope expansion; T-ACT-048/050/051/054 added; T-ACT-049 subsumed per numbering note above). Amended 2026-05-04 evening via PR `docs/post-incident-indices-advanced-2026-05-04` (T-ACT-061 closed-resolved subscription upgrade; T-ACT-062 queued VVIX/VIX/VIX9D freshness; T-ACT-063 queued email egress; T-ACT-064 informational retraining decision tracking; HANDOFF NOTE Appendix A.8 added; HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md relocated from repo root). Amended 2026-05-04 evening via PR `code/t-act-063-alerting-webhook` (T-ACT-063 flipped to DONE — Slack webhook transport added alongside existing Gmail SMTP path; `backend/alerting.py` + `backend/config.py` + `backend/.env.example` + `backend/scripts/test_alert.py` + `backend/tests/test_alerting.py`; investigation findings DD-1 through DD-5 recorded; acceptance criteria #2 verified by tests, #1 and #3 pending operator post-merge smoke test).*
 
 ---
 

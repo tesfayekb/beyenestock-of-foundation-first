@@ -94,11 +94,33 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 #   python -c "import secrets; print(secrets.token_urlsafe(32))"
 RAILWAY_ADMIN_KEY = os.getenv("RAILWAY_ADMIN_KEY", "")
 
-# HARD-B: External alerting via Gmail
-# Set ALERT_EMAIL to receive critical trading event notifications.
-# Set ALERT_GMAIL_APP_PASSWORD to a Gmail App Password (not your account password).
-# To create: Google Account → Security → 2-Step Verification → App Passwords
-# If either is empty, alerting is silently disabled (no error, no crash).
+# HARD-B: External alerting transports.
+#
+# Two independent transports are supported and can be configured
+# together (belt-and-suspenders) or individually.
+#
+# 1) Slack webhook (T-ACT-063, 2026-05-04 — preferred on Railway).
+#    Single env var; HTTPS POST to hooks.slack.com. Railway egress to
+#    HTTPS:443 always works, unlike outbound SMTP (ports 25/465/587)
+#    which is structurally blocked on Railway containers and caused
+#    the 76-hour silent-watchdog incident 2026-05-01 → 2026-05-04
+#    (see HANDOFF NOTE Appendix A.8 + T-ACT-063 entry in TASK_REGISTER).
+#    Setup: Slack workspace → Apps → "Incoming Webhooks" → add to a
+#    channel → copy URL.
+#
+# 2) Gmail SMTP (HARD-B legacy path).
+#    Set ALERT_EMAIL + ALERT_GMAIL_APP_PASSWORD to receive trading
+#    event notifications via email. Gmail App Password is required
+#    (NOT the account password) — create via:
+#       Google Account → Security → 2-Step Verification → App Passwords
+#    Kept for local-dev / non-Railway environments where SMTP egress
+#    works. Will silently fail on Railway with `alert_email_failed
+#    [Errno 101] Network is unreachable` — this is expected and is
+#    why the Slack webhook above is the operational primary.
+#
+# If ALL transports are unconfigured, alerting is silently disabled
+# (no error, no crash — current behaviour preserved).
+ALERT_SLACK_WEBHOOK_URL = os.getenv("ALERT_SLACK_WEBHOOK_URL", "")
 ALERT_EMAIL = os.getenv("ALERT_EMAIL", "")
 ALERT_GMAIL_APP_PASSWORD = os.getenv("ALERT_GMAIL_APP_PASSWORD", "")
 ALERT_FROM_EMAIL = os.getenv("ALERT_FROM_EMAIL", ALERT_EMAIL)
