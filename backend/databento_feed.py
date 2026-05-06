@@ -43,6 +43,40 @@ logger = get_logger("databento_feed")
 
 OCC_RE = re.compile(r"([A-Z]{1,6})(\d{6})([CP])(\d{8})")
 
+# T-ACT-072: producer-side trade age filter.
+#
+# Databento's `db.Live` client occasionally delivers buffered messages
+# with old `ts_event` after reconnect (overnight idle, network blip,
+# server-side replay-on-subscribe). When `_handle_trade` processes
+# these, it pairs the OLD ts_event + OLD strike + OLD time-to-expiry
+# with the CURRENT underlying_price (read from polygon:spx:current at
+# wall-clock-now). The resulting "frankenstein" trade record poisons
+# downstream Black-Scholes computation in compute_gex.
+#
+# This threshold rejects any trade whose ts_event is older than the
+# configured age. Behaviour:
+#   - Live trades during RTH: ts_event is microseconds-to-milliseconds
+#     old; passes trivially.
+#   - Replay/buffered trades on reconnect: ts_event from prior session;
+#     dropped silently with a counter-tracked log.
+#   - Edge case (clock skew between Databento server and our container):
+#     should be sub-second; not a concern at the threshold below.
+#
+# Threshold of 300 seconds (5 minutes) chosen to be:
+#   - Wide enough that legitimate Databento delivery delays (network
+#     queueing, our event-loop scheduling) never hit it.
+#   - Narrow enough that any cross-day or cross-session record is
+#     rejected (always >> 300s old).
+#
+# Rejection is silent on most calls; a periodic WARNING (every Nth
+# rejection) emits for operator visibility, with a process-cumulative
+# counter so log filters can correlate burst severity.
+#
+# See HANDOFF_NOTE_2026-05-06_DATABENTO_PUSH_LIFECYCLE.md for the full
+# diagnostic that motivated this filter.
+DATABENTO_TRADE_MAX_AGE_SECONDS = 300
+_STALE_TRADE_REJECT_LOG_INTERVAL = 100
+
 
 class DatabentoFeed:
     def __init__(self) -> None:
@@ -53,6 +87,10 @@ class DatabentoFeed:
         self.last_valid_trade_at: Optional[float] = None
         self._stop_event = asyncio.Event()
         self._imap = None
+        # T-ACT-072: process-cumulative count of trades rejected by the
+        # ts_event age filter. Per-instance (not module-global) to keep
+        # tests that instantiate multiple feeds isolated.
+        self._stale_trade_reject_count = 0
 
         try:
             self.redis_client.delete("databento:opra:trades")
@@ -215,6 +253,45 @@ class DatabentoFeed:
             if ts_ns > 0
             else date.today()
         )
+
+        # T-ACT-072: reject trades whose ts_event is older than
+        # DATABENTO_TRADE_MAX_AGE_SECONDS. See module-level docstring
+        # above for rationale.
+        #
+        # Filter is intentionally placed here (the live-stream path)
+        # and NOT in `_push_trade`. The other caller of `_push_trade`
+        # is `process_trade` (databento_feed.py ~L362), a back-compat
+        # shim used only by `tests/test_fix_group7a.py`. Future
+        # production callers of `_push_trade` or `process_trade` MUST
+        # filter at the call site or this filter MUST be moved.
+        #
+        # Fail-open on ts_ns <= 0: consistent with the existing
+        # `event_date` fallback at the top of this function — a
+        # missing/zero upstream timestamp falls through to the parse
+        # path rather than being rejected here. Empirically Databento
+        # populates ts_event reliably for OPRA trades.
+        if ts_ns > 0:
+            now_ns = time.time_ns()
+            age_seconds = (now_ns - ts_ns) / 1e9
+            if age_seconds > DATABENTO_TRADE_MAX_AGE_SECONDS:
+                self._stale_trade_reject_count += 1
+                if (
+                    self._stale_trade_reject_count
+                    % _STALE_TRADE_REJECT_LOG_INTERVAL
+                    == 1
+                ):
+                    logger.warning(
+                        "databento_stale_trade_rejected",
+                        age_seconds=round(age_seconds, 1),
+                        threshold_seconds=DATABENTO_TRADE_MAX_AGE_SECONDS,
+                        cumulative_rejections=(
+                            self._stale_trade_reject_count
+                        ),
+                        ts_event_iso=datetime.fromtimestamp(
+                            ts_ns / 1e9, tz=timezone.utc
+                        ).isoformat(),
+                    )
+                return
 
         raw_symbol = None
         try:
