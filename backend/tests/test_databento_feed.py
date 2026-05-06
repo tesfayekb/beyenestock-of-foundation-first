@@ -36,11 +36,15 @@ def feed():
 
 def _mk_trade_mock(instrument_id=12345, pretty_price=5.25, size=10,
                    ts_event=None):
-    """Build a TradeMsg mock whose isinstance() check returns True."""
+    """Build a TradeMsg mock whose isinstance() check returns True.
+
+    Default ``ts_event`` is wall-clock-now in nanoseconds so that the
+    T-ACT-072 producer-side age filter (300s) does not reject the
+    fixture. Tests that need a historical timestamp may override
+    ``ts_event`` explicitly.
+    """
     if ts_event is None:
-        ts_event = int(
-            datetime(2026, 4, 15, tzinfo=timezone.utc).timestamp() * 1e9
-        )
+        ts_event = time.time_ns()
     mock = MagicMock(spec=db.TradeMsg)
     mock.instrument_id = instrument_id
     mock.pretty_price = pretty_price
@@ -178,3 +182,87 @@ def test_push_trade_bounds_list_to_10000(feed):
 
     # Regression guard: the broken EXPIRE pattern must not coexist with LTRIM.
     stateful.expire.assert_not_called()
+
+
+# -----------------------------------------------------------------------------
+# T-ACT-072: producer-side ts_event age filter tests.
+#
+# See HANDOFF_NOTE_2026-05-06_DATABENTO_PUSH_LIFECYCLE.md for the diagnostic
+# that motivated this filter.
+# -----------------------------------------------------------------------------
+
+def _resolved_feed(feed):
+    """Helper: configure the feed fixture so a trade with a valid
+    OCC symbol would normally reach _push_trade. Used by the T-ACT-072
+    tests so that any failure to push can be attributed to the age
+    filter, not to symbol resolution failure."""
+    feed._imap.resolve.return_value = "SPXW  261220P05200000"
+    return feed
+
+
+def test_t_act_072_fresh_trade_passes_age_filter(feed):
+    """A trade with ts_event 1ms old is well under the 300s threshold
+    and must reach _push_trade (rpush called, last_valid_trade_at set)."""
+    _resolved_feed(feed)
+    fresh_ns = time.time_ns() - 1_000_000  # 1 ms ago
+
+    feed._dispatch_record(_mk_trade_mock(ts_event=fresh_ns))
+
+    feed.redis_client.rpush.assert_called_once()
+    assert feed.last_valid_trade_at is not None
+    assert feed._stale_trade_reject_count == 0
+
+
+def test_t_act_072_stale_trade_is_rejected_and_logged(feed):
+    """A trade with ts_event 10 minutes old (well beyond the 300s
+    threshold) must NOT reach _push_trade. The first rejection of
+    a process emits a structured warning."""
+    _resolved_feed(feed)
+    stale_ns = time.time_ns() - 600 * 1_000_000_000  # 10 minutes ago
+
+    with patch("databento_feed.logger") as mock_logger:
+        feed._dispatch_record(_mk_trade_mock(ts_event=stale_ns))
+
+        feed.redis_client.rpush.assert_not_called()
+        assert feed.last_valid_trade_at is None
+        assert feed._stale_trade_reject_count == 1
+
+        # First rejection of the process emits the warning
+        # (count % 100 == 1).
+        mock_logger.warning.assert_called_once()
+        event_name, *_ = mock_logger.warning.call_args[0]
+        kwargs = mock_logger.warning.call_args[1]
+        assert event_name == "databento_stale_trade_rejected"
+        assert kwargs["threshold_seconds"] == 300
+        assert kwargs["age_seconds"] >= 300
+        assert kwargs["cumulative_rejections"] == 1
+        # ts_event_iso is an ISO-8601 UTC string from the upstream ts_event.
+        assert "T" in kwargs["ts_event_iso"]
+
+
+def test_t_act_072_trade_just_past_threshold_is_rejected(feed):
+    """Edge: a trade with ts_event 301s old (1s past threshold) is
+    rejected. Verifies the strict ``> threshold`` boundary."""
+    _resolved_feed(feed)
+    just_stale_ns = time.time_ns() - 301 * 1_000_000_000
+
+    feed._dispatch_record(_mk_trade_mock(ts_event=just_stale_ns))
+
+    feed.redis_client.rpush.assert_not_called()
+    assert feed._stale_trade_reject_count == 1
+
+
+def test_t_act_072_trade_with_zero_ts_event_is_not_filtered(feed):
+    """Edge: ts_event == 0 falls through the age filter (fail-open)
+    and goes to the parse path. Consistent with the existing
+    event_date fallback at the top of _handle_trade. This test
+    verifies that a zero/missing ts_event does not silently bypass
+    parsing — the trade still reaches _push_trade if the symbol
+    resolves."""
+    _resolved_feed(feed)
+
+    feed._dispatch_record(_mk_trade_mock(ts_event=0))
+
+    feed.redis_client.rpush.assert_called_once()
+    assert feed.last_valid_trade_at is not None
+    assert feed._stale_trade_reject_count == 0
