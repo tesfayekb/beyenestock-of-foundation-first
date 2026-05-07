@@ -2510,6 +2510,145 @@ Symptom signature observed 2026-05-06 06:30 ET (pre-RTH): nine consecutive `gex_
 
 ---
 
+### T-ACT-082 — Feature pipeline completion (Path Alpha subset: bb_pct_b + macd_signal + vix_5d_change + rv_20d 5-min basis with B.1.iii backfill)
+
+**Severity:** HIGH (six of the model's 25 input features were silently constant in production: `vwap_distance` #1 importance, `rv_20d` #2, `macd_signal` #6, `morning_range` #7, `bb_pct_b`, `overnight_gap`, `vix_5d_change` #10 — plus the semantically-mismatched daily-vs-realtime `vix_close`/`vvix_close` shifts. LightGBM was effectively running on ~15 of 25 features, materially explaining the production-vs-training accuracy gap (31% live vs 52.92% holdout). T-ACT-082 closes 4 of the 6 unwritten keys plus the `rv_20d` semantic shift; the remaining three OHLC-dependent features defer to T-ACT-085.)
+**Owner:** Cursor — implemented 2026-05-07 via PR `fix/t-act-082-feature-pipeline-completion`
+**Estimated time (actual):** ~120 min Cursor (DIAGNOSE-FIRST model-quality investigation + Q1-Q14 critique + Path Alpha subset implementation + tests + governance + handoff)
+**Status:** [x] DONE (pending operator review/merge)
+
+**Description:** Audit of the T-ACT-076 post-deploy operator-data revealed that the LightGBM inference site (`prediction_engine.py:1085-1110`) reads 25 features from Redis but six of them have no producer in the codebase — specifically `polygon:spx:overnight_gap`, `polygon:spx:macd_signal`, `polygon:spx:bb_pct_b`, `polygon:spx:vwap_distance`, `polygon:spx:morning_range`, and `polygon:vix:5d_change`. The Python `_read_redis(..., default)` fallbacks return constant values (typically 0.0) for every cycle, so the LightGBM tree-splits these features encode are never exercised. Additionally, `polygon:spx:realized_vol_20d` was being written under the 12A daily-basis formula (`std(daily_returns) * sqrt(252) * 100`), semantically mismatching the training pipeline's 5-min-basis formula (`std(5m_returns) * sqrt(252 * 78) * 100` per `train_direction_model.py:292-298`).
+
+**Path Alpha (operator-authorized 2026-05-07 after Cursor's Phase 1 critique surfaced three STOP-class issues):** subset T-ACT-082 to the byte-for-byte-alignable features and defer the OHLC-dependent / data-class-shifting work to follow-up T-ACTs (T-ACT-084, T-ACT-085, T-ACT-086).
+
+**Fix shipped:**
+
+1. **Scope A subset — three new live writers in `polygon_feed.py:_compute_spx_features` / `_store_vix_baseline`:**
+   - `polygon:spx:bb_pct_b` (training L242-244 byte-aligned: `(close - (sma20 - 2*std20)) / (4*std20)` with `ddof=1` sample std; 20-bar warmup; 300s TTL)
+   - `polygon:spx:macd_signal` (training L237-240 byte-aligned: MACD histogram = `(ema12 - ema26)[-1] - ewm9(ema12 - ema26)[-1]` with `adjust=False` recurrence; 35-bar warmup chosen to bring the 9-bar smoothing transient below ~0.03%; 300s TTL). New static helper `PolygonFeed._ewm_adjust_false(values, span)` matches `pandas.Series.ewm(span=N, adjust=False).mean()` to <1e-9 numerical noise (locked by `test_ewm_adjust_false_matches_pandas`).
+   - `polygon:vix:5d_change` (training L274-276 byte-aligned: `(daily_vix[-1] - daily_vix[-6]) / daily_vix[-6]`; 6-day warmup satisfied immediately on poll cycle 1 thanks to `_backfill_vix_history`; 7200s TTL matching sibling daily VIX keys).
+
+2. **Scope B — `rv_20d` 5-min basis writer in `_compute_spx_features`:** new buffer `_spx_5m_returns_history` (cap 1560 = 20 trading days × 78 5-min bars/day), per-cycle append, computes `std(window) * sqrt(252 * 78) * 100` exactly per training (`ddof=1` sample std, matching pandas `.rolling(20*78).std()`). Replaces the 12A daily-basis writer in `_append_spx_daily_return_if_due` (which is now no-op for `realized_vol_20d` but retains the date-guard infrastructure for any future daily-basis sibling).
+
+3. **Scope B.1.iii — `_backfill_spx_5m_history` startup backfill** (~110 LOC): one Polygon `/v2/aggs/ticker/I:SPX/range/5/minute/{30d_ago}/{today}` call seeds 1560 returns + 60 closes (the latter to warm `spx_history` for `safe_return(48)` and the EMA recurrence). Without this, production would run with `rv_20d` falling back to `prediction_engine` default 15.0 for ~21 trading days — operationally activating the same regression T-ACT-082 fixes (workflow rule #11 ROI watch-list "without backfill" rejection branch from Phase 1 critique Q9).
+
+4. **Test churn — `test_spx_daily_rv.py` deleted, replaced with `test_spx_5m_basis_rv.py` (8 tests):** the original file's 7 tests explicitly locked in the daily-basis `sqrt(252)` annualization with a docstring saying "catches accidental re-introduction of intraday annualization factors (sqrt(252 * 78) etc.)" — directly anti-Scope-B by design. Replaced with 5-min-basis invariants: 1560-bar warmth threshold; 5-min-basis annualization math (`sqrt(252 * 78)`) with a hard regression guard against `sqrt(252)` re-introduction; FIFO buffer cap; backfill populates buffer; regression guard that `_append_spx_daily_return_if_due` no longer writes the realized-vol key; date-guard preservation for the future-sibling case. Approved as ~150 LOC churn per Phase 1 critique Q7 / Path Alpha authorization.
+
+5. **New tests — `test_t_act_082_feature_writers.py` (10 tests):** byte-for-byte alignment verification for `bb_pct_b`, `macd_signal`, `vix_5d_change` against the closed-form training formulas, plus warmth-threshold regression guards (no premature writes), TTL contracts, and `_ewm_adjust_false` ↔ `pandas.ewm(adjust=False)` numerical equivalence (catches accidental drift in the recursive helper).
+
+6. **Comment hygiene:** updated 4 outdated "12A garbage values" / "intraday 5-min buffer is garbage" / "polygon:spx:realized_vol_20d written EOD" comments in `polygon_feed.py:43-58`, `polygon_feed.py:316-324`, `polygon_feed.py:519-524`, `prediction_engine.py:1264-1275`, and `tests/test_iron_butterfly_safety_gates.py:235-241` so future readers are not misled by superseded narrative.
+
+**Acceptance criteria:**
+
+- ✅ `polygon:spx:bb_pct_b` written every 5-min cycle (>= 20 closes); value matches training formula to <1e-5 noise.
+- ✅ `polygon:spx:macd_signal` written every 5-min cycle (>= 35 closes); value matches training EMA chain to <1e-5 noise.
+- ✅ `polygon:vix:5d_change` written when daily VIX history >= 6 samples (immediate post-backfill); 7200s TTL.
+- ✅ `polygon:spx:realized_vol_20d` written every 5-min cycle (>= 1560 returns); annualized via `sqrt(252 * 78)`; 300s TTL.
+- ✅ `_backfill_spx_5m_history` populates buffer to 1560 within first cycle (when Polygon API key is set); fail-open on Polygon error.
+- ✅ `_append_spx_daily_return_if_due` no longer writes `polygon:spx:realized_vol_20d` (regression guard test explicitly fails any future re-introduction).
+- ✅ Targeted tests pass: 18 new (8 in `test_spx_5m_basis_rv.py` + 10 in `test_t_act_082_feature_writers.py`); plus 43 nearby tests (`test_iron_butterfly_safety_gates.py`, `test_consolidation_s13.py`, `test_consolidation_s14.py`) all pass — comment-only changes confirmed safe.
+- ✅ Full backend test suite shows zero regressions vs T-ACT-076 baseline.
+- 🟡 Post-deploy validation (operator-observed): post-deploy `model_metadata`-style audit of inference-time feature distributions confirms `bb_pct_b`, `macd_signal`, `rv_20d`, `vix_5d_change` are no longer constant; LightGBM directional accuracy on labeled rows recovers materially toward the 52.92% training holdout floor (full closure deferred to T-ACT-085 / OHLC-dependent features still constant).
+
+**Why subset over fully-original-prompt scope (Path Alpha consensus):** Cursor's Phase 1 Q1-Q14 critique surfaced three STOP-class issues in the original "populate all 6 unwritten keys" framing: (1) `self.spx_history` is `List[float]` of spot CLOSES capped at 60, not OHLC bars — `vwap_distance` (typical-price-based), `morning_range` (high/low/open), and `overnight_gap` (day-boundary anchored on first-bar-of-session) require an entire new data class the live pipeline does not maintain; (2) the `rv_20d` 5-min-basis buffer requires 1560 bars but `spx_history` holds only 60, implying either a 3-week cold-start or the new backfill mechanism added in this PR; (3) `tests/test_spx_daily_rv.py` was anti-Scope-B by docstring design and required ~150 LOC re-write. Operator independently verified all three findings against HEAD and authorized Path Alpha (subset to byte-for-byte-alignable features + B.1.iii backfill) over Path Beta (bundle OHLC fetch, ~570 LOC) and Path Gamma (close-only OHLC approximations, rejected per workflow rule #11 — feeding the model approximated distributions trained on real ones may be worse than constants). Three follow-up T-ACTs (T-ACT-084, T-ACT-085, T-ACT-086) opened to track the deferred work. Per workflow rule #16 (priority by consequential improvement), shipping 4 of the top-10 importance features now (macd_signal #6, rv_20d #2, partial fixes to iv_rv_ratio #4 and vix_term_ratio #8 via correct `rv_20d`, plus `vix_5d_change` #10 and `bb_pct_b`) is the high-value subset.
+
+**Critique-first discipline (DIAGNOSE-FIRST applied):** Operator imposed a critique-first Q1-Q14 review before authorizing implementation. Cursor's Phase 1 critique came back YELLOW with three STOP-class issues (Q1: cache-class insufficiency for OHLC features; Q2: `rv_20d` buffer feasibility; Q7: anti-Scope-B test file); operator independently verified all three against HEAD code citations. Phase 2 was authorized as Path Alpha (subset) with the B.1.iii backfill amendment, T-ACT-083 governance bundled, and ~150 LOC test churn approved. Three follow-up T-ACTs queued for the deferred work.
+
+**Why bundle T-ACT-083 governance into this PR (Q11 BUNDLE decision):** F-068-G reclassification + T-ACT-064 dependency note are governance changes that explain WHY this T-ACT exists. Shipping them in a separate later PR creates a window during which the action tracker / risk register narrative is incoherent with the merged code. Marginal review burden trivial vs. narrative-coherence preservation.
+
+**Cross-references:**
+
+- HANDOFF_NOTE_2026-05-07_T_ACT_082_FEATURE_PIPELINE.md (`trading-docs/06-tracking/`) — Q1-Q14 critique trace, Phase 2 implementation log, Path Alpha vs Beta vs Gamma comparison, B.1.iii backfill rationale
+- F-068 model-quality investigation (`HANDOFF_NOTE_2026-05-06_*.md` series) — establishes the 31%-live vs 52.92%-training-holdout gap that motivated the T-ACT-082 candidate scoping
+- F-068-G (S15 threshold-metric mismatch — initially DISSOLVED by T-ACT-076 conditionally, now RECLASSIFIED to feature-pipeline-incompleteness root cause per T-ACT-083 governance scope; the regime-dependent confound from T-ACT-076 Q5 remains a separate concern tracked under T-ACT-081)
+- T-ACT-064 (post-upgrade LightGBM retraining decision tracking — newly BLOCKED on T-ACT-082 ship + 7 days of post-deploy production accuracy data; updated dependency note in T-ACT-083 governance bundle)
+- T-ACT-077 (data-window hygiene — DEFERRED 2026-05-25; orthogonal to T-ACT-082, both targeting the production-quality gap from different angles)
+- T-ACT-084 (NEW — daily-aligned VIX series, fixes `vix_close`/`vvix_close` daily-vs-realtime semantic shift)
+- T-ACT-085 (NEW — SPX OHLC fetch + day-boundary state, fixes `vwap_distance`/`morning_range`/`overnight_gap`)
+- T-ACT-086 (NEW — `polygon:spx:open` writer, fixes the new A.7-class instance Cursor caught at `shadow_engine.py:318`; this is the 8th A.7-family subclass)
+- HANDOFF NOTE Appendix A.7 (silent-failure-class family — T-ACT-082 closes a sixth subclass: feature-pipeline-incompleteness, where consumer reads but no producer writes; complements T-ACT-076's class-space mismatch and T-ACT-067's schema-CHECK constraint mismatch)
+- HANDOFF NOTE Appendix A.8 (post-upgrade retraining-decision discipline; T-ACT-082 ship + post-deploy data is the gating event for T-ACT-064's eventual decision)
+
+---
+
+### T-ACT-083 — F-068-G governance reclassification + T-ACT-064 dependency note (governance-only, bundled with T-ACT-082)
+
+**Severity:** GOVERNANCE-ONLY (no code change; reclassifies F-068-G root cause and updates T-ACT-064 dependency to reflect the post-T-ACT-082 information state)
+**Owner:** Cursor — implemented 2026-05-07 (bundled into PR `fix/t-act-082-feature-pipeline-completion`)
+**Estimated time (actual):** ~10 min Cursor (drafting + cross-reference updates)
+**Status:** [x] DONE — bundled
+
+**Description:** F-068-G ("S15 threshold-metric mismatch — drift detector emitted `Critical + Z=0.00` against a structurally-collapsed `outcome_correct` distribution") was initially marked as conditionally DISSOLVED by T-ACT-076 Position 1a (binary-labeler fix) — under the assumption that the labeler class-space mismatch was the SOLE structural driver of the 6.1% post-hygiene accuracy reading. The 2026-05-07 model-quality investigation revealed a SECOND structural driver — feature-pipeline incompleteness — that was masked by the labeler bug. T-ACT-083 reclassifies F-068-G's primary root cause from "labeler class-space mismatch only" to "labeler class-space mismatch + feature-pipeline-incompleteness (compounding contributors)". Both T-ACT-076 and T-ACT-082 are needed to fully dissolve F-068-G's dual root causes; either fix shipped alone leaves a residual contributor.
+
+T-ACT-064 (post-upgrade LightGBM retraining decision tracking) had previously listed T-ACT-061/T-ACT-062 as gating dependencies. T-ACT-083 adds T-ACT-082 ship + 7 days of post-deploy production-accuracy data as a NEW gating dependency: any retraining-decision SQL run before T-ACT-082's deploy would conflate "labeler-fixed feature-pipeline-incomplete distribution" with the eventual "labeler-fixed feature-pipeline-complete distribution" the retrained model would inherit. Operator must wait for both T-ACT-082's ship and the 7-day post-deploy window before invoking T-ACT-064's decision matrix.
+
+**Bundled with T-ACT-082 (Q11 BUNDLE):** Governance changes that contextualize a code PR ride with that PR (workflow precedent established under T-ACT-076 / T-ACT-081 bundle 2026-05-07 morning).
+
+**Cross-references:** T-ACT-082 (predecessor — surfaces the second structural driver of F-068-G that motivates the reclassification); T-ACT-076 / T-ACT-081 (predecessor — first structural driver of F-068-G + queued labeler-guard for the regime-dependent residual); T-ACT-064 (downstream — newly-blocked retraining decision); F-068 (parent finding); HANDOFF_NOTE_2026-05-07_T_ACT_082_FEATURE_PIPELINE.md.
+
+---
+
+### T-ACT-084 — Daily-aligned VIX/VVIX series for training-distribution alignment (queued; deferred from T-ACT-082)
+
+**Severity:** MEDIUM (training uses `vix_close`/`vvix_close` from end-of-day Polygon daily aggregates, while live `polygon:vix:current`/`polygon:vvix:current` are real-time intraday quotes — same NAME, different statistical distribution. The model's tree-splits learned on EOD-aligned values are not exercised by the same-named real-time values. Affected derived features include `vix_z_score`, `vvix_z_score`, and the `vix_term_ratio` denominator.)
+**Owner:** Cursor — to be authorized after T-ACT-082 + 7 days of post-deploy data
+**Estimated time:** ~150 min Cursor (~100-150 LOC code: separate `vix_close_eod` / `vvix_close_eod` keys derived from `vix_daily_history[-1]` / `vvix_daily_history[-1]` updated only at the 21:00 UTC EOD gate, plus `prediction_engine.py:1085-1110` reader update + tests)
+**Status:** [ ] QUEUED / DEFERRED — re-evaluate after T-ACT-082 post-deploy window
+
+**Description:** Cursor's T-ACT-082 Phase 1 critique Q14 surfaced a daily-vs-realtime semantic shift on the `vix_close` and `vvix_close` features. Training (per `train_direction_model.py:271-272, 283-284`) uses `vix_close` / `vvix_close` from the daily aggregates parquet (one EOD value per session). The live inference site (`prediction_engine.py:1085-1110`) reads `polygon:vix:current` / `polygon:vvix:current` — JSON envelopes carrying real-time intraday quotes. Same key NAME, different statistical population. The fix requires a separate daily-aligned series in `polygon_feed.py` (sourced from the 21:00 UTC EOD append in `_store_vix_baseline`'s daily branch) under distinct keys `polygon:vix:close_eod` / `polygon:vvix:close_eod`, plus a reader-site change to consume those instead of `:current` for the model-feature path. Operator's original prompt suggested "<50 LOC" for this; Cursor's honest read is ~100-150 LOC including tests.
+
+**Why DEFERRED, not bundled with T-ACT-082:** Path Alpha boundary (Phase 1 critique Q14 deferral). Bundling would push T-ACT-082's PR past the reviewable-in-one-sitting target (~370 + 150 LOC); separating it preserves T-ACT-082's narrow framing and lets the operator review the new VIX series as its own diff with explicit before/after distribution comparison.
+
+**Decision matrix (re-evaluate post-T-ACT-082 deploy + 7 days):**
+
+- **Path A (T-ACT-082 alone closes the production-vs-training accuracy gap to within 5%):** Park indefinitely. Document the daily-vs-realtime semantic shift as an accepted residual confound; no further action.
+- **Path B (residual gap 5-15%):** Schedule T-ACT-084 as MEDIUM priority; closes the gap further.
+- **Path C (residual gap > 15%):** Escalate to HIGH priority; bundle with T-ACT-085 (OHLC fetch) as a coordinated Phase 2 of T-ACT-082's Path Beta.
+
+**Cross-references:** T-ACT-082 Phase 1 critique Q14; F-068 (parent finding); T-ACT-064 (downstream — gating dependency on T-ACT-084's ship if Path B/C selected).
+
+---
+
+### T-ACT-085 — SPX OHLC fetch + day-boundary state for vwap_distance / morning_range / overnight_gap (queued; deferred from T-ACT-082)
+
+**Severity:** HIGH (these are the LARGEST feature-importance gaps remaining in production: `vwap_distance` is the #1-importance feature in the trained LightGBM model per `model_metadata.json`, `morning_range` is #7, and `overnight_gap` is also a top-quartile contributor. All three remain pinned at 0.0 in production until T-ACT-085 ships.)
+**Owner:** Cursor — to be authorized after T-ACT-082 + post-deploy data confirms the residual gap
+**Estimated time:** ~240 min Cursor (~200 LOC code + ~80 LOC tests: new SPX 5-min OHLC fetcher hitting `/v2/aggs/ticker/I:SPX/range/5/minute/today/today` per cycle + new `spx_5m_bars: List[dict]` buffer + day-boundary state for `prev_session_close`/`day_open`/`morning_high_low` + three new feature writers byte-aligned with `train_direction_model.py:249-264`)
+**Status:** [ ] QUEUED / DEFERRED — re-evaluate after T-ACT-082 post-deploy window
+
+**Description:** The live `polygon_feed.py` maintains `self.spx_history: List[float]` (60 spot CLOSES, no OHLC) and has no day-boundary state for `day_open` / `morning_high` / `morning_low`. Three of the model's high-importance features require this missing data class:
+
+1. **`vwap_distance`** (training L249-253): `(close - vwap_typical_price) / vwap_typical_price` where `vwap_typical_price = expanding-day mean of (high+low+close)/3`. Requires 5-min OHLC + day-boundary reset at session open.
+2. **`morning_range`** (training L255-264): `(morning_high - morning_low) / day_open` where `morning_high`/`morning_low` are computed over the first 30 minutes after the open (`minutes_from_open <= 30`). Requires high/low per bar + day-boundary anchor.
+3. **`overnight_gap`** (training L220-227): `(first_bar_open - prev_session_close) / prev_session_close`, gated on `hour == 9` (only written on the open bar). Requires `day_open` (first 5-min bar's open) and `prev_session_close` (separate from `spx_prev_session_close` already maintained).
+
+T-ACT-085 introduces the OHLC fetcher + buffer + day-boundary state + three writers. Tests must verify byte-for-byte alignment with training under cold-start, mid-session, and end-of-session conditions. Workflow rule #11 forbids approximations (close-only `vwap_distance` is REJECTED per Phase 1 critique Q3 because the model's tree-splits learned on true-typical-price distribution may behave worse on close-only than on the constant 0.0 it currently sees).
+
+**Why DEFERRED, not bundled with T-ACT-082:** Path Alpha boundary. Bundling would push T-ACT-082's PR to ~570 LOC code + ~200 LOC tests (Path Beta) — past the reviewable-in-one-sitting target. Separating it preserves Path Alpha's narrow framing while keeping the highest-impact feature deferred to its own focused review.
+
+**Decision matrix (re-evaluate post-T-ACT-082 deploy + 7 days):** Same Path A/B/C as T-ACT-084, with T-ACT-085 prioritized HIGHER (top-quartile feature importance > daily-vs-realtime confound) under any non-Path-A outcome.
+
+**Cross-references:** T-ACT-082 Phase 1 critique Q1 (cache-class insufficiency for OHLC features); F-068 (parent finding); T-ACT-064 (downstream — gating dependency on T-ACT-085's ship if Path B/C selected); T-ACT-086 (sibling — `polygon:spx:open` writer is a strict subset of the day-boundary state added here, so could be subsumed if T-ACT-085 ships first).
+
+---
+
+### T-ACT-086 — polygon:spx:open writer (A.7-family 8th subclass, surfaced by T-ACT-082 Phase 1 critique)
+
+**Severity:** MEDIUM (silent feature gap at `shadow_engine.py:318` — `polygon:spx:open` is read for shadow-mode comparisons but never written by any producer in the codebase. The shadow engine reads it via `_read_redis(..., None)` and presumably falls through to a default; the affected shadow-comparison logic is silently degraded but not broken. This is the 8th A.7-family subclass instance identified in the past 7 days.)
+**Owner:** Cursor — to be authorized any time (independent of T-ACT-082 outcomes)
+**Estimated time:** ~30 min Cursor (~20 LOC: `polygon_feed.py` writes `polygon:spx:open` once per session at the open-minute branch in `_poll_loop`, sourced from the first 5-min bar's open price returned by Polygon snapshot or the existing prev-session-close fetcher's open-of-current-day field)
+**Status:** [ ] QUEUED — independent of T-ACT-082 critical-path
+
+**Description:** Cursor's T-ACT-082 Phase 1 critique Q1 grep for unwritten Redis keys surfaced a NEW silent feature gap not previously in any T-ACT scope: `shadow_engine.py:318` reads `polygon:spx:open` but no producer writes that key. Polygon's `/v3/snapshot?ticker.any_of=I:SPX` response already carries `session.open` per upstream docs; the existing `_fetch_spx_price` (`polygon_feed.py:971-1076`) extracts only `session.close` / `session.last`. Adding a single setex with the response's `session.open` field at the once-per-session open-minute branch closes the gap.
+
+This is the 8th A.7-family subclass instance counted in the past 7 days (alongside T-ACT-046 SPX `fetched_at`, T-ACT-047 `PostgrestAPIError`, T-ACT-055 persist-site audit, T-ACT-057 `.replace(" ", "")` whitespace strip, T-ACT-061 subscription-tier mismatch, T-ACT-067 schema-CHECK family, T-ACT-076 / T-ACT-082 themselves, etc.). The cumulative pattern is sufficient evidence for Section 14's "A.7 silent-failure-class family" framing to be re-elevated to a first-order architectural concern in the next governance review cycle.
+
+**Why DEFERRED, not bundled with T-ACT-082:** A.7-family scope (small, independent fix); bundling would dilute T-ACT-082's narrow Path Alpha framing. Independent of T-ACT-082's success criteria; can ship any time.
+
+**Cross-references:** T-ACT-082 Phase 1 critique Q1 (originating finding); HANDOFF NOTE Appendix A.7 (silent-failure-class family — T-ACT-086 = 8th subclass instance); `shadow_engine.py:318` (consumer site).
+
+---
+
 ### Section 14 cross-references
 
 - HANDOFF NOTE Appendix A.6 — full post-mortem context for the 2026-05-01 phantom-alpha incident (amended 2026-05-03 via Track B PR with T-ACT-045 PENDING-RE-RUN status + validation-artifact protocol)
@@ -2524,11 +2663,13 @@ Symptom signature observed 2026-05-06 06:30 ET (pre-RTH): nine consecutive `gex_
 - HANDOFF_NOTE_2026-05-06_GEX_QUOTE_MISSING.md (`trading-docs/06-tracking/`) — diagnostic for `gex_quote_missing_after_rest` warnings; same root cause addressed by T-ACT-072
 - PR `fix/t-act-076-binary-labeler-position-1a` (T-ACT-076 + T-ACT-081 governance, 2026-05-07) — Position 1a binary labeler (F-068-I dissolution) + bundled `drift_status` CHECK widening + narrow `PostgrestAPIError` classifier (F-068-A closure); same A.7-family pattern as T-ACT-047; amends §A.7 post-deploy SQL with a `pred_direction × outcome_direction` crosstab to quantify Q5 magnitude
 - HANDOFF_NOTE_2026-05-06_F068I_BINARY_LABELER_FIX.md (`trading-docs/06-tracking/`) — original-intent forensic + Q1-Q12 critique + Phase 2 amendments for T-ACT-076; Q5 regime-dependent confound; T-ACT-081 deferral rationale
+- PR `fix/t-act-082-feature-pipeline-completion` (T-ACT-082 + T-ACT-083 governance, 2026-05-07) — Path Alpha subset feature-pipeline completion: 3 byte-for-byte writers (`bb_pct_b`, `macd_signal`, `vix_5d_change`) + `rv_20d` 5-min basis with B.1.iii startup backfill, byte-aligned with `train_direction_model.py`; supersedes 12A daily-basis writer; bundles F-068-G reclassification + T-ACT-064 dependency note. CRITIQUE-FIRST Q1-Q14 discipline applied; YELLOW authorization with B.1.iii backfill amendment + ~150 LOC test churn approved; three follow-up T-ACTs (T-ACT-084, T-ACT-085, T-ACT-086) opened for deferred work
+- HANDOFF_NOTE_2026-05-07_T_ACT_082_FEATURE_PIPELINE.md (`trading-docs/06-tracking/`) — Q1-Q14 critique trace, Path Alpha vs Beta vs Gamma comparison, B.1.iii backfill rationale, deferred-work scoping for T-ACT-084/085/086
 - HANDOFF NOTE Appendix A.5 mitigation #3 — original lesson surfacing the try/except discipline issue
 - SUBSCRIPTION_REGISTRY.md — canonical reference for subscription-vs-runtime audit (mitigation #2 in A.6); §1A tier comparison matrix for Polygon Indices added 2026-05-04 evening
 - T-ACT-054 cv_stress design memo (Cursor 2026-05-03) — Choice A NULL-on-degenerate-input selected; remediation DONE 2026-05-02
 
-*Section 14 opened: 2026-05-01 | Owner: tesfayekb. Amended 2026-05-03 via Track B PR (T-ACT-045 status update; T-ACT-046 scope expansion; T-ACT-048/050/051/054 added; T-ACT-049 subsumed per numbering note above). Amended 2026-05-04 evening via PR `docs/post-incident-indices-advanced-2026-05-04` (T-ACT-061 closed-resolved subscription upgrade; T-ACT-062 queued VVIX/VIX/VIX9D freshness; T-ACT-063 queued email egress; T-ACT-064 informational retraining decision tracking; HANDOFF NOTE Appendix A.8 added; HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md relocated from repo root). Amended 2026-05-04 late evening via PR `feat/t-act-062-vix-vvix-freshness-guard` (T-ACT-062 EXECUTE shipped — VVIX/VIX/VIX9D freshness guard via Option β soft-warn per SD-1, 330s constant extracted to `POLYGON_FRESHNESS_THRESHOLD_SECONDS`, new `polygon_index_helpers.py` shared parser module, 19 new unit tests, T-ACT-061 §7.1 gate waived per SD-5 operator instruction; T-ACT-065 evaluation window opened with due date 2026-05-12). Amended 2026-05-06 mid-RTH via PR `fix/t-act-072-databento-ts-event-age-filter` (T-ACT-072 EXECUTE shipped — producer-side `ts_event` age filter on Databento OPRA trades closes the frankenstein-record surface; CRITIQUE-FIRST Q1-Q8 discipline applied per markets-open / "do not cause further break" operator mandate; YELLOW authorization with three modifications: instance-variable counter, fixture-default refresh, variable-name correction `ts_ns`; four new tests; updated `_mk_trade_mock` default to `time.time_ns()` to keep three pre-existing tests passing). Amended 2026-05-07 via PR `fix/t-act-076-binary-labeler-position-1a` (T-ACT-076 EXECUTE shipped — F-068-I Position 1a binary-labeler fix matching `train_direction_model.py:323-325` byte-for-byte, bundled with F-068-A schema-CHECK widening on `trading_model_performance.drift_status` + narrow `PostgrestAPIError` classifier in `run_weekly_model_performance` per T-ACT-047 Choice C precedent. CRITIQUE-FIRST Q1-Q12 discipline applied; YELLOW authorization with three Phase 2 governance amendments: explicit Q5 regime-dependent confound documentation, T-ACT-081 added as queued-deferred entry, post-deploy verification SQL expanded with `pred_direction × outcome_direction` crosstab. Eight new tests (3 in `test_phase_a1.py` + 5 in `test_t_act_076_weekly_perf_persistent_error.py`); zero suite regressions confirmed via stash-and-baseline comparison.*
+*Section 14 opened: 2026-05-01 | Owner: tesfayekb. Amended 2026-05-03 via Track B PR (T-ACT-045 status update; T-ACT-046 scope expansion; T-ACT-048/050/051/054 added; T-ACT-049 subsumed per numbering note above). Amended 2026-05-04 evening via PR `docs/post-incident-indices-advanced-2026-05-04` (T-ACT-061 closed-resolved subscription upgrade; T-ACT-062 queued VVIX/VIX/VIX9D freshness; T-ACT-063 queued email egress; T-ACT-064 informational retraining decision tracking; HANDOFF NOTE Appendix A.8 added; HANDOFF_NOTE_2026-05-04_INDICES_OUTAGE.md relocated from repo root). Amended 2026-05-04 late evening via PR `feat/t-act-062-vix-vvix-freshness-guard` (T-ACT-062 EXECUTE shipped — VVIX/VIX/VIX9D freshness guard via Option β soft-warn per SD-1, 330s constant extracted to `POLYGON_FRESHNESS_THRESHOLD_SECONDS`, new `polygon_index_helpers.py` shared parser module, 19 new unit tests, T-ACT-061 §7.1 gate waived per SD-5 operator instruction; T-ACT-065 evaluation window opened with due date 2026-05-12). Amended 2026-05-06 mid-RTH via PR `fix/t-act-072-databento-ts-event-age-filter` (T-ACT-072 EXECUTE shipped — producer-side `ts_event` age filter on Databento OPRA trades closes the frankenstein-record surface; CRITIQUE-FIRST Q1-Q8 discipline applied per markets-open / "do not cause further break" operator mandate; YELLOW authorization with three modifications: instance-variable counter, fixture-default refresh, variable-name correction `ts_ns`; four new tests; updated `_mk_trade_mock` default to `time.time_ns()` to keep three pre-existing tests passing). Amended 2026-05-07 via PR `fix/t-act-076-binary-labeler-position-1a` (T-ACT-076 EXECUTE shipped — F-068-I Position 1a binary-labeler fix matching `train_direction_model.py:323-325` byte-for-byte, bundled with F-068-A schema-CHECK widening on `trading_model_performance.drift_status` + narrow `PostgrestAPIError` classifier in `run_weekly_model_performance` per T-ACT-047 Choice C precedent. CRITIQUE-FIRST Q1-Q12 discipline applied; YELLOW authorization with three Phase 2 governance amendments: explicit Q5 regime-dependent confound documentation, T-ACT-081 added as queued-deferred entry, post-deploy verification SQL expanded with `pred_direction × outcome_direction` crosstab. Eight new tests (3 in `test_phase_a1.py` + 5 in `test_t_act_076_weekly_perf_persistent_error.py`); zero suite regressions confirmed via stash-and-baseline comparison. Amended 2026-05-07 via PR `fix/t-act-082-feature-pipeline-completion` (T-ACT-082 EXECUTE shipped — Path Alpha subset feature-pipeline completion: 3 new byte-for-byte writers (`polygon:spx:bb_pct_b`, `polygon:spx:macd_signal`, `polygon:vix:5d_change`) byte-aligned with `train_direction_model.py:237-298` + `polygon:spx:realized_vol_20d` migrated from 12A daily-basis (`sqrt(252)`) to 5-min basis (`sqrt(252*78)`) with new 1560-bar buffer + B.1.iii Polygon `/v2/aggs` startup backfill eliminating 3-week cold-start; T-ACT-083 governance reclassification of F-068-G + T-ACT-064 dependency note bundled; T-ACT-084 (daily-aligned VIX series), T-ACT-085 (SPX OHLC fetch + day-boundary state), T-ACT-086 (`polygon:spx:open` writer / 8th A.7-family subclass) opened as queued-deferred entries. CRITIQUE-FIRST Q1-Q14 discipline applied; YELLOW authorization after Phase 1 surfaced three STOP-class issues (cache-class insufficiency for OHLC features, 1560-bar buffer feasibility, anti-Scope-B test file) — operator independently verified all three then authorized Path Alpha subset over Path Beta (bundle OHLC, ~570 LOC) and Path Gamma (close-only approximations, rejected per workflow rule #11). 18 new tests (8 in `test_spx_5m_basis_rv.py` superseding `test_spx_daily_rv.py` + 10 in `test_t_act_082_feature_writers.py`); zero suite regressions confirmed.*
 
 ---
 
