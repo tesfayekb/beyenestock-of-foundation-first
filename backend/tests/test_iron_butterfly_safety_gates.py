@@ -233,9 +233,13 @@ def test_iv_rv_threshold_blocks_when_vix_cheap():
 
 
 def test_iv_rv_threshold_skips_when_rv_cold():
-    """RV 1.29 from intraday 5-min buffer is garbage. Data-warmth guard
-    skips the filter so it doesn't produce false-positives against
-    obviously-wrong realized vol."""
+    """Sub-5 RV values are anomalous. Under T-ACT-082 the 5-min-basis
+    writer in `polygon_feed._compute_spx_features` produces realistic
+    ~10-30% values once backfill lands; sub-5 indicates either backfill
+    failure or extraordinary market conditions. Data-warmth guard skips
+    the filter so it doesn't produce false-positives against obviously
+    wrong realized vol — same defensive contract as the original 12A
+    cold-start window, retained per T-ACT-082 rationale."""
     from prediction_engine import PredictionEngine
     engine = PredictionEngine.__new__(PredictionEngine)
 

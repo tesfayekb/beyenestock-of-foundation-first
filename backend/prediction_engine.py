@@ -1266,11 +1266,16 @@ class PredictionEngine:
         #
         # P-day butterfly safety sprint (Opus 4.7 review 2026-04-20):
         #   threshold raised 1.05 → 1.10 (match tests/docs, real edge band)
-        #   added data-warmth guard rv_val >= 5.0 — polygon_feed's current
-        #   realized_vol_20d is computed from an intraday 5-min buffer and
-        #   emits garbage values (1.05-1.29) while the true 20-day daily
-        #   RV builder warms up. Skipping the filter when rv < 5 prevents
-        #   false positives against obviously-wrong data.
+        #   added data-warmth guard rv_val >= 5.0 — original rationale was
+        #   that a buggy intraday-bars-with-daily-annualization writer
+        #   emitted 1.05-1.29 garbage values during cold-start. T-ACT-082
+        #   (2026-05-07) replaced both the 12A daily-basis writer and that
+        #   original buggy intraday writer with a 5-min-basis writer that
+        #   is byte-aligned with the LightGBM training pipeline
+        #   (`train_direction_model.py:292-298`). The warmth guard is
+        #   retained as a defensive sanity check — Polygon backfill failures
+        #   or unusual market conditions could still produce sub-5 values
+        #   and the guard remains the cheapest false-positive prevention.
         try:
             # T-ACT-062: parse polygon:vix:current via the backward-
             # compatible helper so legacy raw-float values AND the new

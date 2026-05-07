@@ -40,30 +40,54 @@ class PolygonFeed:
         # same session can't over-saturate the rolling window.
         self.vix_daily_history: List[float] = []
         self._vix_daily_date_written: Optional[str] = None
-        # 12A: True 20-day SPX daily realized vol. The prior
-        # implementation read self.spx_history (5-minute intraday
-        # bars, 60 samples max) and wrote the variance-of-5-min-log-
-        # returns * sqrt(252) to polygon:spx:realized_vol_20d. The
-        # annualization factor 252 is for *daily* returns, so
-        # annualizing 5-min returns that way underestimates by a
-        # factor of sqrt(78) ≈ 8.8 — producing 1.05-1.29% instead of
-        # the true ~15-20% SPX daily RV. Every downstream consumer
-        # (P0.4 IV/RV filter, LightGBM iv_rv_ratio feature, butterfly
-        # threshold tuning) read garbage.
+        # T-ACT-082 (2026-05-07) — supersedes 12A.
+        # ---------------------------------------------------------
+        # 12A first-pass history: an earlier implementation computed
+        # `polygon:spx:realized_vol_20d` from `self.spx_history`
+        # (5-min intraday bars, 60 samples) annualized with the
+        # *daily* factor sqrt(252), under-stating SPX RV by ~sqrt(78)
+        # ≈ 8.8x and producing 1.05-1.29% instead of the true
+        # ~15-20%. 12A swapped this for a daily-basis writer (one
+        # SPX daily return per session, 20-day window, sqrt(252)
+        # annualization).
         #
-        # The new series is appended once per trading day in the same
-        # 19:00 UTC EOD gate as the VIX daily history (T1-7 pattern),
-        # sourcing each sample from polygon:spx:prior_day_return (the
-        # session-over-session return fixed by T1-4 in S13). Capped at
-        # 20 trading days.
+        # T-ACT-082 (Path Alpha, Scope B) reverts to a 5-min-basis
+        # series — but with the CORRECT annualization factor
+        # sqrt(252 * 78) — to align byte-for-byte with the LightGBM
+        # training pipeline (`scripts/train_direction_model.py:292-298`):
+        #
+        #     df["rv_20d"] = (
+        #         df["return_5m"]
+        #         .rolling(20 * 78)
+        #         .std()
+        #         * np.sqrt(252 * 78)
+        #         * 100
+        #     )
+        #
+        # The new state below replaces `spx_daily_returns` for the
+        # purposes of `polygon:spx:realized_vol_20d`. Capacity 1560
+        # = 20 trading days * 78 5-min bars/day (the rolling window
+        # used in training). Backfilled at startup from Polygon's
+        # 5-min aggregates so production does not run with a 3-week
+        # cold-start window where rv_20d falls back to the
+        # `prediction_engine` default 15.0 — same ROI-preservation
+        # discipline (workflow rule #11) that motivated
+        # `_backfill_vix_history` for the VIX series.
+        self._spx_5m_returns_history: List[float] = []
+        self._spx_5m_history_max: int = 1560  # 20 days * 78 bars
+        self._spx_5m_backfill_done: bool = False
+        # Legacy daily-basis buffer retained as a no-op for backwards
+        # compatibility with tests / callers that touch it via
+        # __new__-bypass-init paths. Under T-ACT-082, daily-basis
+        # realized-vol writes are removed from
+        # `_append_spx_daily_return_if_due`; the 5-min-basis writer
+        # in `_compute_spx_features` is now the SOLE producer of
+        # `polygon:spx:realized_vol_20d`.
         self.spx_daily_returns: List[float] = []
         self._spx_daily_date_written: Optional[str] = None
         # T1-7 pattern: restore last-append date from Redis so a
         # process restart near EOD can't double-append the same
-        # calendar day. Independent of the VIX guard — SPX may have
-        # appended today even if VIX hasn't, or vice versa. Best-
-        # effort: if Redis is unavailable at startup, fall back to
-        # the in-memory guard only (matches VIX's graceful degrade).
+        # calendar day. Independent of the VIX guard. Best-effort.
         try:
             _last_spx_date = self.redis_client.get(
                 "polygon:spx:daily_returns:last_date"
@@ -135,6 +159,23 @@ class PolygonFeed:
             await self._backfill_vix_history()
         except Exception as exc:
             logger.warning("vix_history_backfill_skipped", error=str(exc))
+
+        # T-ACT-082 (Scope B.1.iii): seed `_spx_5m_returns_history`
+        # (and `spx_history`) from Polygon's 5-min aggregates so
+        # `polygon:spx:realized_vol_20d` (5-min basis, 1560-bar window
+        # per training byte-alignment) is available within the FIRST
+        # poll cycle instead of after a 3-week organic warmup. Without
+        # this, the live system would run with `rv_20d` falling back
+        # to the prediction-engine default 15.0 for ~21 trading days,
+        # operationally activating the same regression T-ACT-082 fixes.
+        # Failure here is non-fatal — we log and continue with the
+        # cold-start behaviour (per-cycle organic accumulation).
+        try:
+            await self._backfill_spx_5m_history()
+        except Exception as exc:
+            logger.warning(
+                "spx_5m_history_backfill_skipped", error=str(exc)
+            )
 
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         poll_task = asyncio.create_task(self._poll_loop())
@@ -313,15 +354,16 @@ class PolygonFeed:
                                     error=type(prev_exc).__name__,
                                 )
 
-                        # 12A: polygon:spx:realized_vol_20d is now
-                        # written once per trading day in
-                        # _append_spx_daily_return_if_due (called from
-                        # _store_vix_baseline's 19:00 UTC gate).
-                        # Writing it here from 5-minute intraday bars
-                        # annualized with the daily factor 252 was the
-                        # root cause of the 1.05-1.29% garbage values
-                        # that poisoned every downstream consumer —
-                        # see __init__ for the full analysis.
+                        # T-ACT-082 supersedes 12A.
+                        # `polygon:spx:realized_vol_20d` is now written
+                        # once per 5-min poll cycle from
+                        # `_compute_spx_features` (5-min basis, 1560-bar
+                        # rolling std × sqrt(252*78) × 100, byte-aligned
+                        # with `train_direction_model.py:292-298`). The
+                        # daily-basis writer in
+                        # `_append_spx_daily_return_if_due` was removed
+                        # as part of T-ACT-082 Scope B; see __init__
+                        # comment block for the full Scope-B rationale.
                     except Exception as exc:
                         logger.warning("polygon_iv_rv_update_failed", error=str(exc))
 
@@ -516,12 +558,12 @@ class PolygonFeed:
                 self.vix_daily_history = self.vix_daily_history[-20:]
                 self._vix_daily_date_written = today_str
 
-        # 12A: SPX daily realized vol — share the same 21:00 UTC EOD
-        # gate as VIX (but with an INDEPENDENT date-written guard so a
-        # VIX-only skip in the block above doesn't block SPX, and vice
-        # versa). Co-locating both daily updates here means a single
-        # code path runs after the 16:00 ET cash close; _poll_loop no
-        # longer touches polygon:spx:realized_vol_20d.
+        # T-ACT-082 (supersedes 12A). The 21:00 UTC EOD gate now only
+        # maintains the daily-returns buffer and Redis date guard for
+        # potential future use; the realized-vol write moved to
+        # `_compute_spx_features` (5-min basis, called once per poll
+        # cycle). Independent date-written guard from VIX preserved so
+        # restart semantics are unchanged.
         if now.hour >= 21:
             self._append_spx_daily_return_if_due(today_str)
 
@@ -568,6 +610,28 @@ class PolygonFeed:
         self.redis_client.setex(
             "polygon:vix:z_score_daily", 7200, str(z_score)
         )
+
+        # T-ACT-082 Scope A: vix_5d_change. Byte-aligned with
+        # `train_direction_model.py:274-276`:
+        #   daily_vix = vix.set_index("date")["vix_close"]
+        #   df["vix_5d_change"] = daily_vix.pct_change(5).map(...)
+        # i.e. (daily_vix[t] - daily_vix[t-5]) / daily_vix[t-5].
+        # Requires >= 6 daily samples; the daily-history backfill at
+        # startup seeds 20 days from /v2/aggs/I:VIX/range/1/day so
+        # this is ordinarily true on the FIRST poll cycle. Cold-start
+        # tolerated: writer simply skips the key, the inference site
+        # at `prediction_engine.py:1085-1110` uses the
+        # `_read_redis(..., "0.0")` default for that warmup window.
+        if len(self.vix_daily_history) >= 6:
+            vix_t = self.vix_daily_history[-1]
+            vix_t5 = self.vix_daily_history[-6]
+            if vix_t5:
+                vix_5d_change = (vix_t - vix_t5) / vix_t5
+                self.redis_client.setex(
+                    "polygon:vix:5d_change",
+                    7200,
+                    str(round(vix_5d_change, 6)),
+                )
         logger.debug(
             "polygon_vix_zscore_updated",
             vix=round(current, 2),
@@ -580,30 +644,23 @@ class PolygonFeed:
         )
 
     def _append_spx_daily_return_if_due(self, today_str: str) -> None:
-        """12A: Append today's SPX session return to the 20-day rolling
-        window and recompute true daily realized vol.
+        """T-ACT-082 (Scope B supersession of 12A).
 
-        Source: polygon:spx:prior_day_return, set once per poll in
-        _compute_spx_features() as
-            (live_price - prior_session_close) / prior_session_close
-        — the genuine session-over-session return fixed by T1-4 in S13.
+        Under 12A this function was the SOLE writer of
+        `polygon:spx:realized_vol_20d` (daily-basis, sqrt(252)
+        annualization, 20-sample rolling window). T-ACT-082 reverts to
+        a 5-min-basis writer in `_compute_spx_features` (1560-sample
+        rolling window, sqrt(252*78) annualization), byte-aligned with
+        `train_direction_model.py:292-298`. The realized-vol write is
+        therefore REMOVED from this function.
 
-        Guards:
-          * In-memory: _spx_daily_date_written prevents re-append within
-            the same process after the first EOD pass.
-          * Redis: polygon:spx:daily_returns:last_date (25-day TTL,
-            restored in __init__) survives process restarts so a
-            restart at 19:05 UTC after an append at 19:00 UTC cannot
-            double-count. Mirrors T1-7's VIX daily history guard.
-
-        Writes (best-effort, never raises):
-          * polygon:spx:realized_vol_20d     — 24h TTL. Only when
-            len(spx_daily_returns) >= 5. Downstream readers
-            (prediction_engine IV/RV filter) already apply a
-            rv_val >= 5.0 warmth guard, so the 1-4 day cold-start
-            window is explicitly tolerated.
-          * polygon:spx:daily_returns:last_date — 25-day TTL restart
-            guard (comfortably covers long holiday weekends).
+        The daily-returns buffer + Redis date guard are retained as a
+        no-op data path so existing tests that exercise this method via
+        `__new__`-bypass-init paths continue to pass and so a future
+        T-ACT (e.g. a daily-basis observability sibling for human-eye
+        sanity-checking) can plug back in without re-introducing the
+        deprecated writer. Behavioural change is one-way: this function
+        no longer touches `polygon:spx:realized_vol_20d`.
         """
         # Lazy-init for callers that bypass __init__ via __new__ (tests).
         if not hasattr(self, "spx_daily_returns"):
@@ -633,35 +690,18 @@ class PolygonFeed:
 
             self._spx_daily_date_written = today_str
 
-            # Persist last-date to Redis (25-day TTL).
+            # Persist last-date to Redis (25-day TTL). Retained even
+            # under T-ACT-082 so a future daily-basis sibling writer
+            # has the same restart-guard infrastructure available
+            # without re-introducing the deprecated semantics.
             self.redis_client.setex(
                 "polygon:spx:daily_returns:last_date",
                 86400 * 25,
                 today_str,
             )
-
-            if len(self.spx_daily_returns) >= 5:
-                import math
-                n = len(self.spx_daily_returns)
-                mean_r = sum(self.spx_daily_returns) / n
-                variance = sum(
-                    (r - mean_r) ** 2 for r in self.spx_daily_returns
-                ) / n
-                realized_vol = math.sqrt(variance * 252) * 100
-                self.redis_client.setex(
-                    "polygon:spx:realized_vol_20d",
-                    86400,
-                    str(round(realized_vol, 4)),
-                )
-                logger.info(
-                    "polygon_spx_daily_rv_updated",
-                    realized_vol=round(realized_vol, 2),
-                    daily_days=n,
-                    latest_return=round(daily_return, 4),
-                )
         except Exception as exc:
             logger.warning(
-                "polygon_spx_daily_rv_failed",
+                "polygon_spx_daily_return_append_failed",
                 error=str(exc),
             )
 
@@ -968,6 +1008,110 @@ class PolygonFeed:
                 error=type(exc).__name__,
             )
 
+    async def _backfill_spx_5m_history(self) -> None:
+        """
+        T-ACT-082 (Scope B.1.iii): backfill the 5-min returns buffer
+        from Polygon's 5-minute aggregates so `polygon:spx:realized_vol_20d`
+        (5-min basis, 1560-bar rolling std × sqrt(252*78) × 100, byte-
+        for-byte aligned with `train_direction_model.py:292-298`) is
+        meaningful from poll cycle #1 instead of waiting ~21 trading
+        days for organic accumulation.
+
+        Also seeds `self.spx_history[-60:]` from the last 60 closes of
+        the same response so `safe_return(48)` (return_4h) and the
+        bb_pct_b / macd_signal feature paths added in
+        `_compute_spx_features` are warm at startup. (Without this seed,
+        the EMA recursion for macd_signal carries an initial-condition
+        transient for ~30 minutes after restart.)
+
+        Endpoint: `/v2/aggs/ticker/I:SPX/range/5/minute/{start}/{end}`,
+        the same endpoint that produced the training parquet
+        (`scripts/download_historical_data.py:103-152`). 35 calendar
+        days ≈ 25 trading days × 78 bars/day = ~1950 bars, comfortably
+        > the 1561-close minimum for 1560 returns.
+
+        Fails silently — never blocks startup if Polygon is down or
+        the API key is missing. In that case the buffers stay empty and
+        the live writer in `_compute_spx_features` accumulates organically
+        (the cold-start regression flagged in the T-ACT-082 critique
+        Q9 "without backfill" branch).
+        """
+        try:
+            import config
+            if not getattr(config, "POLYGON_API_KEY", ""):
+                logger.debug("spx_5m_backfill_no_api_key")
+                return
+
+            from datetime import date, timedelta
+            import httpx
+
+            end_date = date.today()
+            start_date = end_date - timedelta(days=35)
+
+            url = (
+                f"https://api.polygon.io/v2/aggs/ticker/I:SPX/range/5/minute"
+                f"/{start_date.isoformat()}/{end_date.isoformat()}"
+            )
+            params = {
+                "adjusted": "true",
+                "sort": "asc",
+                # Polygon paginates above 5000; the 35-day window fits
+                # well inside one page (~1950 bars max).
+                "limit": "5000",
+                "apiKey": config.POLYGON_API_KEY,
+            }
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(url, params=params)
+
+            if resp.status_code != 200:
+                logger.warning(
+                    "spx_5m_backfill_failed",
+                    status=resp.status_code,
+                )
+                return
+
+            results = resp.json().get("results", []) or []
+            closes = [float(r["c"]) for r in results if "c" in r]
+
+            if len(closes) < 2:
+                logger.warning(
+                    "spx_5m_backfill_insufficient",
+                    bars_returned=len(closes),
+                )
+                return
+
+            # Compute 5-min returns from successive closes. This
+            # mirrors `df["close"].pct_change(1)` in
+            # train_direction_model.py:215.
+            returns = [
+                (closes[i] - closes[i - 1]) / closes[i - 1]
+                for i in range(1, len(closes))
+                if closes[i - 1]
+            ]
+
+            self._spx_5m_returns_history = returns[
+                -self._spx_5m_history_max:
+            ]
+            # Also seed spx_history with the last 60 closes so EMA-
+            # based features (macd_signal) and the safe_return(48)
+            # window are warm at startup.
+            if not self.spx_history:
+                self.spx_history = closes[-60:]
+
+            self._spx_5m_backfill_done = True
+            logger.info(
+                "spx_5m_history_backfilled",
+                bars=len(self._spx_5m_returns_history),
+                seeded_closes=len(self.spx_history),
+            )
+
+        except Exception as exc:
+            logger.warning(
+                "spx_5m_backfill_error",
+                error=type(exc).__name__,
+            )
+
     async def _fetch_spx_price(self) -> Optional[float]:
         """
         E-1: Fetch live intraday SPX index price from the Polygon snapshot
@@ -1127,6 +1271,29 @@ class PolygonFeed:
         return self._normalize_polygon_timestamp(upstream_ts_raw)
 
     @staticmethod
+    def _ewm_adjust_false(values: List[float], span: int) -> List[float]:
+        """T-ACT-082: replicate `pandas.Series.ewm(span=span, adjust=False).mean()`.
+
+        Used by `_compute_spx_features` for the MACD line and the
+        9-bar smoothing inside `macd_signal`. Byte-aligned with the
+        recurrence pandas applies under `adjust=False`:
+
+            alpha = 2 / (span + 1)
+            y[0]  = x[0]
+            y[t]  = alpha * x[t] + (1 - alpha) * y[t-1]
+
+        Returns a list the same length as `values`. Empty input → []
+        (caller is responsible for the warmup-length precondition).
+        """
+        if not values:
+            return []
+        alpha = 2.0 / (span + 1.0)
+        result = [values[0]]
+        for v in values[1:]:
+            result.append(alpha * v + (1.0 - alpha) * result[-1])
+        return result
+
+    @staticmethod
     def _normalize_polygon_timestamp(value) -> Optional[str]:
         """Convert Polygon's various timestamp representations to ISO 8601.
 
@@ -1218,6 +1385,13 @@ class PolygonFeed:
         Compute SPX technical features from recent price history.
         Stores to Redis for LightGBM model inference.
         Requires >= 2 SPX close values in self.spx_history.
+
+        T-ACT-082 (Scope A subset + Scope B): also writes
+        `polygon:spx:bb_pct_b`, `polygon:spx:macd_signal`, and
+        `polygon:spx:realized_vol_20d` (5-min basis) — all three
+        byte-for-byte aligned with the corresponding columns in
+        `scripts/train_direction_model.py:215-298`. See `__init__`
+        comment block on the supersession of 12A daily-basis RV.
         """
         if len(self.spx_history) < 2:
             return
@@ -1231,10 +1405,99 @@ class PolygonFeed:
                 return (c - closes[-(n + 1)]) / closes[-(n + 1)] if closes[-(n + 1)] else 0.0
             return 0.0
 
-        self.redis_client.setex("polygon:spx:return_5m",  300, str(safe_return(1)))
+        return_5m_value = safe_return(1)
+        self.redis_client.setex("polygon:spx:return_5m",  300, str(return_5m_value))
         self.redis_client.setex("polygon:spx:return_30m", 300, str(safe_return(6)))
         self.redis_client.setex("polygon:spx:return_1h",  300, str(safe_return(12)))
         self.redis_client.setex("polygon:spx:return_4h",  300, str(safe_return(48)))
+
+        # T-ACT-082 Scope B: append the latest 5-min return to the
+        # 1560-bar rolling buffer used for `realized_vol_20d` (5-min
+        # basis). Lazy-init for callers that bypass __init__ via
+        # __new__ (matches the lazy-init pattern used elsewhere in
+        # this file for older test fixtures). Cap is enforced after
+        # append so the buffer never grows past
+        # `_spx_5m_history_max` between cycles.
+        if not hasattr(self, "_spx_5m_returns_history"):
+            self._spx_5m_returns_history = []
+        if not hasattr(self, "_spx_5m_history_max"):
+            self._spx_5m_history_max = 1560
+        # Skip the very first append: with only spx_history[-2:] we
+        # would write the same return into both `return_5m` and the
+        # rolling buffer, but the buffer's job is to accumulate ONE
+        # NEW return per poll cycle. The poll-loop guarantees this:
+        # `_compute_spx_features` runs once per 5-min cycle after a
+        # fresh `spx_history.append(spx_price)`, so each cycle's
+        # `safe_return(1)` is a genuinely-new sample.
+        self._spx_5m_returns_history.append(return_5m_value)
+        if len(self._spx_5m_returns_history) > self._spx_5m_history_max:
+            self._spx_5m_returns_history = self._spx_5m_returns_history[
+                -self._spx_5m_history_max:
+            ]
+
+        # T-ACT-082 Scope B: realized_vol_20d on the 5-min basis.
+        # Byte-aligned with `train_direction_model.py:292-298`:
+        #   df["return_5m"].rolling(20*78).std() * sqrt(252*78) * 100
+        # pandas' .std() defaults to ddof=1 (sample std).
+        if len(self._spx_5m_returns_history) >= self._spx_5m_history_max:
+            import math
+            window = self._spx_5m_returns_history[-self._spx_5m_history_max:]
+            n = len(window)
+            mean_r = sum(window) / n
+            # ddof=1 sample std to match pandas .std()
+            variance = sum((r - mean_r) ** 2 for r in window) / (n - 1)
+            std = variance ** 0.5
+            rv_20d = std * math.sqrt(252 * 78) * 100
+            # 300s TTL so a crashed feed cannot leave a stale value
+            # past one poll cycle. Same TTL discipline as
+            # `polygon:spx:return_5m` above.
+            self.redis_client.setex(
+                "polygon:spx:realized_vol_20d",
+                300,
+                str(round(rv_20d, 4)),
+            )
+
+        # T-ACT-082 Scope A: bb_pct_b. Byte-aligned with
+        # `train_direction_model.py:242-244`:
+        #   sma20 = df["close"].rolling(20).mean()
+        #   std20 = df["close"].rolling(20).std()    # ddof=1
+        #   bb_pct_b = (close - (sma20 - 2*std20)) / (4*std20)
+        if len(closes) >= 20:
+            last20 = closes[-20:]
+            sma20 = sum(last20) / 20
+            variance20 = sum((x - sma20) ** 2 for x in last20) / 19
+            std20 = variance20 ** 0.5
+            if std20 > 0:
+                bb_pct_b = (c - (sma20 - 2 * std20)) / (4 * std20)
+                self.redis_client.setex(
+                    "polygon:spx:bb_pct_b",
+                    300,
+                    str(round(bb_pct_b, 6)),
+                )
+
+        # T-ACT-082 Scope A: macd_signal (which is the MACD HISTOGRAM
+        # in training, despite the column name). Byte-aligned with
+        # `train_direction_model.py:237-240`:
+        #   ema12 = df["close"].ewm(span=12, adjust=False).mean()
+        #   ema26 = df["close"].ewm(span=26, adjust=False).mean()
+        #   macd  = ema12 - ema26
+        #   df["macd_signal"] = macd - macd.ewm(span=9, adjust=False).mean()
+        # The 35-bar warmup minimum is the smallest n such that the
+        # initial-condition transient for the 9-bar EMA-of-MACD has
+        # decayed below ~1% (since (1 - 2/10)^35 ≈ 0.0003). The
+        # backfill seeded spx_history[-60:] so this branch is
+        # ordinarily true on the FIRST poll cycle.
+        if len(closes) >= 35:
+            ema12 = self._ewm_adjust_false(closes, 12)
+            ema26 = self._ewm_adjust_false(closes, 26)
+            macd_line = [a - b for a, b in zip(ema12, ema26)]
+            macd_signal_smoothed = self._ewm_adjust_false(macd_line, 9)
+            macd_histogram = macd_line[-1] - macd_signal_smoothed[-1]
+            self.redis_client.setex(
+                "polygon:spx:macd_signal",
+                300,
+                str(round(macd_histogram, 6)),
+            )
 
         # T1-4: prior_day_return = TRUE session-over-session return.
         # The previous code computed (closes[-1] - closes[-2]) / closes[-2]
