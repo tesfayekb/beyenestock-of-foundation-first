@@ -11,6 +11,14 @@ from collections import defaultdict
 import config
 import httpx
 
+# T-ACT-076 Scope B / F-068-A (2026-05-07): classify postgrest
+# persistent (schema/RLS) errors at the weekly model-performance
+# persist site. Same canonical full path as the T-ACT-047 Choice C
+# precedent at prediction_engine.py:19. postgrest is a transitive
+# dep via supabase==2.10.0 (requirements.txt:1) so the hard import
+# is guaranteed in production.
+from postgrest.exceptions import APIError as PostgrestAPIError
+
 from db import get_client, write_health_status, write_audit_log
 from logger import get_logger
 
@@ -133,16 +141,18 @@ def label_prediction_outcomes(target_date: Optional[date] = None) -> dict:
                     summary["skipped"] += 1
                     continue
 
-                # Compute return and direction
+                # Compute return and direction.
+                # T-ACT-076 / F-068-I (2026-05-06): binary classifier.
+                # Byte-for-byte aligned with backend/scripts/train_direction_model.py:323-325
+                # ("bull" if r > 0 else "bear") so the labeler's class space matches
+                # the trained LightGBM model's class space. Strict `> 0` matches
+                # training; spx_return == 0.0 → "bear" (vanishingly rare under
+                # float division). Completes the same-day binary-revert that
+                # commit 84617a1 (2026-04-17 16:22 ET) applied to the training
+                # script but missed in this labeler — see
+                # HANDOFF_NOTE_2026-05-06_F068I_BINARY_LABELER_FIX.md.
                 spx_return = (spx_at_t30 - spx_at_signal) / spx_at_signal
-                DIRECTION_THRESHOLD = 0.001  # ±0.1%
-
-                if spx_return > DIRECTION_THRESHOLD:
-                    actual_direction = "bull"
-                elif spx_return < -DIRECTION_THRESHOLD:
-                    actual_direction = "bear"
-                else:
-                    actual_direction = "neutral"
+                actual_direction = "bull" if spx_return > 0 else "bear"
 
                 is_correct = pred_direction == actual_direction
 
@@ -674,7 +684,77 @@ def run_weekly_model_performance() -> dict:
             "challenger_active": False,  # Phase 4B: no challenger yet
         }
 
-        get_client().table("trading_model_performance").insert(payload).execute()
+        # T-ACT-076 Scope B / F-068-A (2026-05-07): narrow inner
+        # try/except surfaces PostgrestAPIError (schema/RLS class —
+        # PGRST20x family) with rich structured logging instead of
+        # collapsing to the outer broad-except below. Pattern is
+        # byte-for-byte aligned with the T-ACT-047 Choice C
+        # precedent at prediction_engine.py:1641-1690 — keep the two
+        # call-sites in lock-step to make A.7-family detection
+        # uniform across persist sites. Companion migration
+        # 20260507_widen_drift_status_check.sql widens the CHECK
+        # constraint that this catch-block was historically
+        # silently swallowing (every Sunday 22:05 UTC weekly run
+        # whenever drift_status='ok' or 'unknown').
+        try:
+            (
+                get_client()
+                .table("trading_model_performance")
+                .insert(payload)
+                .execute()
+            )
+        except PostgrestAPIError as persist_err:
+            pgrst_code = getattr(persist_err, "code", None)
+            pgrst_details = getattr(persist_err, "details", None)
+            pgrst_hint = getattr(persist_err, "hint", None)
+            logger.warning(
+                "weekly_model_performance_persistent_error",
+                error_class="postgrest_api_error",
+                pgrst_code=pgrst_code,
+                pgrst_details=pgrst_details,
+                pgrst_hint=pgrst_hint,
+                drift_status_attempted=drift.get("drift_status"),
+                error=str(persist_err),
+                exc_info=True,
+            )
+            write_health_status(
+                "prediction_engine",
+                "error",
+                last_error_message=(
+                    f"PERSISTENT[{pgrst_code or 'unknown'}]: "
+                    f"weekly_model_performance insert failed — "
+                    f"{str(persist_err)[:160]}"
+                ),
+            )
+            try:
+                from alerting import send_alert, CRITICAL
+                send_alert(
+                    CRITICAL,
+                    "weekly_model_performance_persistent_error",
+                    (
+                        f"Postgrest schema/RLS error on "
+                        f"trading_model_performance insert: "
+                        f"code={pgrst_code}, "
+                        f"detail={pgrst_details}, "
+                        f"hint={pgrst_hint}, "
+                        f"drift_status_attempted="
+                        f"{drift.get('drift_status')}. "
+                        f"Persistent class — will not self-heal "
+                        f"via retry. Investigate schema-code "
+                        f"coupling (see T-ACT-076 / F-068-A)."
+                    ),
+                )
+            except Exception as alert_err:
+                logger.warning(
+                    "weekly_model_performance_persistent_alert_failed",
+                    alert_error=str(alert_err),
+                    original_error=str(persist_err),
+                )
+            return {
+                "error": (
+                    f"persistent_postgrest:{pgrst_code or 'unknown'}"
+                )
+            }
 
         summary = {
             "accuracy_5d": acc_5d.get("accuracy"),
@@ -693,6 +773,11 @@ def run_weekly_model_performance() -> dict:
         return summary
 
     except Exception as e:
+        # Outer broad-except preserved for non-postgrest failure
+        # classes (network errors talking to Polygon/Supabase,
+        # bug in compute_*_accuracy, write_audit_log failures,
+        # etc.). Postgrest schema/RLS errors are now classified
+        # by the inner block above before reaching this point.
         logger.error(
             "weekly_model_performance_failed", error=str(e), exc_info=True
         )
