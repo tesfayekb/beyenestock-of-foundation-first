@@ -11,6 +11,7 @@ from logger import get_logger
 from risk_engine import check_execution_quality
 from session_manager import get_today_session, update_session
 from strategy_selector import STATIC_SLIPPAGE_BY_STRATEGY
+import flag_service
 
 logger = get_logger("execution_engine")
 
@@ -532,20 +533,19 @@ class ExecutionEngine:
                     import config as _cfg
                     redis_client = getattr(self, "redis_client", None)
 
-                    def _flag(key: str) -> bool:
-                        if not redis_client:
-                            return False
-                        try:
-                            raw = redis_client.get(key)
-                            return raw in ("true", b"true")
-                        except Exception:
-                            return False
-
                     position["decision_context"] = {
-                        "synthesis_enabled": _flag("agents:ai_synthesis:enabled"),
-                        "flow_enabled":      _flag("agents:flow_agent:enabled"),
-                        "sentiment_enabled": _flag("agents:sentiment_agent:enabled"),
-                        "ai_hint_override":  _flag("strategy:ai_hint_override:enabled"),
+                        "synthesis_enabled": flag_service.is_enabled(
+                            redis_client, "agents:ai_synthesis:enabled"
+                        ),
+                        "flow_enabled": flag_service.is_enabled(
+                            redis_client, "agents:flow_agent:enabled"
+                        ),
+                        "sentiment_enabled": flag_service.is_enabled(
+                            redis_client, "agents:sentiment_agent:enabled"
+                        ),
+                        "ai_hint_override": flag_service.is_enabled(
+                            redis_client, "strategy:ai_hint_override:enabled"
+                        ),
                         "ai_provider":       getattr(_cfg, "AI_PROVIDER", "anthropic"),
                         "ai_model":          getattr(_cfg, "AI_MODEL", "claude-sonnet-4-5"),
                         "prediction_source": prediction.get("source", "rule_based"),

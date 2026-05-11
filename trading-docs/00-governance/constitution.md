@@ -9,7 +9,7 @@ Every architectural decision, every feature, every line of code must answer: **d
 
 ---
 
-## 10 Trading Rules (T-Rules) — Non-Negotiable
+## 11 Trading Rules (T-Rules) — Non-Negotiable
 
 ### T-Rule 1: Foundation Isolation
 The foundation at `beyenestock-of-foundation-first` is production-grade and must be preserved exactly as built. Trading code extends the foundation — it never modifies foundation tables, docs, or governance. The only approved foundation modification is the `profiles` ALTER (Part 4.1).
@@ -40,6 +40,9 @@ Implementation follows the 5-phase build order in trading-docs/08-planning/MASTE
 
 ### T-Rule 10: Silent Failures Are Forbidden
 Nothing in the trading engine may fail silently. Every failure mode has a detection mechanism and a defined response. Every automated action is logged to `audit_logs`. Every health check writes to `trading_system_health`. The Sentinel is an independent safety net.
+
+### T-Rule 11: Deferred Items In Commit Bodies MUST Be Enforced In Code, Not Just Markdown
+When a commit body contains "EXPLICITLY NOT CHANGED, REMAINS DEFERRED" sections or "Adjacent issues (NOT fixed)" lists, the deferred items MUST be entered into `trading-docs/08-planning/TASK_REGISTER.md` within the same PR. Items affecting feature-flag state MUST additionally be enforced by `backend/flag_service.py`'s `BLOCKS_FLAG_FLIP` constant: markdown is the source of intent; Python is the enforcement; both must agree (asserted by `backend/tests/test_flag_service.py::test_blocks_list_matches_task_register_annotations`). Rationale: three prior instances (Commit 1 IC/IB 2026-04-25 `77af9aa`; Commit 3 PCS/CCS 2026-04-28 `fc6b077`; long_straddle 2026-05-11) of the same target_credit defect class shipped because deferred fixes had no runtime enforcement — operator flipped the deferred-strategy flag and the latent bug shipped contaminated trades into production.
 
 ---
 

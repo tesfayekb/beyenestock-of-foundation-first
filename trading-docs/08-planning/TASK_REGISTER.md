@@ -2697,6 +2697,141 @@ This is the 8th A.7-family subclass instance counted in the past 7 days (alongsi
 
 ---
 
+### T-ACT-088 — Fix `long_straddle` `target_credit` chain-mid extraction (recurrence of Commit-1 / Commit-3 defect class)
+
+**Severity:** HIGH (5 contaminated `long_straddle` trades closed `take_profit_debit_100pct` between 2026-05-01 and 2026-05-08, producing +$9,289.16 of phantom `net_pnl` and a ~$22,742 swing vs realistic outcomes. Same defect class as Commit 1 (IC/IB, 2026-04-25, `77af9aa`) and Commit 3 (PCS/CCS, 2026-04-28, `fc6b077`).)
+**Owner:** Cursor — to be authorized after PR1 lands
+**Estimated time:** ~60-90 min Cursor (extend `_chain_leg_mid` extraction to `long_straddle` branch in `strike_selector.py`; populate `entry_greeks`; populate `decision_context["target_credit_source"]`)
+**Status:** [ ] QUEUED — PR3 of 7 long_straddle remediation
+**Blocks-flag-flip:** strategy:long_straddle:enabled
+
+**Description:** `strike_selector.py:572` hardcodes `target_credit = -4.00` for `long_straddle`, divorced from the real Tradier chain mid (~-$40 to -$50 for 0DTE ATM at SPX 7200-7400). The downstream `mark_to_market` pipeline then prices the position arithmetically consistently but against a fantasy `entry_credit`, producing phantom unrealized P&L. The `position_monitor.run_debit_strategy_exits` exit gate (`take_profit_debit_100pct`) fires when the phantom MTM crosses the 200% threshold of the phantom `target_credit`, closing the position with a contaminated `net_pnl` that subsequently poisons calibration, Kelly state, and meta-label training.
+
+**Fix scope:**
+
+- Extend `_chain_leg_mid`-based `target_credit` extraction to the `long_straddle` branch in `strike_selector.py:550-580` (mirror Commit 3's PCS/CCS pattern verbatim).
+- Return `None`-fallback if either `call_mid` or `put_mid` is unavailable; `execution_engine._simulate_fill` then rejects the trade (Bug H gate, PR3).
+- Populate `result["entry_greeks"]` from chain payload (currently hardcoded `{}` at `execution_engine.py:471`).
+- Populate `result["target_credit_source"] = "chain_mid"` for forensic audit.
+
+**Acceptance criteria:**
+
+- Post-deploy: a new `long_straddle` virtual entry records `entry_credit` matching real chain mid (~-$40 to -$50 for 0DTE ATM at SPX 7200-7400), not -$4.00.
+- `decision_context["target_credit_source"] == "chain_mid"` recorded on the position row.
+- Unit test (PR3 scope): `test_target_credit_real.py` asserts `target_credit` for `long_straddle` is within 10× of the chain mid, not ±$0.50 of the hardcoded constant.
+- After acceptance: remove `strategy:long_straddle:enabled` from `flag_service.BLOCKS_FLAG_FLIP` and mark this entry `Status: [x] DONE`.
+
+**Cross-references:** Commit 1 (`77af9aa`, 2026-04-25 — IC/IB precedent); Commit 3 (`fc6b077`, 2026-04-28 — PCS/CCS precedent); LONG_STRADDLE_FIX_FINAL_CONSENSUS_PLAN_v1.0.md §2 PR3; T-ACT-088 through T-ACT-093 share the same defect class.
+
+---
+
+### T-ACT-089 — Fix `calendar_spread` `target_credit` two-expiry chain-mid extraction
+
+**Severity:** HIGH (latent recurrence risk — same hardcoded-`target_credit` defect class as T-ACT-088. `strike_selector.py:585` hardcodes `target_credit = -1.50` for `calendar_spread`; not yet observed in production because `strategy:calendar_spread:enabled` has been OFF, but the bug would materialize on the first flag flip.)
+**Owner:** Cursor — to be authorized after PR1 lands
+**Estimated time:** ~90-120 min Cursor (calendar requires querying TWO chains: near-expiry and far-expiry; net debit = far_mid - near_mid; harder than verticals/straddles)
+**Status:** [ ] QUEUED — PR3 of 7 long_straddle remediation
+**Blocks-flag-flip:** strategy:calendar_spread:enabled
+
+**Description:** `calendar_spread` hardcodes `target_credit = -1.50` at `strike_selector.py:585`. Unlike single-expiry strategies, calendar pricing requires resolving both the near-leg (sold) and far-leg (bought) mids from separate chain queries. The existing `_chain_leg_mid` helper assumes a single chain; calendar needs a two-chain variant.
+
+**Fix scope:**
+
+- Extend `_chain_leg_mid` (or add `_chain_leg_mid_two_expiry`) to resolve near+far mids from two Tradier chain calls.
+- Compute net debit = far_mid - near_mid; populate `result["target_credit"]` accordingly.
+- `None`-fallback if either chain is unavailable.
+- Populate `entry_greeks` (note: calendar greeks net across two expiries — record per-leg greeks for forensic clarity).
+
+**Acceptance criteria:**
+
+- Post-deploy: a new `calendar_spread` virtual entry records `entry_credit` matching net debit of real two-leg chain mids, not -$1.50.
+- Unit test: `test_target_credit_real.py` covers `calendar_spread`.
+- After acceptance: remove `strategy:calendar_spread:enabled` from `flag_service.BLOCKS_FLAG_FLIP` and mark this entry `Status: [x] DONE`.
+
+**Cross-references:** T-ACT-088 (same defect class, single-expiry sibling); LONG_STRADDLE_FIX_FINAL_CONSENSUS_PLAN_v1.0.md §2 PR3.
+
+---
+
+### T-ACT-090 — Fix `long_call` `target_credit` chain-mid extraction + Bug H mis-routing as credit
+
+**Severity:** HIGH (latent recurrence risk + Bug H amplification — `long_call` lacks `target_credit` extraction AND `execution_engine.py:168` `_simulate_fill` mis-routes single-leg debit strategies through the credit branch when the hardcoded fallback yields a positive `base_credit`, producing inverted P&L sign on every closed trade. Strategy currently OFF; would materialize on first flag flip.)
+**Owner:** Cursor — to be authorized after PR1 lands
+**Estimated time:** ~45-60 min Cursor (add `target_credit` extraction at `strike_selector.py:550-562` long_call branch; add Bug H guard in `_simulate_fill` to reject `None target_credit` for debit strategies)
+**Status:** [ ] QUEUED — PR3 of 7 long_straddle remediation
+**Blocks-flag-flip:** strategy:long_call:enabled
+
+**Description:** `strike_selector.py:550-562` does not set `target_credit` for `long_call`/`long_put` (different code path from `long_straddle`). `execution_engine._simulate_fill` then falls back to a positive `base_credit`, which causes `is_debit=False` routing — accounting then computes P&L with the wrong sign convention.
+
+**Fix scope:**
+
+- Add `_chain_leg_mid`-based `target_credit` extraction to `long_call` branch in `strike_selector.py`.
+- Add Bug H guard in `execution_engine._simulate_fill`: reject `None target_credit` for any strategy in `DEBIT_STRATEGIES` (defined in PR5 `backend/strategies.py`); structured error + `signal_status='pending_review'`.
+
+**Acceptance criteria:**
+
+- Post-deploy: a new `long_call` virtual entry records `entry_credit` matching chain mid (NEGATIVE value for a debit).
+- `_simulate_fill` rejects a `long_call` signal with `target_credit=None`, sets `signal_status='pending_review'`, never creates an open position.
+- Unit test: `test_bug_h_simulate_fill_rejection.py` covers the rejection path.
+- After acceptance: remove `strategy:long_call:enabled` from `flag_service.BLOCKS_FLAG_FLIP` and mark this entry `Status: [x] DONE`.
+
+**Cross-references:** T-ACT-088 (same defect class); T-ACT-091 (`long_put` sibling); LONG_STRADDLE_FIX_FINAL_CONSENSUS_PLAN_v1.0.md §2 PR3 + Bug H.
+
+---
+
+### T-ACT-091 — Fix `long_put` `target_credit` chain-mid extraction + Bug H mis-routing as credit
+
+**Severity:** HIGH (same defect class as T-ACT-090; sibling single-leg debit strategy.)
+**Owner:** Cursor — to be authorized after PR1 lands
+**Estimated time:** ~30 min Cursor (mirrors T-ACT-090 fix in `long_put` branch)
+**Status:** [ ] QUEUED — PR3 of 7 long_straddle remediation
+**Blocks-flag-flip:** strategy:long_put:enabled
+
+**Description:** Same as T-ACT-090 but for `long_put` branch in `strike_selector.py:550-562`. Same Bug H amplification path through `_simulate_fill`.
+
+**Fix scope:** Mirror T-ACT-090. Add `target_credit` extraction at `long_put` branch; Bug H guard already added by T-ACT-090 covers `long_put` via the `DEBIT_STRATEGIES` set.
+
+**Acceptance criteria:** Mirror T-ACT-090 for `long_put`. After acceptance: remove `strategy:long_put:enabled` from `flag_service.BLOCKS_FLAG_FLIP`.
+
+**Cross-references:** T-ACT-088 (same defect class); T-ACT-090 (`long_call` sibling); LONG_STRADDLE_FIX_FINAL_CONSENSUS_PLAN_v1.0.md §2 PR3.
+
+---
+
+### T-ACT-092 — Fix `debit_call_spread` `target_credit` chain-mid extraction
+
+**Severity:** HIGH (latent recurrence risk — same hardcoded-`target_credit` defect class. Strategy currently OFF; would materialize on first flag flip. Two-leg debit vertical: net debit = long_call_mid - short_call_mid.)
+**Owner:** Cursor — to be authorized after PR1 lands
+**Estimated time:** ~30-45 min Cursor (mirrors Commit 3's PCS/CCS two-leg pattern but for debit direction)
+**Status:** [ ] QUEUED — PR3 of 7 long_straddle remediation
+**Blocks-flag-flip:** strategy:debit_call_spread:enabled
+
+**Description:** Two-leg debit vertical. Same defect class as `long_straddle` but with inverted credit/debit sign. Reuses `_chain_leg_mid` for each leg, computes net debit.
+
+**Fix scope:** Add `_chain_leg_mid`-based `target_credit` extraction for `debit_call_spread` in `strike_selector.py`; net debit = long_leg_mid - short_leg_mid. Populate `entry_greeks` (sum across legs).
+
+**Acceptance criteria:** Post-deploy `debit_call_spread` virtual entry records realistic net-debit `entry_credit`. Unit test in `test_target_credit_real.py`. After acceptance: remove `strategy:debit_call_spread:enabled` from `flag_service.BLOCKS_FLAG_FLIP`.
+
+**Cross-references:** T-ACT-088 (same defect class); T-ACT-093 (sibling); Commit 3 `fc6b077` (two-leg vertical precedent, credit direction); LONG_STRADDLE_FIX_FINAL_CONSENSUS_PLAN_v1.0.md §2 PR3.
+
+---
+
+### T-ACT-093 — Fix `debit_put_spread` `target_credit` chain-mid extraction
+
+**Severity:** HIGH (same defect class as T-ACT-092; sibling two-leg debit vertical.)
+**Owner:** Cursor — to be authorized after PR1 lands
+**Estimated time:** ~30 min Cursor (mirrors T-ACT-092 fix for put-side)
+**Status:** [ ] QUEUED — PR3 of 7 long_straddle remediation
+**Blocks-flag-flip:** strategy:debit_put_spread:enabled
+
+**Description:** Same as T-ACT-092 but for `debit_put_spread` branch.
+
+**Fix scope:** Mirror T-ACT-092. Add `_chain_leg_mid`-based `target_credit` extraction for `debit_put_spread`; net debit = long_leg_mid - short_leg_mid.
+
+**Acceptance criteria:** Mirror T-ACT-092 for `debit_put_spread`. After acceptance: remove `strategy:debit_put_spread:enabled` from `flag_service.BLOCKS_FLAG_FLIP`.
+
+**Cross-references:** T-ACT-088 (same defect class); T-ACT-092 (sibling); LONG_STRADDLE_FIX_FINAL_CONSENSUS_PLAN_v1.0.md §2 PR3.
+
+---
+
 ### Section 14 cross-references
 
 - HANDOFF NOTE Appendix A.6 — full post-mortem context for the 2026-05-01 phantom-alpha incident (amended 2026-05-03 via Track B PR with T-ACT-045 PENDING-RE-RUN status + validation-artifact protocol)
