@@ -12,6 +12,7 @@ from polygon_index_helpers import parse_polygon_index_value
 from risk_engine import compute_position_size, check_trade_frequency
 from model_retraining import get_kelly_multiplier_from_db
 from strike_selector import get_strikes
+import flag_service
 
 logger = get_logger("strategy_selector")
 
@@ -212,19 +213,21 @@ class StrategySelector:
         The `default` parameter MUST be passed explicitly at every call
         site. Missing key returns `default`, not False.
 
-        Accepts both bytes 'true' (decode_responses=False) and string
-        'true' (decode_responses=True) for forward-compatibility with
-        both Redis client configurations.
+        Delegates to :func:`flag_service.is_enabled` which preserves the
+        exact polarity semantic of the prior in-line implementation AND
+        adds Layer B blocks-list enforcement: any flag listed in
+        ``flag_service.BLOCKS_FLAG_FLIP`` returns False even when Redis
+        explicitly says ``"true"`` (catches direct-CLI Redis bypass).
+
+        Accepts both bytes ``"true"`` (decode_responses=False) and
+        string ``"true"`` (decode_responses=True) for forward
+        compatibility with both Redis client configurations.
         """
-        try:
-            if not self.redis_client:
-                return default
-            val = self.redis_client.get(flag_key)
-            if val is None:
-                return default
-            return val in ("true", b"true")
-        except Exception:
-            return default
+        return flag_service.is_enabled(
+            self.redis_client,
+            flag_key,
+            default=default,
+        )
 
     def _check_time_window(
         self, cv_stress: Optional[float] = None

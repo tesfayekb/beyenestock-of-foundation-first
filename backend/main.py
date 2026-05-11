@@ -13,6 +13,7 @@ import config
 from capital_manager import CapitalError, get_deployed_capital
 from databento_feed import DatabentoFeed
 from db import get_client, write_health_status
+import flag_service
 from gex_engine import GexEngine
 from logger import get_logger
 from polygon_feed import PolygonFeed
@@ -2571,6 +2572,24 @@ async def set_feature_flag(
 
         if not redis_client:
             return {"error": "redis_unavailable"}
+
+        # Layer A: blocks-flag-flip enforcement. Refuses to enable any
+        # flag listed in flag_service.BLOCKS_FLAG_FLIP until the
+        # corresponding T-ACT entry in
+        # trading-docs/08-planning/TASK_REGISTER.md is closed. Disabling
+        # is always allowed regardless of the blocks list (operator must
+        # be able to halt a strategy).
+        allowed_to_set, refuse_reason = flag_service.can_set_enabled(
+            flag_key, enabled
+        )
+        if not allowed_to_set:
+            logger.warning(
+                "admin_flag_flip_refused",
+                flag_key=flag_key,
+                attempted_value=enabled,
+                reason=refuse_reason,
+            )
+            return {"error": refuse_reason}
 
         if flag_key in _SIGNAL_FLAGS:
             # Signal flags: default ON. Toggling ON deletes the key
