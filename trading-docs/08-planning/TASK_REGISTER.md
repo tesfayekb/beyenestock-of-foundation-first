@@ -2313,6 +2313,8 @@ Pre-T-ACT-061 (Indices Starter era): all three feeds were silently 15-min stale 
 
 **Status:** [ ] OPEN — queued, lower urgency than T-ACT-062. Operator can prioritize among T-ACT-062 vs T-ACT-063 based on which provides higher governance value first.
 
+**2026-05-12 update — recurrence confirmed:** Today's PR-C post-deploy verification surfaced the same `alert_email_failed [Errno 101] Network is unreachable` signature reported in the original T-ACT-063 entry (2026-05-04 outage). Today's symptom uses port 465 (`SMTP_SSL`) per `backend/alerting.py:168`, whereas the original T-ACT-063 hypothesis referenced port 587 — confirming the egress block is broader than originally hypothesized (both common SMTP egress ports are affected from Railway). The in-process safety surfaces (ERROR log, `audit_logs` row, `system_alerts` row) all fired correctly during the PR-C smoke test; only the daemon-thread SMTP delivery silently failed (caught by `alerting.py:189-195` `alert_email_failed` ERROR log). EXECUTE deferred until after PR-A (T-ACT-099) merges + trading resumes credit-only per Cursor + Claude sequence 2026-05-12. See also T-ACT-098 (defensive whitespace strip for `ALERT_GMAIL_APP_PASSWORD` — T-ACT-057 Option B revival; bundling candidate for the same alerting-hardening EXECUTE PR).
+
 **Cross-references:** T-ACT-057 (ALERT_GMAIL_APP_PASSWORD whitespace silent-rejection; T-ACT-063 is the SECOND distinct alerting blackout root-cause discovered after T-ACT-057's whitespace fix; reinforces the discipline-meta-lesson "infrastructure-config silent-failure surfaces require 3-question exhaustive verification: SET / CORRECT FORMAT / END-TO-END VALIDATED" — T-ACT-063 demonstrates that even with all three questions answered correctly, a fourth-class issue (transport-layer egress reliability) can still produce detection-without-notification). HANDOFF A.7 (silent-failure-class family — T-ACT-063 may surface a 4th subclass: alerting-transport reliability surface). HANDOFF A.8 (this T-ACT was identified during the 2026-05-04 outage diagnosis when operator noted no email arrived during the 76-hour silent window despite watchdog firing correctly).
 
 ---
@@ -2928,6 +2930,125 @@ Operator's 2026-05-12 ~10:58 ET halt attempt (`redis-cli SET capital:deployment_
 - No regression in existing endpoint tests; `test_consolidation_s11.py:407-413` is either preserved or explicitly updated per the chosen option.
 
 **Cross-references:** Round 1 diagnose §10 adjacent issue #5; T-ACT-094 (the incident that surfaced this); T-ACT-096 (sibling endpoint cleanup).
+
+---
+
+### T-ACT-098 — Defensive whitespace strip at `config.py:103` for `ALERT_GMAIL_APP_PASSWORD` (T-ACT-057 Option B revival)
+
+**Severity:** LOW (regression-prone surface; NOT the cause of 2026-05-12 silent-email recurrence — that was T-ACT-063 egress block).
+**Owner:** Cursor — to be authorized.
+**Estimated time:** ~15 min Cursor (1 line + 2 unit tests).
+**Status:** [ ] QUEUED — deferred (post-trading-resume).
+**Blocks-flag-flip:** N/A.
+
+**Description:**
+T-ACT-057 (2026-05-02) recommended a 1-line `.replace(" ", "")` defensive strip at `backend/config.py:103` after Gmail's UI display-format spaces broke SMTP login (Gmail's App Password generator displays the 16-char password as `"abcd efgh ijkl mnop"` with display spaces; copy-paste from the UI carries the spaces; `smtplib` rejects them with `SMTPAuthenticationError`). The defensive strip was marked **Option B** in T-ACT-057's remediation menu and DEFERRED at the time pending operator decision. Still unapplied at HEAD `3d2d429` (verified 2026-05-12).
+
+This is **NOT** the cause of the 2026-05-12 silent-email recurrence — that was the T-ACT-063 `[Errno 101] Network is unreachable` egress block, which is transport-layer, not credential-layer. But the regression-prone surface remains live: any future operator App Password rotation that copies from Gmail's UI without manually stripping spaces will silently re-trigger the original T-ACT-057 silent-rejection failure mode. Filing this now prevents that recurrence.
+
+**Fix scope:**
+- 1 line in `backend/config.py:103` — change `ALERT_GMAIL_APP_PASSWORD = os.getenv("ALERT_GMAIL_APP_PASSWORD", "")` to `ALERT_GMAIL_APP_PASSWORD = os.getenv("ALERT_GMAIL_APP_PASSWORD", "").replace(" ", "")`.
+- 2 unit tests in `backend/tests/test_consolidation_s12.py` (or sibling alerting-config test file): (a) `"abcd efgh ijkl mnop"` → `"abcdefghijklmnop"`; (b) `"abcdefghijklmnop"` (already stripped) → unchanged.
+
+**Bundling note:** Could bundle with T-ACT-063 EXECUTE (the SMTP→webhook/HTTP-API transport switch) if both ship in the same alerting-hardening PR. Combined LOC is small (~5 lines + ~30 lines tests).
+
+**Acceptance criteria:** App Password with display-format spaces (e.g., `"abcd efgh ijkl mnop"`) is silently normalized to 16-char continuous before SMTP login. Existing test suites pass unchanged.
+
+**Cross-references:** T-ACT-057 (original discovery 2026-05-02 — Option A `.strip()` applied; Option B `.replace(" ", "")` deferred); T-ACT-063 (parallel alerting-hardening defect — egress-layer; bundling candidate).
+
+---
+
+### T-ACT-099 — Missing strategy flag gate at `strategy_selector.py:1083` (PR-A of long_straddle remediation)
+
+**Severity:** HIGH (phantom-trade vector — 6 trades fired post-PR1 deploy despite governance-layer enforcement; root cause of 2026-05-11 10:05 ET and 2026-05-12 09:45 ET phantom long_straddle entries).
+**Owner:** Cursor — IN PROGRESS (this PR).
+**Estimated time:** ~3-5 hours Cursor (DIAGNOSE done 2026-05-12 ~13:30 ET; EXECUTE in this PR).
+**Status:** [ ] IN PROGRESS — PR-A this commit.
+**Blocks-flag-flip:** N/A (the 6 BLOCKS_FLAG_FLIP strategies are already canonically annotated under T-ACT-088 through T-ACT-093 when PR1 shipped governance-layer enforcement; this PR closes the *decision-site* gap for the same 6 flags rather than declaring a new annotation. The `flag_service.BLOCKS_FLAG_FLIP` membership invariant test at `test_flag_service.py::test_blocks_list_matches_task_register_annotations` is satisfied by the existing T-ACT-088..093 entries unchanged).
+
+**Origin:** The 6th (2026-05-11 10:05 ET) and 7th (2026-05-12 09:45 ET) phantom `long_straddle` trades fired POST-PR1-merge, proving PR1's flag enforcement was structurally ineffective for the actual decision path. The 6th-phantom diagnose (prior session) identified `strategy_type = ordered[0]` at `backend/strategy_selector.py:1083` as the unchecked decision site; PR-A DIAGNOSE (2026-05-12 ~13:30 ET) expanded the finding to three unchecked sites at L1083, L1097, L1136 plus three other sites (L1166-1169, L1212-1218, L1226) classified as not phantom-trade risks (deferred to T-ACT-100 / T-ACT-101).
+
+**Defect class:** Per-strategy `strategy:<name>:enabled` flag was being read only at `strategy_selector.py:1595` as a `logger.info` argument, never gating decisions. Three `strategy_type = ...` assignment sites accepted strategies regardless of flag state.
+
+**Fix scope (PR-A — this commit):**
+- `backend/strategy_selector.py:9` — extend top-level db import to include `write_audit_log`.
+- `backend/strategy_selector.py` — add new private helper `_pick_first_enabled_strategy(ordered, exclude=None) -> Optional[str]` (idempotent across L1083 and L1136 patches).
+- `backend/strategy_selector.py:1083` — replace `strategy_type = ordered[0]` with `strategy_type = self._pick_first_enabled_strategy(ordered)`.
+- `backend/strategy_selector.py:1092-1095` — add `and self._check_feature_flag(f"strategy:{strategy_hint}:enabled", default=False)` term to the AI-hint accept chain.
+- `backend/strategy_selector.py:1139` — insert new symmetric `elif` for blocked-by-flag hint observability (`logger.info("ai_hint_blocked_by_flag", ...)`; INFO level, not WARN).
+- `backend/strategy_selector.py:1136` — replace `strategy_type = ordered[0]` with `self._pick_first_enabled_strategy(ordered, exclude=strategy_type)`.
+- `backend/strategy_selector.py:1149` — update outdated `# strategy_type already set to regime-based above — safe` comment (no longer true post-PR-A).
+- `backend/strategy_selector.py:~1150` — insert audit-row + early-return block immediately after the AI-hint try/except, BEFORE the calendar_spread block at L1151 (`write_audit_log(action="trading.strategy_selection_blocked", ...)` + `logger.info("strategy_selection_blocked", ...)` + `return None`).
+- `backend/tests/test_strategy_selector.py` — extend with 6 new tests (3 helper unit tests + 3 end-to-end `select()` tests).
+
+**Acceptance criteria:**
+1. New 6 tests in `test_strategy_selector.py` pass.
+2. Existing tests in `test_strategy_selector.py` (3), `test_phase_2a_agents.py::test_strategy_selector_logs_warning_on_invalid_hint`, `test_consolidation_s4.py`, `test_consolidation_s14.py`, `test_flag_service.py` pass unchanged (the pre-existing `test_consolidation_s4.py::test_price_position_straddle_returns_nonzero` failure is the long_straddle MTM bug tracked under PR-B / T-ACT-088 — `backend/mark_to_market.py` is byte-identical to `origin/main` in PR-A; failure is NOT introduced by PR-A).
+3. Post-deploy Railway log: `strategy_selection_blocked` INFO log fires on cycles where regime is `trend` / `volatile_bullish` / `volatile_bearish` with debit strategies blocked.
+4. Post-deploy Supabase: `audit_logs` rows with `action='trading.strategy_selection_blocked'` appear with `metadata.regime` + `metadata.ordered` + `metadata.all_blocked_by`.
+5. Post-deploy operator-side smoke test (see DIAGNOSE §9):
+   - All 6 BLOCKS_FLAG_FLIP strategies = `"false"` or absent in Redis.
+   - All 4 credit strategies = `"true"` in Redis (operator SETs explicitly per Step 2.5 if absent — default-OFF polarity means absent ≠ enabled).
+   - `trading_prediction_outputs` last 30 min shows `no_trade_reason='no_signal_selected'` clustered with `regime IN ('trend','volatile_bullish','volatile_bearish')` (gate working as designed) and trades selected on other regimes (credit-only working).
+6. Operator reverts kill switch via dashboard → trading resumes credit-only.
+
+**Skip-cycle profile (expected, not a defect):** 3 of 10 active regimes will skip cycles credit-only:
+- `volatile_bullish` (debit_call_spread + long_call — both BLOCKS)
+- `volatile_bearish` (debit_put_spread + long_put — both BLOCKS)
+- `trend` (debit_call_spread + debit_put_spread + long_call + long_put — all 4 BLOCKS)
+
+7 of 11 regimes trade normally credit-only (`quiet_bullish`, `quiet_bearish`, `pin_range`, `range`, `crisis`, `event` via fall-through to `iron_condor`, `unknown`). The 11th regime (`panic`) has a pre-existing skip (empty candidate list).
+
+**Cross-references:** PR1 (BLOCKS_FLAG_FLIP + `flag_service.is_enabled` — governance layer); PR-C / T-ACT-094 (audit-row precedent at `backend/capital_manager.py:226-240`); 6th-phantom diagnose (prior session, identified the L1083 site); T-ACT-100 (dead-code cleanup post-PR-A — L1166-1169 becomes unreachable); T-ACT-101 (iron_condor fallback gating at L1218/L1226 — operator-control consistency); T-ACT-088 (PR-B chain-mid `target_credit` extraction — addresses the MTM root cause of the original 5 phantom trades; runs AFTER PR-A resumes credit-only trading per operator decision 2026-05-12); T-ACT-063 (email egress recurrence — addressed AFTER PR-A resumes trading).
+
+---
+
+### T-ACT-100 — Dead code cleanup at `strategy_selector.py:1166-1169` (post-PR-A)
+
+**Severity:** LOW (dead code; no operational impact).
+**Owner:** Cursor — to be authorized.
+**Estimated time:** ~30 min Cursor (delete branch + 1-2 tests + verify).
+**Status:** [ ] QUEUED — deferred (post-PR-A-merge).
+**Blocks-flag-flip:** N/A.
+
+**Description:**
+PR-A DIAGNOSE 2026-05-12 ~13:30 ET surfaced this as adjacent issue #1. The calendar_spread post-fallback at `backend/strategy_selector.py:1163-1169` (`strategy_type = ordered_remaining[0] if ordered_remaining else "iron_condor"`) becomes unreachable post-PR-A because:
+- (a) L1083 iterate-fall-through gate iterates past `calendar_spread` when its flag is OFF (cannot enter the L1157 `if strategy_type == "calendar_spread":` block with the flag OFF);
+- (b) L1097 AI-hint accept gate (post-PR-A) rejects `calendar_spread` hint when flag is OFF;
+- (c) L1136 failed-today fallback (post-PR-A) iterates past `calendar_spread` when flag is OFF.
+
+Therefore `strategy_type == "calendar_spread"` post-PR-A implies the flag is ON, which makes `if not cal_flag:` at L1162 always False, which makes L1163-1169 unreachable.
+
+**Fix scope:** Remove L1162-1169 dead branch + simplify the L1157 calendar_spread block. ~10 LOC reduction.
+
+**Acceptance criteria:** No behaviour change (the branch was unreachable); cleaner code; tests still pass.
+
+**Cross-references:** T-ACT-099 (PR-A — the change that makes this branch unreachable); PR-A DIAGNOSE §2 enumeration table (site #4 classification).
+
+---
+
+### T-ACT-101 — Gate unchecked iron_condor fallbacks at `strategy_selector.py:1212` and `:1226`
+
+**Severity:** LOW (operator-control consistency gap; NO phantom-trade risk because `iron_condor` is not in BLOCKS_FLAG_FLIP).
+**Owner:** Cursor — to be authorized.
+**Estimated time:** ~45 min Cursor (replace 2 sites + 2-3 tests + verify).
+**Status:** [ ] QUEUED — deferred.
+**Blocks-flag-flip:** N/A.
+
+**Description:**
+PR-A DIAGNOSE 2026-05-12 ~13:30 ET surfaced this as adjacent issue #2. After PR-A, two `strategy_type` assignments still bypass `_check_feature_flag`:
+1. `strategy_selector.py:1212-1218` — `strategy_type = "long_straddle" if (... and _straddle_allowed) else "iron_condor"` — the `long_straddle` branch is gated by `_straddle_allowed` (L1208-1211), but the `iron_condor` fallback path is unchecked.
+2. `strategy_selector.py:1226` — `except Exception: strategy_type = "iron_condor"` — bare-except defensive fallback.
+
+**Phantom-trade risk: NONE.** `iron_condor` is not in BLOCKS_FLAG_FLIP (`backend/flag_service.py:69-76`), so these two sites can never select a blocked strategy.
+
+**Operator-control gap:** If operator sets `strategy:iron_condor:enabled=false`, these branches still produce `iron_condor`. The gap is theoretical (operator-disabling iron_condor isn't currently a use case) but warrants consistent gate enforcement across all `strategy_type = ...` sites in `select()`.
+
+**Fix scope:** Replace both sites with `self._pick_first_enabled_strategy(ordered, ...)` calls OR an explicit `_check_feature_flag("strategy:iron_condor:enabled", default=False)` check with None fallback. Bundle with T-ACT-100 if both fit in a single cleanup PR (~20 LOC + tests combined).
+
+**Acceptance criteria:** All `strategy_type = ...` assignments in `select()` go through a flag check; setting `strategy:iron_condor:enabled=false` causes the cycle to skip cleanly (`no_signal_selected`).
+
+**Cross-references:** T-ACT-099 (PR-A — partial fix; closes the 3 phantom-trade sites); T-ACT-100 (dead-code cleanup — bundling candidate); PR-A DIAGNOSE §2 enumeration table (sites #5 and #6 classification).
 
 ---
 

@@ -6,7 +6,7 @@ Implements D-010, D-011, D-012, D-015, D-020.
 from datetime import datetime, timezone
 from typing import Optional, Tuple, Union
 
-from db import write_health_status
+from db import write_health_status, write_audit_log
 from logger import get_logger
 from polygon_index_helpers import parse_polygon_index_value
 from risk_engine import compute_position_size, check_trade_frequency
@@ -227,6 +227,48 @@ class StrategySelector:
             self.redis_client,
             flag_key,
             default=default,
+        )
+
+    def _pick_first_enabled_strategy(
+        self,
+        ordered: list,
+        exclude: Optional[str] = None,
+    ) -> Optional[str]:
+        """Return the first strategy in ``ordered`` whose flag is enabled.
+
+        PR-A gate: this is the single source of truth for "given a
+        direction-filtered candidate list, which one are we actually
+        allowed to trade?" Replaces the unchecked ``ordered[0]`` pick
+        at the regime path and the AI-hint failed-today fallback.
+
+        Parameters
+        ----------
+        ordered:
+            Direction-filtered strategy-name list from
+            ``_stage2_direction_filter`` (e.g., ``["long_straddle",
+            "calendar_spread", "iron_condor"]`` for the event regime).
+        exclude:
+            Strategy name to skip (used by the AI-hint failed-today
+            fallback to skip the strategy that already stop-outted
+            today). ``None`` means consider all candidates.
+
+        Returns
+        -------
+        First strategy in ``ordered`` (excluding ``exclude``) whose
+        ``strategy:<name>:enabled`` flag is True per
+        ``flag_service.is_enabled`` semantics. ``None`` if no candidate
+        is enabled — caller MUST handle this as a cycle skip and emit
+        the ``trading.strategy_selection_blocked`` audit row.
+        """
+        return next(
+            (
+                s for s in ordered
+                if s != exclude
+                and self._check_feature_flag(
+                    f"strategy:{s}:enabled", default=False
+                )
+            ),
+            None,
         )
 
     def _check_time_window(
@@ -1080,7 +1122,12 @@ class StrategySelector:
             # recommendation AND strategy:ai_hint_override:enabled=true,
             # use the AI hint instead of the regime-based top pick.
             # Falls back to regime-based on any error or low confidence.
-            strategy_type = ordered[0]  # default: regime-based
+            # PR-A: iterate-fall-through gate replaces the unconditional
+            # ordered[0] pick. Returns None when every candidate is
+            # blocked; the audit-row+early-return block below handles
+            # that case before the calendar_spread block can dereference
+            # a None strategy_type.
+            strategy_type = self._pick_first_enabled_strategy(ordered)
             try:
                 if self._check_feature_flag(
                     "strategy:ai_hint_override:enabled", default=False
@@ -1093,6 +1140,10 @@ class StrategySelector:
                         strategy_hint
                         and hint_confidence >= 0.65
                         and strategy_hint in valid_strategies
+                        and self._check_feature_flag(
+                            f"strategy:{strategy_hint}:enabled",
+                            default=False,
+                        )  # PR-A: hint must also be flag-enabled
                     ):
                         strategy_type = strategy_hint
                         logger.info(
@@ -1133,9 +1184,36 @@ class StrategySelector:
                                     date=_today,
                                     fallback=ordered[0],
                                 )
-                                strategy_type = ordered[0]
+                                # PR-A: re-iterate excluding the failed
+                                # strategy. If no candidate remains, the
+                                # audit-row + early-return block at the
+                                # end of the AI-hint try/except will
+                                # fire.
+                                strategy_type = (
+                                    self._pick_first_enabled_strategy(
+                                        ordered, exclude=strategy_type
+                                    )
+                                )
                         except Exception:
                             pass  # fail open — never block trades on flag check
+                    elif (
+                        strategy_hint
+                        and hint_confidence >= 0.65
+                        and strategy_hint in valid_strategies
+                    ):
+                        # PR-A observability symmetry: log when a valid
+                        # hint is rejected because its flag is off. INFO
+                        # level (not WARN — this is expected behaviour,
+                        # not a failure). Without this, the silent
+                        # rejection of a flag-blocked hint creates the
+                        # same observability gap that hid the 6th
+                        # phantom long_straddle trade.
+                        logger.info(
+                            "ai_hint_blocked_by_flag",
+                            hint=strategy_hint,
+                            confidence=hint_confidence,
+                            regime_iterated=strategy_type,
+                        )
                     elif strategy_hint and strategy_hint not in valid_strategies:
                         logger.warning(
                             "ai_hint_invalid_strategy",
@@ -1146,7 +1224,45 @@ class StrategySelector:
                 logger.warning(
                     "ai_hint_override_failed", error=str(hint_err)
                 )
-                # strategy_type already set to regime-based above — safe
+                # PR-A: strategy_type may be None here if every
+                # regime-ordered candidate is blocked. The audit-row +
+                # early-return block below handles this case before
+                # the calendar_spread block can dereference None.
+
+            # PR-A: when every regime-ordered candidate has its flag
+            # blocked AND the AI hint did not produce a valid override,
+            # strategy_type is None at this point. Emit one audit row
+            # per cycle (mirrors PR-C precedent at
+            # capital_manager.py:226-240) and return None so the cycle
+            # cleanly skips via trading_cycle.py:195
+            # ("no_signal_selected"). Bounded volume: one row per
+            # 5-min cycle. No send_alert call — no_signal_selected is
+            # expected behaviour on trend/volatile_bullish/
+            # volatile_bearish regimes with debit strategies blocked.
+            if strategy_type is None:
+                try:
+                    write_audit_log(
+                        action="trading.strategy_selection_blocked",
+                        target_type="trading",
+                        metadata={
+                            "regime": regime,
+                            "ordered": list(ordered),
+                            "all_blocked_by": [
+                                f"strategy:{s}:enabled" for s in ordered
+                            ],
+                        },
+                    )
+                except Exception as audit_exc:
+                    logger.debug(
+                        "strategy_selection_blocked_audit_skipped",
+                        error=str(audit_exc),
+                    )
+                logger.info(
+                    "strategy_selection_blocked",
+                    regime=regime,
+                    ordered=list(ordered),
+                )
+                return None
 
             # Phase 3C: Calendar spread only fires AFTER catalyst announcement.
             # Placed BEFORE get_strikes()/sizing so the eventual strategy_type
