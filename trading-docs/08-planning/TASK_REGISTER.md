@@ -1742,7 +1742,7 @@ Tasks surfaced during the 2026-05-01 trading session validation. See HANDOFF NOT
 
 **Numbering note (2026-05-03):** T-ACT-049 was originally proposed as a separate entry for the `polygon_feed.py:174-184` silent-staleness fix, sibling to T-ACT-046 (`tradier_feed.py:282-283`). Per Cursor's recommendation 2026-05-03, both fixes are bundled into an expanded T-ACT-046 (same root pattern, single PR — Track B). T-ACT-049 is therefore subsumed and not assigned. The next available T-ACT number after the 2026-05-03 batch (T-ACT-048, T-ACT-050, T-ACT-051, T-ACT-054) is T-ACT-055.
 
-**Numbering note (2026-05-04 evening, amended late evening):** Numbers T-ACT-056, T-ACT-058, T-ACT-059 are RESERVED placeholders, not yet assigned to delivered work. T-ACT-056 is reserved for the exhaustive persist-site audit (gate for A.7 family re-closure on database-persistence subclass) per T-ACT-055 entry. T-ACT-058 is reserved for the Option B `.replace(" ", "")` defensive whitespace strip code-change PR per T-ACT-057 entry. T-ACT-059 is reserved for the exhaustive infrastructure-config audit (gate for A.7 family re-closure on infrastructure-config subclass) per T-ACT-057 entry. T-ACT-060 was assigned to the stale `_upsert_criterion` test references fix (Option Bravo per T-ACT-060 plan-review) executed 2026-05-04. T-ACT-061..T-ACT-064 were added in PR #100 `docs/post-incident-indices-advanced-2026-05-04` (governance closure for the 2026-05-01 → 2026-05-04 prediction outage). T-ACT-065 was added 2026-05-04 evening alongside the T-ACT-062 EXECUTE PR `feat/t-act-062-vix-vvix-freshness-guard` to formalize the 7-day post-T-ACT-062-merge evaluation (decision matrix for hard-gate-flip on VIX/VVIX/VIX9D per SD-1 Option β). **T-ACT-062 closed 2026-05-04 late evening via the EXECUTE PR (Option β shipped per SD-1; T-ACT-061 §7.1 gate waived per SD-5).** **T-ACT-072 added 2026-05-06 mid-RTH via PR `fix/t-act-072-databento-ts-event-age-filter` (producer-side ts_event age filter on Databento OPRA trades; CRITIQUE-FIRST Q1-Q8 + YELLOW-authorized implementation per markets-open risk discipline). T-ACT-066..T-ACT-071 and T-ACT-073 remain RESERVED placeholders for the diagnostic-derived follow-ups identified across the 2026-05-05 / 2026-05-06 handoff notes (`HANDOFF_NOTE_2026-05-05_RTH_DAY1_ANOMALIES.md`, `HANDOFF_NOTE_2026-05-05_FIRST_POST_DEPLOY_TRADE.md`, `HANDOFF_NOTE_2026-05-06_GEX_QUOTE_MISSING.md`, `HANDOFF_NOTE_2026-05-06_DATABENTO_PUSH_LIFECYCLE.md`); they will be assigned as those follow-ups are scoped.** **Next available T-ACT is T-ACT-074.**
+**Numbering note (2026-05-04 evening, amended late evening):** Numbers T-ACT-056, T-ACT-058, T-ACT-059 are RESERVED placeholders, not yet assigned to delivered work. T-ACT-056 is reserved for the exhaustive persist-site audit (gate for A.7 family re-closure on database-persistence subclass) per T-ACT-055 entry. T-ACT-058 is reserved for the Option B `.replace(" ", "")` defensive whitespace strip code-change PR per T-ACT-057 entry. T-ACT-059 is reserved for the exhaustive infrastructure-config audit (gate for A.7 family re-closure on infrastructure-config subclass) per T-ACT-057 entry. T-ACT-060 was assigned to the stale `_upsert_criterion` test references fix (Option Bravo per T-ACT-060 plan-review) executed 2026-05-04. T-ACT-061..T-ACT-064 were added in PR #100 `docs/post-incident-indices-advanced-2026-05-04` (governance closure for the 2026-05-01 → 2026-05-04 prediction outage). T-ACT-065 was added 2026-05-04 evening alongside the T-ACT-062 EXECUTE PR `feat/t-act-062-vix-vvix-freshness-guard` to formalize the 7-day post-T-ACT-062-merge evaluation (decision matrix for hard-gate-flip on VIX/VVIX/VIX9D per SD-1 Option β). **T-ACT-062 closed 2026-05-04 late evening via the EXECUTE PR (Option β shipped per SD-1; T-ACT-061 §7.1 gate waived per SD-5).** **T-ACT-072 added 2026-05-06 mid-RTH via PR `fix/t-act-072-databento-ts-event-age-filter` (producer-side ts_event age filter on Databento OPRA trades; CRITIQUE-FIRST Q1-Q8 + YELLOW-authorized implementation per markets-open risk discipline). T-ACT-066..T-ACT-071 and T-ACT-073 remain RESERVED placeholders for the diagnostic-derived follow-ups identified across the 2026-05-05 / 2026-05-06 handoff notes (`HANDOFF_NOTE_2026-05-05_RTH_DAY1_ANOMALIES.md`, `HANDOFF_NOTE_2026-05-05_FIRST_POST_DEPLOY_TRADE.md`, `HANDOFF_NOTE_2026-05-06_GEX_QUOTE_MISSING.md`, `HANDOFF_NOTE_2026-05-06_DATABENTO_PUSH_LIFECYCLE.md`); they will be assigned as those follow-ups are scoped.** **T-ACT-102 was assigned 2026-05-12 alongside T-ACT-065 closure for VIX/VVIX/VIX9D stale-event root-cause investigation (see §14 T-ACT-065 closure entry + §14 T-ACT-102 entry).** **Next available T-ACT is T-ACT-103.** (T-ACT-066..T-ACT-071 and T-ACT-073..T-ACT-075 remain reserved per prior placeholder reservations; T-ACT-076..T-ACT-101 + T-ACT-102 are now all assigned to delivered or queued work.)
 
 ### T-ACT-045 — Post-PR-#90 empirical SPX real-time validation
 
@@ -2384,6 +2384,62 @@ Pre-T-ACT-061 (Indices Starter era): all three feeds were silently 15-min stale 
 **Reference:** SD-1 from T-ACT-062 PR review, 2026-05-04 evening (operator selected Option β `beta_hard_spx_only_soft_others`; this T-ACT formalizes the 7-day evaluation that informs whether to flip).
 
 **Cross-references:** T-ACT-062 (predecessor — establishes the soft-warn telemetry that this T-ACT consumes). T-ACT-061 §7.1 probe (independent verification — confirms SPX real-time entitlement; T-ACT-065 measures the analogous post-deploy reality for VIX/VVIX/VIX9D via produced log signal rather than a one-shot probe). HANDOFF NOTE Appendix A.8 L8.1 ("subscription/entitlement claims as present-day factual questions" — T-ACT-065 generalizes the discipline from "verify tier description" to "verify production log evidence over a window before flipping a behavioral guard").
+
+---
+
+### §14 entry — T-ACT-065 closure (2026-05-12 ~16:30 ET)
+
+**Status:** [X] CLOSED — decision documented per spec (TASK_REGISTER.md:2382: "T-ACT-065 closes regardless of which path chosen").
+
+**Window:** T-ACT-062 merge `f34f3a4` (2026-05-05T11:50:35Z = 2026-05-05 07:50:35 ET) → 2026-05-12T19:50:00Z (15:50 ET). Elapsed: 7 days 8 hours. RTH days in window: 5 full + 1 partial = 6.
+
+**Evidence:**
+
+- **VIX-family stale events** (Railway web-dashboard export; CLI `railway logs --since 2026-05-05T11:50:35Z` was capped at 500 lines total across 7 days and returned 0 events for every query including `trading_cycle_skipped` — see HANDOFF_NOTE_2026-05-12_RAILWAY_CLI_TRUNCATION.md):
+  - `vix_price_stale` = 15
+  - `vvix_price_stale` = 16
+  - `vix9d_price_stale` = 7
+  - **N_TOTAL = 38** (or 35 steady-state, excluding 3 boot-time outliers on 2026-05-07T14:10:00Z with age ~64500s = ~17.9h, post-deploy/post-overnight artifact; helper arithmetic at `prediction_engine.py:514-518` confirms `fetched_at` ≈ 2026-05-06 16:14:45 ET = 14.8 min after market close on 5/6, consistent with last pre-shutdown producer write).
+
+- **Adjacent surfaces:** `*_upstream_timestamp_missing` = 0; `*_freshness_check_failed` = 0 (clean — no adjacent-surface scope expansion needed if any future flip is justified).
+
+- **SPX hard-gate firings (comparison surface):** 0 (per Supabase `no_trade_reason ILIKE '%stale%'` = 0 rows — authoritative for SPX since SPX hard-gate writes a DB row via the early-return at `prediction_engine.py:1471-1483`, unlike VIX-family soft-warn at `prediction_engine.py:1503-1509` which intentionally discards the helper's return tuple and proceeds).
+
+- **Cycle denominator:** **C_TOTAL = 436 RTH cycles** (Supabase `trading_prediction_outputs` with RTH-time filter, M-F 09:30-16:00 ET). Theoretical max was 466 (5 full RTH days × 78 cycles + 1 partial RTH day × 76 cycles); 436/466 = 93.6% — healthy denominator.
+
+- **Cluster analysis:** **K_MAX = 4 consecutive 5-min cycles** within 6-min adjacency. Two clusters identified on 2026-05-11:
+  - 12:30 → 12:45 ET (4 cycles, mixed vix + vvix)
+  - 13:15 → 13:30 ET (4 cycles, mixed vix + vvix)
+
+- **Stale rate:** **R = 8.72% (full) | R = 8.03% (steady-state)**; both ≫ 1% Rule 3 threshold by ~8× margin.
+
+- **Steady-state age distribution** (35 events, boot-time outliers excluded): min 344.3s, median 359.4s, max 584.5s. 33/35 (94.3%) events in 330–500s band (just 14-170s over the 330s threshold). Pattern suggests feed cadence near threshold, not feed failure — surfaced as one of four hypotheses for T-ACT-102 root-cause investigation.
+
+**Decision: Rule 3 (Common-or-Clustered) → DO NOT FLIP. Retain Option β (`beta_hard_spx_only_soft_others`) per SD-1.**
+
+**Rationale:** Per TASK_REGISTER.md:2379 — "Common (> 1% of cycles) OR clustered (> 3 consecutive in any window): investigate root cause before flipping. Do NOT flip yet. Open diagnostic task." Both Rule 3 conditions fire independently:
+- R = 8.72% exceeds 1% threshold by ~8.7×
+- K_MAX = 4 exceeds cluster threshold of 3
+
+Verdict survives sensitivity check: excluding the 3 deploy-boot-time outliers reduces N_TOTAL from 38 to 35 (R = 8.03%) but R remains ≫ 1%. K_MAX is unaffected because both clusters fall on 2026-05-11, separate from the 2026-05-07 boot event.
+
+**Temporal pattern:** 19 of 38 events (50%) concentrated on 2026-05-11 specifically. 0 events on 2026-05-12 (today) through 15:50 ET. The observed pattern is consistent with EITHER (a) a localized 5/11 degradation event OR (b) increasing degradation through 5/11 with 5/12 being a partial-day datapoint. Either interpretation supports the spec's mandate to investigate before flipping. Day-by-day distribution:
+- 2026-05-05 (Tue, merge day): 0 events
+- 2026-05-06 (Wed): 2 events
+- 2026-05-07 (Thu): 7 events (3 are boot-time outliers)
+- 2026-05-08 (Fri): 10 events
+- 2026-05-11 (Mon): 19 events ← half the total
+- 2026-05-12 (Tue, partial through 15:50 ET): 0 events
+
+**Follow-up: T-ACT-102 opened** for root-cause investigation (four-hypothesis scope per TASK_REGISTER §14 T-ACT-102 entry: Polygon feed cadence vs 330s threshold; producer-side cycle timing in `polygon_feed.py`; consumer-side clock-skew sanity check at `_check_index_freshness`; threshold tuning as candidate solution post-diagnosis). T-ACT-102 must close before any future α-flip proposal — this prevents "second-chance shipping" without spec-mandated diagnostic work.
+
+**Closure rationale:** Per TASK_REGISTER.md:2382, T-ACT-065 closes regardless of which matrix rule applies. The deliverable is the documented evidence + decision, not the flip itself. ✅ Closure criterion met.
+
+**Cross-references:**
+- T-ACT-062 (predecessor — shipped Option β soft-warn whose telemetry was consumed here)
+- T-ACT-102 (immediate successor — root-cause investigation opened by this closure)
+- HANDOFF NOTE Appendix A.8 (prior expectation: Indices Advanced confirmed real-time 2026-05-04 evening → T-ACT-065 DIAGNOSE §8.8 predicted N_TOTAL ≈ 0; actual data contradicted prior; the data wins per discipline — sharpens A.8's "subscription/entitlement claims as present-day factual questions" lesson to "even confirmed subscription tier may produce stale events; verify telemetry over a window")
+- HANDOFF_NOTE_2026-05-12_RAILWAY_CLI_TRUNCATION.md (new — Railway CLI log-truncation discipline; sixth verification-surface foot-gun this session)
 
 ---
 
@@ -3049,6 +3105,44 @@ PR-A DIAGNOSE 2026-05-12 ~13:30 ET surfaced this as adjacent issue #2. After PR-
 **Acceptance criteria:** All `strategy_type = ...` assignments in `select()` go through a flag check; setting `strategy:iron_condor:enabled=false` causes the cycle to skip cleanly (`no_signal_selected`).
 
 **Cross-references:** T-ACT-099 (PR-A — partial fix; closes the 3 phantom-trade sites); T-ACT-100 (dead-code cleanup — bundling candidate); PR-A DIAGNOSE §2 enumeration table (sites #5 and #6 classification).
+
+---
+
+### T-ACT-102 — Root-cause investigation: VIX/VVIX/VIX9D stale-event pattern (8.7% rate, 5/11 cluster) prior to any hard-gate flip decision
+
+**Severity:** MEDIUM (decision-blocker for T-ACT-065 follow-up; not a trading-correctness defect today because Option β soft-warn keeps cycles flowing on slightly-stale data)
+**Owner:** Cursor — diagnostic; operator runs probes
+**Estimated time:** ~60-90 min (data pull + hypothesis ranking + PR scope draft for whichever fix path the evidence supports)
+**Status:** [ ] OPEN — opened 2026-05-12 via T-ACT-065 closure
+**Predecessor:** T-ACT-065 (closed Rule 3; this T-ACT is the spec-mandated "investigate root cause before flipping" follow-up)
+
+**Trigger:** T-ACT-065 closure on 2026-05-12 documented Rule 3 verdict (R = 8.72%, K_MAX = 4 consecutive cycles, 19/38 events on 2026-05-11 alone). Per TASK_REGISTER.md:2379, Rule 3 requires "investigate root cause before flipping. Do NOT flip yet. Open diagnostic task." This is that diagnostic task.
+
+**Hypotheses to investigate (Cursor: prioritize in this order):**
+
+1. **Polygon Indices Advanced feed cadence vs 330s threshold.**
+   Question: Is Polygon actually delivering at 5-min cadence on VIX/VVIX/VIX9D, or is cadence irregular (e.g., 5.5-min mean with jitter)? Method: cross-check Polygon's documented `last_quote.t` cadence against produced Redis `fetched_at` timestamps over a fresh probe window (~30 min during RTH on the next trading day). Expected output: distribution of inter-write gaps; if 95th percentile is > 330s, the threshold is too tight for the feed cadence and is the root cause.
+
+2. **Producer-side `polygon_feed.py` cycle timing.**
+   Question: Does the producer's cron actually run every 5 min, or does it miss cycles (cold-start, retry backoff, etc.)? Method: pull producer-side log evidence over the same 7-day window (`polygon_index_writes` or equivalent producer-side event) and reconcile against the 38-event consumer-side stale signal. If producer is missing writes, consumer-side staleness is downstream of a producer issue.
+
+3. **Consumer-side `_check_index_freshness` clock-skew sanity check.**
+   Verify `prediction_engine.py:514-518` uses consistent UTC-tz-aware timestamps on both legs of `datetime.now(timezone.utc) - fetched_at`. Already very likely correct (the code reads `fetched_at` via `datetime.fromisoformat()` which preserves the timezone); included for completeness. Expected outcome: no clock-skew issue.
+
+4. **Threshold tuning candidate solution.**
+   Per T-ACT-065 finalization §4, 94% of steady-state stale events show ages in the 344-500s band (just 14-170s over the 330s threshold). Hypothesis: raising `POLYGON_FRESHNESS_THRESHOLD_SECONDS` from 330 to, e.g., 420 absorbs the jitter and eliminates the "9%-of-cycles" hard-gate impact. T-ACT-102 evaluates this AFTER establishing the producer/feed root cause (1 + 2), not before. Do not propose the value pre-diagnostic.
+
+**Success criterion:** Root-cause hypothesis confirmed with evidence, AND recommendation for ONE of:
+(a) Threshold-tuning PR (raise `POLYGON_FRESHNESS_THRESHOLD_SECONDS` to a justified value; document the cadence-vs-threshold rationale);
+(b) Producer-side fix PR (eliminate missed cycles in `polygon_feed.py`);
+(c) Re-run T-ACT-065-style evaluation after a fix lands (with the same 7-day window methodology + Railway dashboard discipline per HANDOFF_NOTE_2026-05-12_RAILWAY_CLI_TRUNCATION.md);
+(d) Documented decision that no fix is warranted (Option β remains permanently — e.g., if cadence is fundamentally irregular on Polygon's side and threshold-tuning doesn't help).
+
+**Acceptance gate before any future α-flip:** T-ACT-102 must close with verdict + evidence BEFORE any subsequent T-ACT can propose a hard-gate flip on VIX/VVIX/VIX9D. This prevents "second-chance shipping" without doing the diagnostic work the matrix mandates.
+
+**Boot-time outlier note:** The 3 events on 2026-05-07T14:10:00Z with age ~64514s are a deploy-restart artifact (Redis values from previous day's close, ~17.9h old, fired once before fresh data flows in). Any future hard-gate PR must implement a deploy-warmup grace period (suppress stale-gate during first 5-10 min post-startup OR until first fresh fetch confirmed); otherwise the gate would unnecessarily skip the first post-deploy cycle. Document as T-ACT-102 acceptance criterion (NOT a T-ACT-065 closure blocker — Option β doesn't have this issue because soft-warn proceeds).
+
+**Cross-references:** T-ACT-065 (predecessor — established the Rule 3 verdict that triggers this diagnostic); T-ACT-062 (great-grandparent — shipped Option β soft-warn whose telemetry feeds both T-ACT-065 and this T-ACT); HANDOFF NOTE Appendix A.8 (Indices Advanced tier confirmation 2026-05-04 evening — the prior expectation that informed T-ACT-065's α-flip hypothesis but was contradicted by the actual data); HANDOFF NOTE Appendix A.7 (silent-failure-class family convention — the producer-side missed-cycle hypothesis (2) falls under A.7 if confirmed); HANDOFF_NOTE_2026-05-12_RAILWAY_CLI_TRUNCATION.md (verification-surface discipline that surfaced this issue — without dashboard fallback, T-ACT-065 would have closed with a false-zero verdict).
 
 ---
 
