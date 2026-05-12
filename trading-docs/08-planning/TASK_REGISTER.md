@@ -2832,6 +2832,105 @@ This is the 8th A.7-family subclass instance counted in the past 7 days (alongsi
 
 ---
 
+### T-ACT-094 — capital:deployment_pct loud rejection (PR-C of long_straddle remediation)
+
+**Severity:** HIGH (silent rejection of explicit operator safety command; trust failure rather than feature failure).
+**Owner:** Cursor — authorized 2026-05-12 by operator (Decision A2 + B1).
+**Estimated time:** ~45 min Cursor (single commit, three files, no migrations).
+**Status:** [ ] in_progress — PR-C of long_straddle remediation (slotted ahead of PR-A and PR-B per operator decision 2026-05-12).
+**Blocks-flag-flip:** N/A (not a strategy flag; `capital:deployment_pct` is a sizing knob, not an enable/disable toggle).
+
+**Numbering note:** PR-C uses T-ACT-094 (cleanest sequential). The leverage_multiplier sibling (originally proposed as T-ACT-094 in Round 2 validation) is renumbered to T-ACT-095 below.
+
+**Description:**
+Operator's 2026-05-12 ~10:58 ET halt attempt (`redis-cli SET capital:deployment_pct "0"`) was silently rejected by the range check at `backend/capital_manager.py:196` (`if 0.01 <= val <= 2.0:`). `val=0.0` failed the range check, fell through to the `else` branch, logged `WARN capital_deployment_pct_out_of_range value=0.0 using_default=1.0`, and trading continued at 100% deployment for three cycles (11:00, 11:05, 11:10 ET) before the operator caught it via the dashboard kill switch (which writes `kill_switch_session_halted` to `audit_logs` per `supabase/functions/kill-switch/index.ts:204-218`). Three observability surfaces (log severity, audit, alerting) were all silent or insufficiently visible. The operator's mental model ("capital:deployment_pct=0 halts trading") did not match the codebase semantic ("capital:deployment_pct is a sizing knob with hard floor; values outside [0.01, 2.0] fall back to default 1.0").
+
+**Fix scope (PR-C):**
+- `backend/capital_manager.py:199-203` — replace the WARN-only block with `logger.error("capital_deployment_pct_rejected", …)` + `write_audit_log(action="trading.deployment_pct_rejected", …)` + `send_alert(WARNING, "deployment_pct_rejected", …)`. Lazy imports (mirrors `risk_engine.py:533-545`); each wrapped in `try/except` so `ImportError` cannot break the cycle.
+- Range-check predicate `0.01 <= val <= 2.0` UNCHANGED. Fallback to `DEFAULT_DEPLOYMENT_PCT=1.0` UNCHANGED. Numeric behaviour UNCHANGED (Round 1 STOP #2: lowering the bound recreates the 2026-04-20 watchdog defect at `trading_cycle.py:55-78` — `CapitalError` short-circuits `main.py:run_prediction_cycle` BEFORE the prediction-row write, and `position_monitor.run_prediction_watchdog` is `session_status='halted'`-aware but NOT `capital:deployment_pct=0`-aware → 12-minute force-close of the open book).
+- Bare-except at `capital_manager.py:204-205` UNCHANGED (operator Decision B1: defer to T-ACT-095 where leverage_multiplier loud-rejection bundles both fixes coherently).
+- 4 new tests in `backend/tests/test_consolidation_s11.py`: `test_deployment_pct_zero_produces_loud_rejection`, `test_deployment_pct_negative_produces_loud_rejection`, `test_deployment_pct_above_range_produces_loud_rejection`, `test_deployment_pct_in_range_no_loud_rejection`. Uses `unittest.mock.patch` (NOT `caplog`) because `backend/logger.py:41` configures `structlog.PrintLoggerFactory()` which bypasses stdlib `logging`.
+
+**Acceptance criteria:**
+- Operator runs `redis-cli SET capital:deployment_pct "0"` in staging or production and observes within one 5-min cycle: (a) Railway log shows `capital_deployment_pct_rejected` at ERROR level with operator-actionable `reason` field; (b) `audit_logs` row written with `action='trading.deployment_pct_rejected'`, `target_type='trading'`, `metadata={"value": 0.0, "using_default": 1.0}`; (c) Slack/email alert dispatched at WARNING level with `event='deployment_pct_rejected'`.
+- All 20+ existing tests in `test_consolidation_s11.py` and `test_consolidation_s14.py` pass unchanged.
+- Existing `test_deployment_pct_out_of_range_uses_default` at L331-341 passes unchanged (it asserts return value only; PR-C preserves the fallback semantic).
+
+**Cross-references:** Round 1 diagnose `/mnt/user-data/outputs/CURSOR_PROMPT_PR_C_HALT_MECHANISM_DIAGNOSE.md` (established STOP #1 dashboard-already-audits + STOP #2 watchdog-land-mine); Round 2 validation `/mnt/user-data/outputs/CURSOR_PROMPT_PR_C_PLAN_VALIDATION.md` (14 of 14 plan elements converged after refinements); operator decisions A2+B1 2026-05-12 ~11:55 ET; LONG_STRADDLE_FIX_FINAL_CONSENSUS_PLAN_v1.0.md (PR-C slotted ahead of PR-A and PR-B); `kill-switch` Edge Function at `supabase/functions/kill-switch/index.ts:204-218` (canonical halt path).
+
+---
+
+### T-ACT-095 — capital:leverage_multiplier loud rejection + bare-except hardening (PR-C sibling)
+
+**Severity:** MEDIUM (same defect class as T-ACT-094; same module; no current incident but operator could misuse `capital:leverage_multiplier=0` the same way).
+**Owner:** Cursor — to be authorized after PR-C lands.
+**Estimated time:** ~30 min Cursor (mirrors T-ACT-094 fix at L213-218 + bare-except hardening at L204-205 and L218-219).
+**Status:** [ ] QUEUED — deferred sibling of T-ACT-094.
+**Blocks-flag-flip:** N/A.
+
+**Description:**
+`backend/capital_manager.py:213-218` has the same WARN-only silent-rejection pattern for `capital:leverage_multiplier` range check (`if 0.5 <= val <= 5.0:`). Same defect class as T-ACT-094: operator could set the key to an out-of-range value and the system would silently fall back to `DEFAULT_LEVERAGE=1.0`. Additionally, the bare-except at L204-205 (`capital:deployment_pct` read) and L218-219 (`capital:leverage_multiplier` read) swallows Redis connection errors, `float(garbage)` `ValueError`, and any other read failure with `pass` — zero log output. Operator Decision B1 (2026-05-12) bundled both bare-except hardenings into this T-ACT so the two reads get the same treatment in one PR (avoids asymmetric error handling on adjacent reads in the same function).
+
+**Fix scope:**
+- `backend/capital_manager.py:213-218` — mirror T-ACT-094: WARN → ERROR + `write_audit_log(action="trading.leverage_multiplier_rejected", …)` + `send_alert(WARNING, "leverage_multiplier_rejected", …)`.
+- `backend/capital_manager.py:204-205` and L218-219 — replace bare `except Exception: pass` with `except Exception as exc: logger.error("capital_<key>_read_failed", error=str(exc))`. Continue with default (do not raise), but log loudly.
+- New tests in `test_consolidation_s11.py` mirroring T-ACT-094's 4 tests, plus 2 new tests for the bare-except path (Redis raises; `float(garbage)` raises).
+
+**Acceptance criteria:**
+- Parallel to T-ACT-094 for `capital:leverage_multiplier`.
+- Redis read errors and `float()` errors produce ERROR log entries; numeric behaviour (fallback to defaults) UNCHANGED.
+
+**Cross-references:** T-ACT-094 (parent); operator Decision B1 2026-05-12 (bundling rationale); Round 2 validation §9 V8.2 (bare-except finding).
+
+---
+
+### T-ACT-096 — set_feature_flag admin endpoint: add write_audit_log integration
+
+**Severity:** MEDIUM (audit coverage gap; affects every flag flip via the admin endpoint).
+**Owner:** Cursor — to be authorized.
+**Estimated time:** ~1 hour Cursor.
+**Status:** [ ] QUEUED — deferred.
+**Blocks-flag-flip:** N/A.
+
+**Description:**
+`backend/main.py:2509-2640` (`POST /admin/trading/feature-flags`) writes to Redis and to the `trading_feature_flags` Supabase mirror (L2614-2622) but does NOT call `write_audit_log`. Every flag flip via this admin endpoint — including `strategy:*:enabled`, `agents:*:enabled`, `kill_switch:enabled`, `earnings_straddle:enabled`, and `capital:deployment_pct`/`capital:leverage_multiplier` (broken-by-bool-coercion, see T-ACT-097) — is unaudited from the backend side. The Supabase mirror gives current state but not history. This is an order-of-magnitude larger audit gap than the (non-existent) halt audit gap that PR-C originally proposed to fix.
+
+**Fix scope:**
+- Add `write_audit_log(action="trading.flag_updated", target_type="trading", target_id=flag_key, metadata={"enabled": enabled, "polarity": "signal"|"standard"})` to the success path at `main.py:2636`.
+- Add `write_audit_log(action="trading.flag_update_refused", target_type="trading", target_id=flag_key, metadata={"attempted_value": enabled, "reason": refuse_reason})` to the BLOCKS_FLAG_FLIP refusal path at `main.py:2585-2592`.
+- Mirror the lazy-import pattern from T-ACT-094.
+
+**Acceptance criteria:**
+- Every flag flip via the admin endpoint produces an audit_logs row (success or refusal).
+- No regression in existing endpoint tests.
+
+**Cross-references:** Round 1 diagnose §10 adjacent issue #2; T-ACT-094 (precedent for lazy-import audit writes).
+
+---
+
+### T-ACT-097 — set_feature_flag admin endpoint: split float vs bool handling for capital:* keys
+
+**Severity:** MEDIUM (endpoint cannot actually write the keys it claims to allow).
+**Owner:** Cursor — to be authorized.
+**Estimated time:** ~1 hour Cursor (entangled with test_consolidation_s11.py:407-413 allowlist invariant — needs design decision).
+**Status:** [ ] QUEUED — deferred.
+**Blocks-flag-flip:** N/A.
+
+**Description:**
+`backend/main.py:2566` does `enabled = bool(payload.get("enabled", False))`. This coerces any payload to bool, making the endpoint incapable of writing float-valued keys like `capital:deployment_pct` or `capital:leverage_multiplier`. Those keys are in the `_TRADING_FLAG_KEYS` allowlist at `main.py:1863` but cannot actually be set via the endpoint to anything other than the strings `"true"` or `"false"`. Operator must use `redis-cli SET` directly — which is also what produced the T-ACT-094 incident (no admin-endpoint audit, no permission check, easy typo).
+
+**Fix scope (operator decides at design time):**
+- (a) Split-handler for float vs bool flags with proper type validation. The handler dispatches on flag_key prefix (`capital:*` → float in `[0, 5]`; `strategy:*` / `signal:*` / `agents:*` → bool); OR
+- (b) Remove `capital:deployment_pct` and `capital:leverage_multiplier` from `_TRADING_FLAG_KEYS`; require direct `redis-cli SET` for them. Combined with T-ACT-094 + T-ACT-095 loud-rejection so CLI mistakes are surfaced. Update `test_consolidation_s11.py:407-413` to invert the assertion.
+
+**Acceptance criteria:**
+- `capital:deployment_pct` is settable via the admin endpoint to float values (option a) OR is explicitly removed from the allowlist with documentation pointing operators to the correct path (option b).
+- No regression in existing endpoint tests; `test_consolidation_s11.py:407-413` is either preserved or explicitly updated per the chosen option.
+
+**Cross-references:** Round 1 diagnose §10 adjacent issue #5; T-ACT-094 (the incident that surfaced this); T-ACT-096 (sibling endpoint cleanup).
+
+---
+
 ### Section 14 cross-references
 
 - HANDOFF NOTE Appendix A.6 — full post-mortem context for the 2026-05-01 phantom-alpha incident (amended 2026-05-03 via Track B PR with T-ACT-045 PENDING-RE-RUN status + validation-artifact protocol)

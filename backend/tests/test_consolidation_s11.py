@@ -434,3 +434,160 @@ def test_run_prediction_cycle_skips_on_capital_error():
             mock_cycle.assert_not_called()
     finally:
         restore()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PR-C: loud rejection of out-of-range deployment_pct
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# Round 1 + Round 2 diagnose established that the silent-rejection
+# defect at capital_manager.py:196 caused the operator's 2026-05-12
+# halt attempt (SET capital:deployment_pct "0") to be ignored: the
+# range check `0.01 <= val <= 2.0` rejected 0.0, the else branch
+# logged WARN, and trading continued at 100% deployment for three
+# cycles before the operator caught it via the dashboard kill
+# switch.
+#
+# PR-C makes the rejection loud across three observability surfaces
+# (ERROR log + audit_logs row + send_alert WARNING). Numeric
+# behaviour is UNCHANGED — values outside [0.01, 2.0] still fall
+# back to DEFAULT_DEPLOYMENT_PCT=1.0. Lowering the range would
+# re-create the 2026-04-20 watchdog defect (see trading_cycle.py
+# L55-78 historical comment).
+#
+# Test pattern uses unittest.mock.patch, NOT pytest caplog, because
+# backend/logger.py:41 configures structlog.PrintLoggerFactory()
+# which bypasses Python's stdlib logging — caplog cannot capture
+# these events. The lazy imports inside the rejection branch are
+# patched at the source module (db.write_audit_log, alerting.send_alert)
+# rather than at the import site, matching the actual lazy-import
+# resolution and the precedent at risk_engine.py:533-545.
+
+def test_deployment_pct_zero_produces_loud_rejection():
+    """val=0.0 (the operator's 2026-05-12 incident value) triggers all
+    three loud-rejection surfaces: ERROR log, audit row, send_alert.
+
+    Numeric behaviour preserved (fallback to default 1.0).
+    """
+    from capital_manager import get_deployment_config
+
+    redis = MagicMock()
+    redis.get.side_effect = lambda k: "0" if "pct" in k else None
+
+    with patch("capital_manager.logger") as mock_logger, \
+            patch("db.write_audit_log") as mock_audit, \
+            patch("alerting.send_alert") as mock_alert:
+        pct, lev = get_deployment_config(redis)
+
+    assert pct == 1.0, (
+        f"0.0 is outside [0.01, 2.0] — must fall back to default 1.0. "
+        f"Got {pct}. Round 1 STOP #2: changing this fallback recreates "
+        f"the 2026-04-20 watchdog defect."
+    )
+    assert lev == 1.0  # no leverage Redis value -> default
+
+    mock_logger.error.assert_called_once()
+    error_event = mock_logger.error.call_args.args[0]
+    assert error_event == "capital_deployment_pct_rejected", (
+        f"expected event 'capital_deployment_pct_rejected', "
+        f"got {error_event!r}"
+    )
+    error_kwargs = mock_logger.error.call_args.kwargs
+    assert error_kwargs["value"] == 0.0
+    assert error_kwargs["using_default"] == 1.0
+
+    mock_audit.assert_called_once()
+    audit_kwargs = mock_audit.call_args.kwargs
+    assert audit_kwargs["action"] == "trading.deployment_pct_rejected"
+    assert audit_kwargs["target_type"] == "trading"
+    assert audit_kwargs["metadata"]["value"] == 0.0
+    assert audit_kwargs["metadata"]["using_default"] == 1.0
+
+    mock_alert.assert_called_once()
+    alert_args = mock_alert.call_args.args
+    assert alert_args[0] == "warning", (
+        f"expected level 'warning' (alerting.WARNING constant), "
+        f"got {alert_args[0]!r}"
+    )
+    assert alert_args[1] == "deployment_pct_rejected"
+
+
+def test_deployment_pct_negative_produces_loud_rejection():
+    """Negative values (impossible-by-design) trigger the same loud
+    rejection. Validates the fix is symmetric across the rejection
+    space, not narrowly tailored to val=0.0.
+    """
+    from capital_manager import get_deployment_config
+
+    redis = MagicMock()
+    redis.get.side_effect = lambda k: "-0.5" if "pct" in k else None
+
+    with patch("capital_manager.logger") as mock_logger, \
+            patch("db.write_audit_log") as mock_audit, \
+            patch("alerting.send_alert") as mock_alert:
+        pct, _ = get_deployment_config(redis)
+
+    assert pct == 1.0
+    mock_logger.error.assert_called_once_with(
+        "capital_deployment_pct_rejected",
+        value=-0.5,
+        using_default=1.0,
+        reason=mock_logger.error.call_args.kwargs["reason"],
+    )
+    mock_audit.assert_called_once()
+    assert (
+        mock_audit.call_args.kwargs["metadata"]["value"] == -0.5
+    )
+    mock_alert.assert_called_once()
+    assert mock_alert.call_args.args[0] == "warning"
+
+
+def test_deployment_pct_above_range_produces_loud_rejection():
+    """Above-range values (99.0 — the existing sibling test's payload)
+    now also trigger all three loud-rejection surfaces.
+
+    The pre-PR-C test_deployment_pct_out_of_range_uses_default at
+    L331-341 still passes (asserts only on pct == 1.0), but this
+    test adds the missing observability assertions for the same
+    value-class.
+    """
+    from capital_manager import get_deployment_config
+
+    redis = MagicMock()
+    redis.get.side_effect = lambda k: "99.0" if "pct" in k else None
+
+    with patch("capital_manager.logger") as mock_logger, \
+            patch("db.write_audit_log") as mock_audit, \
+            patch("alerting.send_alert") as mock_alert:
+        pct, _ = get_deployment_config(redis)
+
+    assert pct == 1.0
+    mock_logger.error.assert_called_once()
+    assert (
+        mock_logger.error.call_args.args[0]
+        == "capital_deployment_pct_rejected"
+    )
+    mock_audit.assert_called_once()
+    mock_alert.assert_called_once()
+
+
+def test_deployment_pct_in_range_no_loud_rejection():
+    """Happy path: val=0.5 is in [0.01, 2.0]; NONE of the loud-
+    rejection surfaces fire. Negative assertion that the fix does
+    not accidentally trigger on the success path.
+    """
+    from capital_manager import get_deployment_config
+
+    redis = MagicMock()
+    redis.get.side_effect = lambda k: "0.5" if "pct" in k else None
+
+    with patch("capital_manager.logger") as mock_logger, \
+            patch("db.write_audit_log") as mock_audit, \
+            patch("alerting.send_alert") as mock_alert:
+        pct, lev = get_deployment_config(redis)
+
+    assert abs(pct - 0.5) < 0.001
+    assert lev == 1.0  # no leverage Redis value
+    mock_logger.error.assert_not_called()
+    mock_audit.assert_not_called()
+    mock_alert.assert_not_called()

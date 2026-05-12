@@ -196,11 +196,65 @@ def get_deployment_config(redis_client=None) -> tuple:
             if 0.01 <= val <= 2.0:
                 deployment_pct = val
             else:
-                logger.warning(
-                    "capital_deployment_pct_out_of_range",
+                # PR-C: loud rejection of out-of-range deployment_pct.
+                # Numeric behaviour is unchanged (fall back to
+                # DEFAULT_DEPLOYMENT_PCT). What changes is observability:
+                # ERROR log + audit row + Slack/email alert so the
+                # operator cannot miss this rejection silently. See
+                # Round 1 diagnose STOP #2 for why we do not honour 0
+                # as a halt (would re-create the 2026-04-20 watchdog
+                # defect). The canonical halt path is the kill-switch
+                # Edge Function at supabase/functions/kill-switch/.
+                logger.error(
+                    "capital_deployment_pct_rejected",
                     value=val,
                     using_default=DEFAULT_DEPLOYMENT_PCT,
+                    reason=(
+                        "capital:deployment_pct is a sizing knob, "
+                        "NOT a halt mechanism. To halt trading, use "
+                        "the dashboard KILL SWITCH button "
+                        "(supabase/functions/kill-switch/index.ts — "
+                        "sets session_status='halted')."
+                    ),
                 )
+                # Lazy imports so a circular-import or ImportError
+                # cannot break this hot path. db.write_audit_log and
+                # alerting.send_alert are both documented never-raise,
+                # but the lazy-import line itself can still raise
+                # ImportError if module layout shifts. Mirrors the
+                # precedent at risk_engine.py:533-545.
+                try:
+                    from db import write_audit_log
+                    write_audit_log(
+                        action="trading.deployment_pct_rejected",
+                        target_type="trading",
+                        metadata={
+                            "value": val,
+                            "using_default": DEFAULT_DEPLOYMENT_PCT,
+                        },
+                    )
+                except Exception as audit_exc:
+                    logger.debug(
+                        "deployment_pct_rejected_audit_skipped",
+                        error=str(audit_exc),
+                    )
+                try:
+                    from alerting import send_alert, WARNING
+                    send_alert(
+                        WARNING,
+                        "deployment_pct_rejected",
+                        f"capital:deployment_pct={val} is outside "
+                        f"[0.01, 2.0]. Trading continued at default "
+                        f"deployment_pct={DEFAULT_DEPLOYMENT_PCT}. "
+                        f"This key is a sizing knob, NOT a halt. "
+                        f"To halt trading, use the dashboard KILL "
+                        f"SWITCH button.",
+                    )
+                except Exception as alert_exc:
+                    logger.debug(
+                        "deployment_pct_rejected_alert_skipped",
+                        error=str(alert_exc),
+                    )
     except Exception:
         pass
 
